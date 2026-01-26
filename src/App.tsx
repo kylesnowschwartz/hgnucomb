@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { HexGrid } from '@ui/HexGrid';
+import { ControlPanel } from '@ui/ControlPanel';
 
 function App() {
   const [dimensions, setDimensions] = useState({
@@ -19,7 +20,12 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  return <HexGrid width={dimensions.width} height={dimensions.height} />;
+  return (
+    <>
+      <HexGrid width={dimensions.width} height={dimensions.height} />
+      <ControlPanel />
+    </>
+  );
 }
 
 export default App;
