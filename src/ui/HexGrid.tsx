@@ -9,27 +9,41 @@
  * @see .agent-history/context-packet-task4-hex-grid.md
  */
 
-import { useState, useCallback } from 'react';
-import { Stage, Layer, RegularPolygon, Line } from 'react-konva';
+import { useState, useCallback, useMemo } from 'react';
+import { Stage, Layer, Line, RegularPolygon } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
-import { hexToPixel, hexesInRange } from '@shared/types';
-import { useAgentStore } from '@state/agentStore';
+import { hexToPixel, hexesInRect } from '@shared/types';
+import { useAgentStore, type AgentState } from '@state/agentStore';
 import { useShallow } from 'zustand/shallow';
-import { AgentNode } from './AgentNode';
+import type { AgentRole, AgentStatus } from '@protocol/types';
 
 // ============================================================================
 // Style Constants
 // ============================================================================
 
 const STYLE = {
-  background: '#fafafa',
-  gridStroke: '#e0e0e0',
+  background: '#f5f5f5', // Slightly darker background
+  hexFill: '#ffffff', // White fill for empty hexes
+  hexStroke: '#c0c0c0', // Darker stroke for contrast
   gridStrokeWidth: 1,
   hexSize: 40,
   minZoom: 0.3,
   maxZoom: 3.0,
   zoomFactor: 1.08,
 } as const;
+
+const ROLE_COLORS: Record<AgentRole, string> = {
+  orchestrator: '#3b82f6', // blue
+  worker: '#22c55e', // green
+  specialist: '#a855f7', // purple
+};
+
+const STATUS_OPACITY: Record<AgentStatus, number> = {
+  idle: 1.0,
+  working: 1.0,
+  blocked: 0.5,
+  offline: 0.3,
+};
 
 // ============================================================================
 // Component Props
@@ -42,8 +56,6 @@ export interface HexGridProps {
   height: number;
   /** Hex cell radius in pixels (default: 40) */
   hexSize?: number;
-  /** Range of hexes to render from origin (default: 5) */
-  hexRange?: number;
 }
 
 // ============================================================================
@@ -54,7 +66,6 @@ export function HexGrid({
   width,
   height,
   hexSize = STYLE.hexSize,
-  hexRange = 5,
 }: HexGridProps) {
   // Viewport state
   const [scale, setScale] = useState(1);
@@ -63,8 +74,25 @@ export function HexGrid({
   // Agent state - useShallow prevents infinite re-render from new array references
   const agents = useAgentStore(useShallow((s) => s.getAllAgents()));
 
-  // Generate hex cells
-  const hexes = hexesInRange(hexRange);
+  // Calculate visible hex range based on viewport (for culling)
+  const visibleHexes = useMemo(() => {
+    // Transform viewport bounds to world coordinates
+    const worldMinX = -position.x / scale;
+    const worldMinY = -position.y / scale;
+    const worldMaxX = (width - position.x) / scale;
+    const worldMaxY = (height - position.y) / scale;
+
+    return hexesInRect(worldMinX, worldMaxX, worldMinY, worldMaxY, hexSize);
+  }, [position, scale, width, height, hexSize]);
+
+  // Build lookup: hex coord -> agent (if occupied)
+  const agentByHex = useMemo(() => {
+    const map = new Map<string, AgentState>();
+    for (const agent of agents) {
+      map.set(`${agent.hex.q},${agent.hex.r}`, agent);
+    }
+    return map;
+  }, [agents]);
 
   /**
    * Handle wheel zoom - scales toward cursor position.
@@ -131,9 +159,12 @@ export function HexGrid({
       style={{ background: STYLE.background }}
     >
       <Layer>
-        {/* Render hex grid */}
-        {hexes.map((hex) => {
+        {/* Render hex grid with agent fills */}
+        {visibleHexes.map((hex) => {
           const { x, y } = hexToPixel(hex, hexSize);
+          const agent = agentByHex.get(`${hex.q},${hex.r}`);
+          const fill = agent ? ROLE_COLORS[agent.role] : STYLE.hexFill;
+          const opacity = agent ? STATUS_OPACITY[agent.status] : 1;
           return (
             <RegularPolygon
               key={`${hex.q},${hex.r}`}
@@ -141,18 +172,38 @@ export function HexGrid({
               y={y}
               sides={6}
               radius={hexSize}
-              rotation={30} // Pointy-top orientation
-              stroke={STYLE.gridStroke}
+              fill={fill}
+              stroke={STYLE.hexStroke}
               strokeWidth={STYLE.gridStrokeWidth}
+              opacity={opacity}
               listening={false}
             />
           );
         })}
 
-        {/* Render agents */}
-        {agents.map((agent) => (
-          <AgentNode key={agent.id} agent={agent} hexSize={hexSize} />
-        ))}
+        {/* Render connection lines (on top of hexes) */}
+        {agents.flatMap((agent) =>
+          agent.connections
+            .filter((id) => agents.some((a) => a.id === id)) // Only draw if target exists
+            .filter((connectionId) => agent.id < connectionId) // Dedupe: only draw once per pair
+            .map((connectionId) => {
+              const target = agents.find((a) => a.id === connectionId);
+              if (!target) return null;
+
+              const from = hexToPixel(agent.hex, hexSize);
+              const to = hexToPixel(target.hex, hexSize);
+
+              return (
+                <Line
+                  key={`conn-${agent.id}-${connectionId}`}
+                  points={[from.x, from.y, to.x, to.y]}
+                  stroke="#9ca3af" // gray-400
+                  strokeWidth={2}
+                  listening={false}
+                />
+              );
+            })
+        )}
 
         {/* Origin marker */}
         <Line

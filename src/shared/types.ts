@@ -57,3 +57,49 @@ export function hexesInRange(radius: number): HexCoordinate[] {
   }
   return hexes;
 }
+
+/**
+ * Generate hex coordinates within a rectangular pixel region.
+ * Used for viewport culling - only render hexes visible on screen.
+ *
+ * In axial coordinates, a rectangular (q,r) range produces a parallelogram
+ * in pixel space. To cover a rectangular viewport, we must vary the q range
+ * based on r to compensate for the diagonal offset.
+ *
+ * @param minX - Left edge in world pixels
+ * @param maxX - Right edge in world pixels
+ * @param minY - Top edge in world pixels
+ * @param maxY - Bottom edge in world pixels
+ * @param size - Hex radius in pixels
+ * @returns Array of hex coordinates within the rectangle
+ */
+export function hexesInRect(
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number,
+  size: number
+): HexCoordinate[] {
+  const hexes: HexCoordinate[] = [];
+
+  // Calculate r range from y bounds (r controls vertical position)
+  const rMin = Math.floor(minY / (size * 1.5)) - 1;
+  const rMax = Math.ceil(maxY / (size * 1.5)) + 1;
+
+  const sqrt3 = Math.sqrt(3);
+
+  for (let r = rMin; r <= rMax; r++) {
+    // For each row, calculate the q range needed to cover x bounds
+    // x = size * (sqrt(3) * q + sqrt(3)/2 * r)
+    // Solving for q: q = (x / size - sqrt(3)/2 * r) / sqrt(3)
+    const rOffset = (sqrt3 / 2) * r;
+    const qMin = Math.floor((minX / size - rOffset) / sqrt3) - 1;
+    const qMax = Math.ceil((maxX / size - rOffset) / sqrt3) + 1;
+
+    for (let q = qMin; q <= qMax; q++) {
+      hexes.push({ q, r });
+    }
+  }
+
+  return hexes;
+}
