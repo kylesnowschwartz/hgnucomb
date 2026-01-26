@@ -25,7 +25,10 @@ const STYLE = {
   background: '#f5f5f5', // Slightly darker background
   hexFill: '#ffffff', // White fill for empty hexes
   hexStroke: '#c0c0c0', // Darker stroke for contrast
+  connectionStroke: '#9ca3af', // gray-400, connection lines between agents
+  originMarkerStroke: '#cccccc', // Origin crosshair
   gridStrokeWidth: 1,
+  connectionStrokeWidth: 2,
   hexSize: 40,
   minZoom: 0.3,
   maxZoom: 3.0,
@@ -197,8 +200,8 @@ export function HexGrid({
                 <Line
                   key={`conn-${agent.id}-${connectionId}`}
                   points={[from.x, from.y, to.x, to.y]}
-                  stroke="#9ca3af" // gray-400
-                  strokeWidth={2}
+                  stroke={STYLE.connectionStroke}
+                  strokeWidth={STYLE.connectionStrokeWidth}
                   listening={false}
                 />
               );
@@ -208,13 +211,13 @@ export function HexGrid({
         {/* Origin marker */}
         <Line
           points={[-10, 0, 10, 0]}
-          stroke="#ccc"
+          stroke={STYLE.originMarkerStroke}
           strokeWidth={1}
           listening={false}
         />
         <Line
           points={[0, -10, 0, 10]}
-          stroke="#ccc"
+          stroke={STYLE.originMarkerStroke}
           strokeWidth={1}
           listening={false}
         />
