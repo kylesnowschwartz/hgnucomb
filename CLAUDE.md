@@ -13,6 +13,30 @@ Spatial terminal multiplexer: a 2D navigable canvas where terminals and agents e
 
 **Not using:** Electron/Tauri (pure browser + local server for now)
 
+## Theme System
+
+Using [Catppuccin Mocha](https://catppuccin.com/) - dark theme with pastel accents.
+
+**Structure:**
+- `src/theme/catppuccin-mocha.ts` - Current dark theme
+- `src/theme/catppuccin-latte.ts` - Light theme (available)
+- `src/index.css` - CSS custom properties (`--ctp-*` namespace)
+
+**CSS custom properties:** All colors use `--ctp-<colorname>` variables defined in index.css. Components should use these rather than hardcoded hex values.
+
+**TypeScript imports:**
+```ts
+import { palette, ui, xtermTheme, agentColors, hexGrid } from '@theme/catppuccin-mocha';
+// Or for explicit theme selection:
+import { latte, mocha } from '@theme';
+```
+
+**To switch themes:** Update imports in HexGrid.tsx, TerminalPanel.tsx, and CSS vars in index.css.
+
+**Agent colors:** orchestrator=blue, worker=green, specialist=mauve
+
+**Reference:** `.cloned-sources/catppuccin-palette/` contains the official palette repo
+
 ## Architecture
 
 ```
@@ -75,6 +99,7 @@ MVP complete. Next steps TBD:
 `.cloned-sources/` contains upstream repos (gitignored):
 - `terminal-mcp` - xterm.js + node-pty patterns
 - `ghostty-web` - Alternative terminal renderer (tried, reverted - too early)
+- `catppuccin-palette` - Official Catppuccin color palette (MIT License)
 
 ## Research-Backed Implementation
 

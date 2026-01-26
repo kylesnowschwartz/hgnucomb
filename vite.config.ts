@@ -12,6 +12,7 @@ export default defineConfig({
       '@ui': resolve(__dirname, 'src/ui'),
       '@state': resolve(__dirname, 'src/state'),
       '@terminal': resolve(__dirname, 'src/terminal'),
+      '@theme': resolve(__dirname, 'src/theme'),
     },
   },
 })

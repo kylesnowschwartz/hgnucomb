@@ -4,10 +4,10 @@
   right: 20px;
   width: 320px;
   max-height: 300px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid #e0e0e0;
+  background: var(--ctp-mantle);
+  border: 1px solid var(--ctp-surface0);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(76, 79, 105, 0.15);
   z-index: 100;
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 13px;
@@ -19,13 +19,13 @@
   max-height: 200px;
   overflow-y: auto;
   padding: 12px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--ctp-surface0);
   flex: 1;
   min-height: 60px;
 }
 
 .control-panel__log--empty {
-  color: #999;
+  color: var(--ctp-subtext0);
   font-style: italic;
 }
 
@@ -39,18 +39,18 @@
 }
 
 .control-panel__event-seq {
-  color: #666;
+  color: var(--ctp-subtext0);
   margin-right: 8px;
 }
 
 .control-panel__event-type {
-  color: #0066cc;
+  color: var(--ctp-blue);
   display: inline-block;
   width: 100px;
 }
 
 .control-panel__event-summary {
-  color: #333;
+  color: var(--ctp-text);
 }
 
 .control-panel__controls {
@@ -62,9 +62,10 @@
 .control-panel__btn {
   flex: 1;
   padding: 8px 16px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--ctp-surface1);
   border-radius: 4px;
-  background: #fff;
+  background: var(--ctp-base);
+  color: var(--ctp-text);
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
@@ -72,8 +73,8 @@
 }
 
 .control-panel__btn:hover:not(:disabled) {
-  background: #f5f5f5;
-  border-color: #999;
+  background: var(--ctp-surface0);
+  border-color: var(--ctp-overlay0);
 }
 
 .control-panel__btn:disabled {
@@ -82,21 +83,21 @@
 }
 
 .control-panel__btn--play {
-  background: #e8f5e9;
-  border-color: #4caf50;
-  color: #2e7d32;
+  background: color-mix(in srgb, var(--ctp-green) 15%, var(--ctp-base));
+  border-color: var(--ctp-green);
+  color: var(--ctp-green);
 }
 
 .control-panel__btn--play:hover:not(:disabled) {
-  background: #c8e6c9;
+  background: color-mix(in srgb, var(--ctp-green) 25%, var(--ctp-base));
 }
 
 .control-panel__btn--stop {
-  background: #ffebee;
-  border-color: #f44336;
-  color: #c62828;
+  background: color-mix(in srgb, var(--ctp-red) 15%, var(--ctp-base));
+  border-color: var(--ctp-red);
+  color: var(--ctp-red);
 }
 
 .control-panel__btn--stop:hover:not(:disabled) {
-  background: #ffcdd2;
+  background: color-mix(in srgb, var(--ctp-red) 25%, var(--ctp-base));
 }

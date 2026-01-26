@@ -17,17 +17,19 @@ import { useAgentStore, type AgentState } from '@state/agentStore';
 import { useUIStore } from '@state/uiStore';
 import { useShallow } from 'zustand/shallow';
 import type { AgentRole, AgentStatus } from '@protocol/types';
+import { hexGrid, agentColors } from '@theme/catppuccin-mocha';
 
 // ============================================================================
 // Style Constants
 // ============================================================================
 
 const STYLE = {
-  background: '#f5f5f5', // Slightly darker background
-  hexFill: '#ffffff', // White fill for empty hexes
-  hexStroke: '#c0c0c0', // Darker stroke for contrast
-  connectionStroke: '#9ca3af', // gray-400, connection lines between agents
-  originMarkerStroke: '#cccccc', // Origin crosshair
+  background: hexGrid.background,
+  hexFill: hexGrid.hexFill,
+  hexStroke: hexGrid.hexStroke,
+  hexStrokeSelected: hexGrid.hexStrokeSelected,
+  connectionStroke: agentColors.connection,
+  originMarkerStroke: hexGrid.originMarker,
   gridStrokeWidth: 1,
   connectionStrokeWidth: 2,
   hexSize: 40,
@@ -37,9 +39,9 @@ const STYLE = {
 } as const;
 
 const ROLE_COLORS: Record<AgentRole, string> = {
-  orchestrator: '#3b82f6', // blue
-  worker: '#22c55e', // green
-  specialist: '#a855f7', // purple
+  orchestrator: agentColors.orchestrator,
+  worker: agentColors.worker,
+  specialist: agentColors.specialist,
 };
 
 const STATUS_OPACITY: Record<AgentStatus, number> = {
@@ -183,7 +185,7 @@ export function HexGrid({
               sides={6}
               radius={hexSize}
               fill={fill}
-              stroke={isSelected ? '#ffffff' : STYLE.hexStroke}
+              stroke={isSelected ? STYLE.hexStrokeSelected : STYLE.hexStroke}
               strokeWidth={isSelected ? 3 : STYLE.gridStrokeWidth}
               opacity={opacity}
               listening={!!agent}

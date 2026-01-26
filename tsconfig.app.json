@@ -31,7 +31,8 @@
       "@protocol/*": ["src/protocol/*"],
       "@ui/*": ["src/ui/*"],
       "@state/*": ["src/state/*"],
-      "@terminal/*": ["src/terminal/*"]
+      "@terminal/*": ["src/terminal/*"],
+      "@theme/*": ["src/theme/*"]
     }
   },
   "include": ["src"]

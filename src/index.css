@@ -1,3 +1,10 @@
+/**
+ * Base styles
+ * Theme colors imported from generated/theme.css (built from TypeScript source)
+ */
+
+@import './generated/theme.css';
+
 * {
   margin: 0;
   padding: 0;
@@ -13,5 +20,7 @@ body,
 }
 
 body {
-  background-color: #fafafa;
+  background-color: var(--ctp-base);
+  color: var(--ctp-text);
+  font-family: system-ui, -apple-system, sans-serif;
 }
