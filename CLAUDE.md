@@ -4,50 +4,77 @@ Spatial terminal multiplexer: a 2D navigable canvas where terminals and agents e
 
 ## Stack
 
-Early stages, still up for debate, but starting ground is:
+**Decided and working:**
+- React 19 + Vite (frontend)
+- Konva.js via react-konva (hex grid canvas)
+- xterm.js + WebGL addon (terminal rendering)
+- Zustand (state management)
+- Node.js + node-pty + WebSocket (terminal server)
 
-Electron + React + Konva.js + xterm.js + node-pty
+**Not using:** Electron/Tauri (pure browser + local server for now)
 
-## Documentation
+## Architecture
 
-All planning docs and research live in `.agent-history/`:
+```
+Browser (localhost:5173)          Server (localhost:3001)
+┌─────────────────────────┐       ┌─────────────────────────┐
+│ App.tsx                 │       │ WebSocket Server        │
+│   ├── HexGrid           │       │   └── TerminalManager   │
+│   ├── ControlPanel      │  WS   │       └── Sessions[]    │
+│   └── TerminalPanel ◄───┼───────┼───► node-pty processes  │
+│                         │       │                         │
+│ Stores:                 │       └─────────────────────────┘
+│   agentStore (agents)   │
+│   terminalStore (PTY)   │
+│   uiStore (selection)   │
+└─────────────────────────┘
+```
 
-- `context-packet-20260124-hgnucomb.md` - Project goals, constraints, milestones
-- `PLAN-hybrid-mvp.md` - Current MVP plan (fake events + hex grid visualization)
-- `research-index.md` - Index of all research with quick answers
+## Key Patterns
 
-DO NOT COMMIT .cloned-sources/ and .agent-history/ they are gitignored and not part of main repo.
+**Terminal data flow:**
+- App.tsx subscribes to `bridge.onData()` → stores in buffer (always, even when panel closed)
+- TerminalPanel subscribes to `bridge.onData()` → writes to xterm (only when mounted)
+- Closing panel keeps PTY running; reopening replays buffer
 
-## Current Focus
+**Agent-session mapping:**
+- `terminalStore.agentToSession: Map<agentId, sessionId>`
+- Click agent → check for existing session → create or reuse
 
-Hybrid MVP: Build fake event emitter + hex UI to validate the spatial visualization concept before wiring to real agents.
+**Hex grid clicks:**
+- `uiStore.selectedAgentId` drives which terminal is shown
+- HexGrid sets selection, App.tsx reacts to open panel
+
+## Running
+
+```bash
+just dev-all    # Start both UI and server
+just kill       # Clean up orphaned processes
+```
 
 ## Task Tracking
-
-Use `bl` for persistent task tracking:
 
 ```bash
 bl ready              # What can I work on now?
 bl list --tree        # Full dependency tree
 bl create "title"     # New task
 bl close <id>         # Complete task
-bl update <a> --blocked-by <b>  # Set dependencies
 ```
 
-CONTEXT PACKETS: Context packets live in: `.agent-history/tasks/{complete,in-progress,waiting}/` these documents are critical for planning and implementation.
+Context packets live in `.agent-history/tasks/{complete,in-progress,waiting}/`
 
-## Workflow
+## Current Status
 
-Each phase follows: **context packet -> plan -> implement -> repeat**
-
-Don't over-plan. Build one thing, validate it works, move on.
+MVP complete. Next steps TBD:
+- Real agent orchestration (connect to actual Claude instances)
+- Multi-agent communication protocol
+- Session persistence across page reloads
 
 ## Reference Code
 
-`.cloned-sources/` contains upstream repos for patterns:
-- `terminal-mcp` - xterm.js + node-pty integration
-- `ccswarm` - WebSocket + JSON-RPC 2.0 agent protocol
-- `claude-swarm` - MCP + YAML config agent protocol
+`.cloned-sources/` contains upstream repos (gitignored):
+- `terminal-mcp` - xterm.js + node-pty patterns
+- `ghostty-web` - Alternative terminal renderer (tried, reverted - too early)
 
 ## Research-Backed Implementation
 
@@ -56,7 +83,7 @@ All implementation work MUST follow this sequence:
 ### 1. Source the Reference Code
 Before writing any code that uses a library or framework:
 - Check if the library exists in `.cloned-sources/`
-- If NOT present, use the sc-repo-documentation-expert sub-agent to clone the official repo first:
+- If NOT present, use the `sc-repo-documentation-expert` agent to clone the official repo first
 
 ### 2. Research Patterns
 With reference code available:
@@ -66,7 +93,7 @@ With reference code available:
 
 ### 3. Plan
 - Draft implementation plan based on verified patterns from source
-- Get user approval before coding (per CDP-001)
+- Get user approval before coding
 
 ### 4. Implement
 - Write code that follows patterns found in reference repos
