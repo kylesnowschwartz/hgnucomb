@@ -1,5 +1,5 @@
 /**
- * Event Protocol Types for term-canvas
+ * Event Protocol Types for hgnucomb
  *
  * Defines the message contract between the event hub and UI components.
  * Adapted from ccswarm patterns for hub-spoke agent coordination.

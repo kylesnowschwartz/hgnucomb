@@ -1,4 +1,4 @@
-# term-canvas
+# hgnucomb
 
 Spatial terminal multiplexer: a 2D navigable canvas where terminals and agents exist as positionable, interactive units.
 
@@ -12,7 +12,7 @@ Electron + React + Konva.js + xterm.js + node-pty
 
 All planning docs and research live in `.agent-history/`:
 
-- `context-packet-20260124-term-canvas.md` - Project goals, constraints, milestones
+- `context-packet-20260124-hgnucomb.md` - Project goals, constraints, milestones
 - `PLAN-hybrid-mvp.md` - Current MVP plan (fake events + hex grid visualization)
 - `research-index.md` - Index of all research with quick answers
 
