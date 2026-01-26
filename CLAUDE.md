@@ -16,9 +16,39 @@ All planning docs and research live in `.agent-history/`:
 - `PLAN-hybrid-mvp.md` - Current MVP plan (fake events + hex grid visualization)
 - `research-index.md` - Index of all research with quick answers
 
+DO NOT COMMIT .cloned-sources/ and .agent-history/ they are gitignored and not part of main repo.
+
 ## Current Focus
 
 Hybrid MVP: Build fake event emitter + hex UI to validate the spatial visualization concept before wiring to real agents.
+
+## Task Tree
+
+Session-based task tracking resets each conversation. This is the persistent record.
+
+```
+COMPLETE:
+  [x] #1 Event Protocol types (src/protocol/types.ts)
+  [x] #2 Event Script - ScriptPlayer with timed playback (src/protocol/script.ts)
+  [x] #4 Hex Grid with pan/zoom (src/ui/HexGrid.tsx)
+
+WAITING:
+  [ ] #3 Agent State Manager - registry that processes events
+  [ ] #4 Agent Nodes - render agents on hex grid [blocked by #3]
+  [ ] #5 Connection Visualization - edges between agents [blocked by #4]
+  [ ] #6 Task State Manager - track task lifecycle
+  [ ] #7 REFINEMENT: Hex grid visual design improvements
+  [ ] #8 Event Log Panel - scrolling event stream
+  [ ] #9 Agent Detail Panel - selection and details [blocked by #3, #4]
+
+Context packets live in: .agent-history/tasks/{complete,in-progress,waiting}/
+```
+
+## Workflow
+
+Each phase follows: **context packet -> plan -> implement -> repeat**
+
+Don't over-plan. Build one thing, validate it works, move on.
 
 ## Reference Code
 
