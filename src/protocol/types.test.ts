@@ -9,9 +9,7 @@ import {
   createMessage,
   resetMessageCounter,
   type Message,
-  type SpawnPayload,
   type TaskProgressPayload,
-  type TaskFailPayload,
 } from './types';
 
 describe('Event Protocol Types', () => {

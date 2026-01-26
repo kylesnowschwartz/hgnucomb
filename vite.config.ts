@@ -10,6 +10,7 @@ export default defineConfig({
       '@shared': resolve(__dirname, 'src/shared'),
       '@protocol': resolve(__dirname, 'src/protocol'),
       '@ui': resolve(__dirname, 'src/ui'),
+      '@state': resolve(__dirname, 'src/state'),
     },
   },
 })

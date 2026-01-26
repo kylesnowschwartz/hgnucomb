@@ -29,7 +29,8 @@
     "paths": {
       "@shared/*": ["src/shared/*"],
       "@protocol/*": ["src/protocol/*"],
-      "@ui/*": ["src/ui/*"]
+      "@ui/*": ["src/ui/*"],
+      "@state/*": ["src/state/*"]
     }
   },
   "include": ["src"]

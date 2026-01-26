@@ -34,7 +34,7 @@ bl close <id>         # Complete task
 bl update <a> --blocked-by <b>  # Set dependencies
 ```
 
-Context packets live in: `.agent-history/tasks/{complete,in-progress,waiting}/`
+CONTEXT PACKETS: Context packets live in: `.agent-history/tasks/{complete,in-progress,waiting}/` these documents are critical for planning and implementation.
 
 ## Workflow
 

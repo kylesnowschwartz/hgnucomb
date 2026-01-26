@@ -13,6 +13,9 @@ import { useState, useCallback } from 'react';
 import { Stage, Layer, RegularPolygon, Line } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { hexToPixel, hexesInRange } from '@shared/types';
+import { useAgentStore } from '@state/agentStore';
+import { useShallow } from 'zustand/shallow';
+import { AgentNode } from './AgentNode';
 
 // ============================================================================
 // Style Constants
@@ -56,6 +59,9 @@ export function HexGrid({
   // Viewport state
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: width / 2, y: height / 2 });
+
+  // Agent state - useShallow prevents infinite re-render from new array references
+  const agents = useAgentStore(useShallow((s) => s.getAllAgents()));
 
   // Generate hex cells
   const hexes = hexesInRange(hexRange);
@@ -142,6 +148,11 @@ export function HexGrid({
             />
           );
         })}
+
+        {/* Render agents */}
+        {agents.map((agent) => (
+          <AgentNode key={agent.id} agent={agent} hexSize={hexSize} />
+        ))}
 
         {/* Origin marker */}
         <Line

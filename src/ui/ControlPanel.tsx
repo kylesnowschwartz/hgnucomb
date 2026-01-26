@@ -12,6 +12,8 @@ import type {
   TaskCompletePayload,
   TaskFailPayload,
 } from '@protocol/types';
+import { useAgentStore } from '@state/agentStore';
+import { useTaskStore } from '@state/taskStore';
 import './ControlPanel.css';
 
 /**
@@ -77,11 +79,16 @@ export function ControlPanel() {
     const player = new ScriptPlayer(freshScript);
     playerRef.current = player;
 
+    // Clear UI and stores
     setEvents([]);
+    useAgentStore.getState().clear();
+    useTaskStore.getState().clear();
     setIsPlaying(true);
 
     player.subscribe((event) => {
       setEvents((prev) => [...prev, event]);
+      useAgentStore.getState().processEvent(event);
+      useTaskStore.getState().processEvent(event);
     });
 
     player.play().then(() => {
@@ -94,6 +101,8 @@ export function ControlPanel() {
       playerRef.current.stop();
     }
     setEvents([]);
+    useAgentStore.getState().clear();
+    useTaskStore.getState().clear();
     setIsPlaying(false);
   }, []);
 
