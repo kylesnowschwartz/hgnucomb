@@ -11,6 +11,7 @@ export default defineConfig({
       '@protocol': resolve(__dirname, 'src/protocol'),
       '@ui': resolve(__dirname, 'src/ui'),
       '@state': resolve(__dirname, 'src/state'),
+      '@terminal': resolve(__dirname, 'src/terminal'),
     },
   },
 })

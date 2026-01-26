@@ -30,7 +30,8 @@
       "@shared/*": ["src/shared/*"],
       "@protocol/*": ["src/protocol/*"],
       "@ui/*": ["src/ui/*"],
-      "@state/*": ["src/state/*"]
+      "@state/*": ["src/state/*"],
+      "@terminal/*": ["src/terminal/*"]
     }
   },
   "include": ["src"]
