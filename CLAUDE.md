@@ -17,21 +17,37 @@ Spatial terminal multiplexer: a 2D navigable canvas where terminals and agents e
 
 Using [Catppuccin Mocha](https://catppuccin.com/) - dark theme with pastel accents.
 
-**Structure:**
-- `src/theme/catppuccin-mocha.ts` - Current dark theme
-- `src/theme/catppuccin-latte.ts` - Light theme (available)
-- `src/index.css` - CSS custom properties (`--ctp-*` namespace)
+**Single source of truth:** TypeScript theme files generate CSS at build time.
 
-**CSS custom properties:** All colors use `--ctp-<colorname>` variables defined in index.css. Components should use these rather than hardcoded hex values.
+**Structure:**
+```
+src/theme/
+  catppuccin-mocha.ts   # Current theme (dark)
+  catppuccin-latte.ts   # Light theme (available)
+  index.ts              # Barrel exports
+scripts/
+  generate-theme-css.ts # Generates CSS from TS
+src/generated/
+  theme.css             # Auto-generated (gitignored)
+```
+
+**Build-time generation:**
+```bash
+pnpm theme              # Generate CSS manually
+pnpm dev / pnpm build   # Auto-runs theme generation
+```
+
+**To switch themes:**
+1. Edit `scripts/generate-theme-css.ts` - change the import to latte or mocha
+2. Update imports in `HexGrid.tsx` and `TerminalPanel.tsx`
+3. Run `pnpm theme` (or restart dev server)
 
 **TypeScript imports:**
 ```ts
 import { palette, ui, xtermTheme, agentColors, hexGrid } from '@theme/catppuccin-mocha';
-// Or for explicit theme selection:
-import { latte, mocha } from '@theme';
 ```
 
-**To switch themes:** Update imports in HexGrid.tsx, TerminalPanel.tsx, and CSS vars in index.css.
+**CSS custom properties:** Use `--ctp-<colorname>` variables in CSS files.
 
 **Agent colors:** orchestrator=blue, worker=green, specialist=mauve
 
