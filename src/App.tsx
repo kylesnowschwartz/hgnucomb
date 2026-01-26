@@ -4,6 +4,7 @@ import { ControlPanel } from '@ui/ControlPanel';
 import { TerminalPanel } from '@ui/TerminalPanel';
 import { WebSocketBridge } from '@terminal/index';
 import { useTerminalStore } from '@state/terminalStore';
+import { useUIStore } from '@state/uiStore';
 
 function App() {
   const [dimensions, setDimensions] = useState({
@@ -12,49 +13,80 @@ function App() {
   });
 
   const {
+    bridge,
     setBridge,
     setConnectionState,
+    connectionState,
     addSession,
-    removeSession,
     markExited,
     activeSessionId,
     setActiveSession,
-    bridge,
+    getSessionForAgent,
   } = useTerminalStore();
 
-  // Initialize bridge and create session on mount
+  const { selectedAgentId, selectAgent } = useUIStore();
+
+  // Initialize bridge on mount
   useEffect(() => {
     const ws = new WebSocketBridge();
     setBridge(ws);
 
-    // Track connection state
     const unsubConnection = ws.onConnectionChange((state) => {
       setConnectionState(state);
       console.log('[App] Connection state:', state);
     });
 
-    // Connect and create initial session
-    ws.connect()
-      .then(async () => {
-        console.log('[App] Connected to terminal server');
-        const session = await ws.createSession({ cols: 80, rows: 24 });
-        addSession(session);
-
-        // Listen for exit events
-        ws.onExit(session.sessionId, (exitCode) => {
-          markExited(session.sessionId, exitCode);
-        });
-      })
-      .catch((err) => {
-        console.error('[App] Failed to connect:', err);
-      });
+    ws.connect().catch((err) => {
+      console.error('[App] Failed to connect:', err);
+    });
 
     return () => {
       unsubConnection();
       ws.disconnect();
       setBridge(null);
     };
-  }, [setBridge, setConnectionState, addSession, markExited]);
+  }, [setBridge, setConnectionState]);
+
+  // When agent selected, ensure terminal session exists
+  useEffect(() => {
+    if (!selectedAgentId || !bridge || connectionState !== 'connected') {
+      if (!selectedAgentId) {
+        setActiveSession(null);
+      }
+      return;
+    }
+
+    // Check if session already exists for this agent
+    const existingSession = getSessionForAgent(selectedAgentId);
+    if (existingSession) {
+      setActiveSession(existingSession.sessionId);
+      return;
+    }
+
+    // Create new session for agent
+    bridge
+      .createSession({ cols: 80, rows: 24 })
+      .then((session) => {
+        addSession(session, selectedAgentId);
+        setActiveSession(session.sessionId);
+
+        // Listen for exit
+        bridge.onExit(session.sessionId, (exitCode) => {
+          markExited(session.sessionId, exitCode);
+        });
+      })
+      .catch((err) => {
+        console.error('[App] Failed to create session:', err);
+      });
+  }, [
+    selectedAgentId,
+    bridge,
+    connectionState,
+    getSessionForAgent,
+    addSession,
+    setActiveSession,
+    markExited,
+  ]);
 
   // Window resize handler
   useEffect(() => {
@@ -70,22 +102,16 @@ function App() {
   }, []);
 
   const handleCloseTerminal = useCallback(async () => {
-    if (!bridge || !activeSessionId) return;
-
-    try {
-      await bridge.disposeSession(activeSessionId);
-      removeSession(activeSessionId);
-      setActiveSession(null);
-    } catch (err) {
-      console.error('[App] Failed to dispose session:', err);
-    }
-  }, [bridge, activeSessionId, removeSession, setActiveSession]);
+    // Just deselect agent - keep session alive in background
+    selectAgent(null);
+    setActiveSession(null);
+  }, [selectAgent, setActiveSession]);
 
   return (
     <>
       <HexGrid width={dimensions.width} height={dimensions.height} />
       <ControlPanel />
-      {activeSessionId && (
+      {activeSessionId && selectedAgentId && (
         <TerminalPanel sessionId={activeSessionId} onClose={handleCloseTerminal} />
       )}
     </>

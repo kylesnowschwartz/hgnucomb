@@ -16,6 +16,7 @@ const MAX_BUFFER_CHUNKS = 1000;
 
 export interface TerminalSession {
   sessionId: string;
+  agentId: string | null; // Associated agent, null for standalone sessions
   cols: number;
   rows: number;
   buffer: string[];
@@ -35,9 +36,10 @@ interface TerminalStore {
   // Sessions
   sessions: Map<string, TerminalSession>;
   activeSessionId: string | null;
+  agentToSession: Map<string, string>; // agentId -> sessionId
 
   // Actions
-  addSession: (info: TerminalSessionInfo) => void;
+  addSession: (info: TerminalSessionInfo, agentId?: string | null) => void;
   removeSession: (sessionId: string) => void;
   appendData: (sessionId: string, data: string) => void;
   markExited: (sessionId: string, exitCode: number) => void;
@@ -45,6 +47,7 @@ interface TerminalStore {
   resizeSession: (sessionId: string, cols: number, rows: number) => void;
   clearBuffer: (sessionId: string) => void;
   getSession: (sessionId: string) => TerminalSession | undefined;
+  getSessionForAgent: (agentId: string) => TerminalSession | undefined;
   getAllSessions: () => TerminalSession[];
 }
 
@@ -57,32 +60,48 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
 
   sessions: new Map(),
   activeSessionId: null,
+  agentToSession: new Map(),
 
-  addSession: (info) => {
-    set((s) => ({
-      sessions: new Map(s.sessions).set(info.sessionId, {
-        sessionId: info.sessionId,
-        cols: info.cols,
-        rows: info.rows,
-        buffer: [],
-        exited: false,
-      }),
-      // Auto-select first session
-      activeSessionId: s.activeSessionId ?? info.sessionId,
-    }));
-    console.log('[TerminalStore] Session added:', info.sessionId);
+  addSession: (info, agentId = null) => {
+    set((s) => {
+      const newAgentToSession = new Map(s.agentToSession);
+      if (agentId) {
+        newAgentToSession.set(agentId, info.sessionId);
+      }
+      return {
+        sessions: new Map(s.sessions).set(info.sessionId, {
+          sessionId: info.sessionId,
+          agentId,
+          cols: info.cols,
+          rows: info.rows,
+          buffer: [],
+          exited: false,
+        }),
+        agentToSession: newAgentToSession,
+        // Don't auto-select - let UI control this
+        activeSessionId: s.activeSessionId,
+      };
+    });
+    console.log('[TerminalStore] Session added:', info.sessionId, 'for agent:', agentId);
   },
 
   removeSession: (sessionId) => {
     set((s) => {
-      const next = new Map(s.sessions);
-      next.delete(sessionId);
+      const session = s.sessions.get(sessionId);
+      const nextSessions = new Map(s.sessions);
+      nextSessions.delete(sessionId);
+
+      // Clean up agent mapping
+      const nextAgentToSession = new Map(s.agentToSession);
+      if (session?.agentId) {
+        nextAgentToSession.delete(session.agentId);
+      }
+
       return {
-        sessions: next,
+        sessions: nextSessions,
+        agentToSession: nextAgentToSession,
         activeSessionId:
-          s.activeSessionId === sessionId
-            ? (next.keys().next().value ?? null)
-            : s.activeSessionId,
+          s.activeSessionId === sessionId ? null : s.activeSessionId,
       };
     });
     console.log('[TerminalStore] Session removed:', sessionId);
@@ -158,5 +177,9 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
   },
 
   getSession: (sessionId) => get().sessions.get(sessionId),
+  getSessionForAgent: (agentId) => {
+    const sessionId = get().agentToSession.get(agentId);
+    return sessionId ? get().sessions.get(sessionId) : undefined;
+  },
   getAllSessions: () => Array.from(get().sessions.values()),
 }));

@@ -21,6 +21,8 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const bridge = useTerminalStore((s) => s.bridge);
+  const getSession = useTerminalStore((s) => s.getSession);
+  const appendData = useTerminalStore((s) => s.appendData);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -47,15 +49,24 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
     // Open terminal to DOM
     terminal.open(container);
 
+    // Replay existing buffer (for reopened sessions)
+    const session = getSession(sessionId);
+    if (session?.buffer.length) {
+      for (const chunk of session.buffer) {
+        terminal.write(chunk);
+      }
+    }
+
     // Layout must settle before fitting
     setTimeout(() => {
       fitAddon.fit();
       terminal.focus();
     }, 0);
 
-    // Wire data: bridge -> terminal
+    // Wire data: bridge -> terminal AND store in buffer
     const unsubData = bridge.onData(sessionId, (data) => {
       terminal.write(data);
+      appendData(sessionId, data);
     });
 
     // Wire data: terminal -> bridge
@@ -91,7 +102,7 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [sessionId, bridge, onClose]);
+  }, [sessionId, bridge, onClose, getSession, appendData]);
 
   return (
     <div className="terminal-panel">

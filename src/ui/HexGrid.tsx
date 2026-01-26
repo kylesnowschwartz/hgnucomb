@@ -14,6 +14,7 @@ import { Stage, Layer, Line, RegularPolygon } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { hexToPixel, hexesInRect } from '@shared/types';
 import { useAgentStore, type AgentState } from '@state/agentStore';
+import { useUIStore } from '@state/uiStore';
 import { useShallow } from 'zustand/shallow';
 import type { AgentRole, AgentStatus } from '@protocol/types';
 
@@ -76,6 +77,10 @@ export function HexGrid({
 
   // Agent state - useShallow prevents infinite re-render from new array references
   const agents = useAgentStore(useShallow((s) => s.getAllAgents()));
+
+  // UI state - selected agent for terminal
+  const selectedAgentId = useUIStore((s) => s.selectedAgentId);
+  const selectAgent = useUIStore((s) => s.selectAgent);
 
   // Calculate visible hex range based on viewport (for culling)
   const visibleHexes = useMemo(() => {
@@ -168,6 +173,8 @@ export function HexGrid({
           const agent = agentByHex.get(`${hex.q},${hex.r}`);
           const fill = agent ? ROLE_COLORS[agent.role] : STYLE.hexFill;
           const opacity = agent ? STATUS_OPACITY[agent.status] : 1;
+          const isSelected = agent && agent.id === selectedAgentId;
+
           return (
             <RegularPolygon
               key={`${hex.q},${hex.r}`}
@@ -176,10 +183,13 @@ export function HexGrid({
               sides={6}
               radius={hexSize}
               fill={fill}
-              stroke={STYLE.hexStroke}
-              strokeWidth={STYLE.gridStrokeWidth}
+              stroke={isSelected ? '#ffffff' : STYLE.hexStroke}
+              strokeWidth={isSelected ? 3 : STYLE.gridStrokeWidth}
               opacity={opacity}
-              listening={false}
+              listening={!!agent}
+              onClick={agent ? () => selectAgent(agent.id) : undefined}
+              onTap={agent ? () => selectAgent(agent.id) : undefined}
+              style={agent ? { cursor: 'pointer' } : undefined}
             />
           );
         })}
