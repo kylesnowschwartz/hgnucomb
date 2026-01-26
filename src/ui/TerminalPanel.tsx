@@ -8,8 +8,38 @@
 import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
 import { useTerminalStore } from '@state/terminalStore';
+import './fonts.css';
 import './TerminalPanel.css';
+
+// Tokyo Night theme - matches popular terminal/editor themes
+const TERMINAL_THEME = {
+  foreground: '#c0caf5',
+  background: 'transparent',
+  cursor: '#c0caf5',
+  cursorAccent: '#1a1b26',
+  selectionBackground: '#33467c',
+  selectionForeground: '#c0caf5',
+  // Normal colors
+  black: '#15161e',
+  red: '#f7768e',
+  green: '#9ece6a',
+  yellow: '#e0af68',
+  blue: '#7aa2f7',
+  magenta: '#bb9af7',
+  cyan: '#7dcfff',
+  white: '#a9b1d6',
+  // Bright colors
+  brightBlack: '#414868',
+  brightRed: '#f7768e',
+  brightGreen: '#9ece6a',
+  brightYellow: '#e0af68',
+  brightBlue: '#7aa2f7',
+  brightMagenta: '#bb9af7',
+  brightCyan: '#7dcfff',
+  brightWhite: '#c0caf5',
+};
 
 interface TerminalPanelProps {
   sessionId: string;
@@ -28,16 +58,15 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
     const container = containerRef.current;
     if (!container || !bridge) return;
 
-    // Create terminal with transparent background
+    // Create terminal with Nerd Font and Tokyo Night theme
     const terminal = new Terminal({
-      fontFamily: '"SF Mono", Consolas, monospace',
+      fontFamily: '"JetBrainsMono Nerd Font", "SF Mono", Consolas, monospace',
       fontSize: 14,
-      theme: {
-        background: 'transparent',
-        foreground: '#f8f8f8',
-      },
+      theme: TERMINAL_THEME,
       allowTransparency: true,
       cursorBlink: true,
+      // xterm.js specific options for better rendering
+      customGlyphs: true, // Use built-in box drawing glyphs
     });
 
     const fitAddon = new FitAddon();
@@ -48,6 +77,14 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
 
     // Open terminal to DOM
     terminal.open(container);
+
+    // Enable GPU-accelerated rendering
+    const webglAddon = new WebglAddon();
+    webglAddon.onContextLoss(() => {
+      // WebGL context lost - fall back to canvas renderer
+      webglAddon.dispose();
+    });
+    terminal.loadAddon(webglAddon);
 
     // Replay existing buffer (for reopened sessions)
     const session = getSession(sessionId);
@@ -61,6 +98,8 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
     setTimeout(() => {
       fitAddon.fit();
       terminal.focus();
+      // Sync PTY size after fit
+      bridge.resize(sessionId, terminal.cols, terminal.rows);
     }, 0);
 
     // Wire data: bridge -> terminal AND store in buffer
@@ -76,10 +115,9 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
 
     // Handle resize
     const resizeObserver = new ResizeObserver(() => {
-      if (fitAddonRef.current) {
+      if (fitAddonRef.current && terminalRef.current) {
         fitAddonRef.current.fit();
-        const { cols, rows } = terminal;
-        bridge.resize(sessionId, cols, rows);
+        bridge.resize(sessionId, terminalRef.current.cols, terminalRef.current.rows);
       }
     });
     resizeObserver.observe(container);
