@@ -196,12 +196,17 @@ export function HexGrid({
               const from = hexToPixel(agent.hex, hexSize);
               const to = hexToPixel(target.hex, hexSize);
 
+              // Hierarchy = either agent is orchestrator; Peer = both non-orchestrators
+              const isHierarchy =
+                agent.role === 'orchestrator' || target.role === 'orchestrator';
+
               return (
                 <Line
                   key={`conn-${agent.id}-${connectionId}`}
                   points={[from.x, from.y, to.x, to.y]}
                   stroke={STYLE.connectionStroke}
                   strokeWidth={STYLE.connectionStrokeWidth}
+                  dash={isHierarchy ? undefined : [6, 4]} // Dotted for peer connections
                   listening={false}
                 />
               );

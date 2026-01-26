@@ -149,11 +149,11 @@ export class ScriptPlayer {
  * Build the demo script with fresh message IDs.
  * Must be called each time you need a fresh script to get consistent evt-001, evt-002, etc.
  */
-export function buildDemoScript(delayMs: number = 2000): ScriptEvent[] {
+export function buildDemoScript(delayMs: number = 500): ScriptEvent[] {
   resetMessageCounter();
 
   return [
-    // t=0s: Spawn orchestrator
+    // Spawn orchestrator at center
     {
       delay: 0,
       event: createMessage<'agent.spawn'>('agent.spawn', 'hub', 'broadcast', {
@@ -161,10 +161,10 @@ export function buildDemoScript(delayMs: number = 2000): ScriptEvent[] {
         role: 'orchestrator',
         systemPrompt: 'Coordinate worker agents to complete tasks',
         hex: { q: 0, r: 0 },
-        connections: ['worker-1', 'worker-2'],
+        connections: ['worker-1', 'worker-2', 'worker-3', 'specialist-1'],
       } satisfies SpawnPayload),
     },
-    // t=2s: Spawn worker-1
+    // Spawn workers around orchestrator
     {
       delay: delayMs,
       event: createMessage<'agent.spawn'>('agent.spawn', 'hub', 'broadcast', {
@@ -172,21 +172,41 @@ export function buildDemoScript(delayMs: number = 2000): ScriptEvent[] {
         role: 'worker',
         systemPrompt: 'Execute assigned tasks',
         hex: { q: 1, r: 0 },
-        connections: ['orchestrator-1'],
+        connections: ['orchestrator-1', 'worker-2'],
       } satisfies SpawnPayload),
     },
-    // t=4s: Spawn worker-2
     {
       delay: delayMs,
       event: createMessage<'agent.spawn'>('agent.spawn', 'hub', 'broadcast', {
         agentId: 'worker-2',
         role: 'worker',
         systemPrompt: 'Execute assigned tasks',
+        hex: { q: 0, r: 1 },
+        connections: ['orchestrator-1', 'worker-1', 'worker-3'],
+      } satisfies SpawnPayload),
+    },
+    {
+      delay: delayMs,
+      event: createMessage<'agent.spawn'>('agent.spawn', 'hub', 'broadcast', {
+        agentId: 'worker-3',
+        role: 'worker',
+        systemPrompt: 'Execute assigned tasks',
+        hex: { q: -1, r: 1 },
+        connections: ['orchestrator-1', 'worker-2'],
+      } satisfies SpawnPayload),
+    },
+    // Spawn specialist
+    {
+      delay: delayMs,
+      event: createMessage<'agent.spawn'>('agent.spawn', 'hub', 'broadcast', {
+        agentId: 'specialist-1',
+        role: 'specialist',
+        systemPrompt: 'Handle specialized analysis tasks',
         hex: { q: -1, r: 0 },
         connections: ['orchestrator-1'],
       } satisfies SpawnPayload),
     },
-    // t=6s: Assign task-1 to worker-1
+    // Assign tasks
     {
       delay: delayMs,
       event: createMessage<'task.assign'>('task.assign', 'orchestrator-1', 'worker-1', {
@@ -195,7 +215,6 @@ export function buildDemoScript(delayMs: number = 2000): ScriptEvent[] {
         description: 'Process data batch A',
       } satisfies TaskAssignPayload),
     },
-    // t=8s: Assign task-2 to worker-2
     {
       delay: delayMs,
       event: createMessage<'task.assign'>('task.assign', 'orchestrator-1', 'worker-2', {
@@ -204,7 +223,15 @@ export function buildDemoScript(delayMs: number = 2000): ScriptEvent[] {
         description: 'Process data batch B',
       } satisfies TaskAssignPayload),
     },
-    // t=10s: Progress on task-1
+    {
+      delay: delayMs,
+      event: createMessage<'task.assign'>('task.assign', 'orchestrator-1', 'specialist-1', {
+        taskId: 'task-3',
+        agentId: 'specialist-1',
+        description: 'Analyze anomalies in dataset',
+      } satisfies TaskAssignPayload),
+    },
+    // Progress updates
     {
       delay: delayMs,
       event: createMessage<'task.progress'>('task.progress', 'worker-1', 'orchestrator-1', {
@@ -213,7 +240,6 @@ export function buildDemoScript(delayMs: number = 2000): ScriptEvent[] {
         message: 'Halfway through batch A',
       } satisfies TaskProgressPayload),
     },
-    // t=12s: Progress on task-2
     {
       delay: delayMs,
       event: createMessage<'task.progress'>('task.progress', 'worker-2', 'orchestrator-1', {
@@ -222,7 +248,15 @@ export function buildDemoScript(delayMs: number = 2000): ScriptEvent[] {
         message: 'Halfway through batch B',
       } satisfies TaskProgressPayload),
     },
-    // t=14s: Complete task-1
+    {
+      delay: delayMs,
+      event: createMessage<'task.progress'>('task.progress', 'specialist-1', 'orchestrator-1', {
+        taskId: 'task-3',
+        progress: 0.75,
+        message: 'Found 3 anomalies, analyzing',
+      } satisfies TaskProgressPayload),
+    },
+    // Completions
     {
       delay: delayMs,
       event: createMessage<'task.complete'>('task.complete', 'worker-1', 'orchestrator-1', {
@@ -230,7 +264,13 @@ export function buildDemoScript(delayMs: number = 2000): ScriptEvent[] {
         result: { recordsProcessed: 1000 },
       } satisfies TaskCompletePayload),
     },
-    // t=16s: Complete task-2
+    {
+      delay: delayMs,
+      event: createMessage<'task.complete'>('task.complete', 'specialist-1', 'orchestrator-1', {
+        taskId: 'task-3',
+        result: { anomaliesFound: 3, severity: 'low' },
+      } satisfies TaskCompletePayload),
+    },
     {
       delay: delayMs,
       event: createMessage<'task.complete'>('task.complete', 'worker-2', 'orchestrator-1', {
@@ -242,7 +282,7 @@ export function buildDemoScript(delayMs: number = 2000): ScriptEvent[] {
 }
 
 /**
- * Pre-built demo script with 2-second delays.
- * 9 events, 16 seconds total playback.
+ * Pre-built demo script with 0.5-second delays.
+ * 15 events, ~7 seconds total playback.
  */
-export const DEMO_SCRIPT: ScriptEvent[] = buildDemoScript(2000);
+export const DEMO_SCRIPT: ScriptEvent[] = buildDemoScript(500);
