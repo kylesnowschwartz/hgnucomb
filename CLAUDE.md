@@ -22,27 +22,19 @@ DO NOT COMMIT .cloned-sources/ and .agent-history/ they are gitignored and not p
 
 Hybrid MVP: Build fake event emitter + hex UI to validate the spatial visualization concept before wiring to real agents.
 
-## Task Tree
+## Task Tracking
 
-Session-based task tracking resets each conversation. This is the persistent record.
+Use `bl` for persistent task tracking:
 
+```bash
+bl ready              # What can I work on now?
+bl list --tree        # Full dependency tree
+bl create "title"     # New task
+bl close <id>         # Complete task
+bl update <a> --blocked-by <b>  # Set dependencies
 ```
-COMPLETE:
-  [x] #1 Event Protocol types (src/protocol/types.ts)
-  [x] #2 Event Script - ScriptPlayer with timed playback (src/protocol/script.ts)
-  [x] #4 Hex Grid with pan/zoom (src/ui/HexGrid.tsx)
 
-WAITING:
-  [ ] #3 Agent State Manager - registry that processes events
-  [ ] #4 Agent Nodes - render agents on hex grid [blocked by #3]
-  [ ] #5 Connection Visualization - edges between agents [blocked by #4]
-  [ ] #6 Task State Manager - track task lifecycle
-  [ ] #7 REFINEMENT: Hex grid visual design improvements
-  [ ] #8 Event Log Panel - scrolling event stream
-  [ ] #9 Agent Detail Panel - selection and details [blocked by #3, #4]
-
-Context packets live in: .agent-history/tasks/{complete,in-progress,waiting}/
-```
+Context packets live in: `.agent-history/tasks/{complete,in-progress,waiting}/`
 
 ## Workflow
 
