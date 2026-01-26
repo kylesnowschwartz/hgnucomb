@@ -52,7 +52,6 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
   const fitAddonRef = useRef<FitAddon | null>(null);
   const bridge = useTerminalStore((s) => s.bridge);
   const getSession = useTerminalStore((s) => s.getSession);
-  const appendData = useTerminalStore((s) => s.appendData);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -102,10 +101,9 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
       bridge.resize(sessionId, terminal.cols, terminal.rows);
     }, 0);
 
-    // Wire data: bridge -> terminal AND store in buffer
+    // Wire data: bridge -> terminal (buffer storage handled by App.tsx)
     const unsubData = bridge.onData(sessionId, (data) => {
       terminal.write(data);
-      appendData(sessionId, data);
     });
 
     // Wire data: terminal -> bridge
@@ -140,7 +138,7 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [sessionId, bridge, onClose, getSession, appendData]);
+  }, [sessionId, bridge, onClose, getSession]);
 
   return (
     <div className="terminal-panel">

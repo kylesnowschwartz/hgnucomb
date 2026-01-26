@@ -18,6 +18,7 @@ function App() {
     setConnectionState,
     connectionState,
     addSession,
+    appendData,
     markExited,
     activeSessionId,
     setActiveSession,
@@ -70,6 +71,11 @@ function App() {
         addSession(session, selectedAgentId);
         setActiveSession(session.sessionId);
 
+        // Always store data in buffer (even when panel is closed)
+        bridge.onData(session.sessionId, (data) => {
+          appendData(session.sessionId, data);
+        });
+
         // Listen for exit
         bridge.onExit(session.sessionId, (exitCode) => {
           markExited(session.sessionId, exitCode);
@@ -84,6 +90,7 @@ function App() {
     connectionState,
     getSessionForAgent,
     addSession,
+    appendData,
     setActiveSession,
     markExited,
   ]);
