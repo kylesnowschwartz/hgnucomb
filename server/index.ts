@@ -12,12 +12,20 @@ import {
   ServerMessage,
   isClientMessage,
 } from "./protocol.js";
+import {
+  generateContext,
+  writeContextFile,
+  cleanupContextFile,
+} from "./context.js";
 
 const PORT = 3001;
 const manager = new TerminalSessionManager();
 
 // Track which sessions belong to which client for cleanup
 const clientSessions = new Map<WebSocket, Set<string>>();
+
+// Track sessionId -> agentId for context cleanup
+const sessionToAgent = new Map<string, string>();
 
 function send(ws: WebSocket, msg: ServerMessage): void {
   if (ws.readyState === WebSocket.OPEN) {
@@ -28,8 +36,22 @@ function send(ws: WebSocket, msg: ServerMessage): void {
 function handleMessage(ws: WebSocket, msg: ClientMessage): void {
   switch (msg.type) {
     case "terminal.create": {
-      const { cols, rows, shell, cwd, env } = msg.payload;
-      const { session, sessionId } = manager.create({ cols, rows, shell, cwd, env });
+      const { cols, rows, shell, cwd, env, agentSnapshot, allAgents } = msg.payload;
+
+      // Generate context file for orchestrators
+      let finalEnv = env;
+      if (agentSnapshot && agentSnapshot.cellType === "orchestrator" && allAgents) {
+        const context = generateContext(agentSnapshot, allAgents);
+        const contextPath = writeContextFile(agentSnapshot.agentId, context);
+        finalEnv = { ...env, HGNUCOMB_CONTEXT: contextPath };
+      }
+
+      const { session, sessionId } = manager.create({ cols, rows, shell, cwd, env: finalEnv });
+
+      // Track session -> agent for context cleanup
+      if (agentSnapshot) {
+        sessionToAgent.set(sessionId, agentSnapshot.agentId);
+      }
 
       // Track session for this client
       let sessions = clientSessions.get(ws);
@@ -54,6 +76,12 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
         });
         // Clean up tracking
         sessions?.delete(sessionId);
+        // Clean up context file if this was an orchestrator
+        const agentId = sessionToAgent.get(sessionId);
+        if (agentId) {
+          cleanupContextFile(agentId);
+          sessionToAgent.delete(sessionId);
+        }
       });
 
       send(ws, {
@@ -123,6 +151,12 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
       const disposed = manager.dispose(sessionId);
       if (disposed) {
         clientSessions.get(ws)?.delete(sessionId);
+        // Clean up context file if this was an orchestrator
+        const agentId = sessionToAgent.get(sessionId);
+        if (agentId) {
+          cleanupContextFile(agentId);
+          sessionToAgent.delete(sessionId);
+        }
         send(ws, {
           type: "terminal.disposed",
           requestId: msg.requestId,

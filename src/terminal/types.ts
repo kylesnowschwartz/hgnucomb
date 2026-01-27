@@ -5,6 +5,8 @@
  * is a separate package. Keeping them in sync is a manual process.
  */
 
+import type { AgentSnapshot } from '@shared/context.ts';
+
 // ============================================================================
 // Connection State
 // ============================================================================
@@ -31,6 +33,10 @@ export interface TerminalSessionConfig {
   shell?: string;
   cwd?: string;
   env?: Record<string, string>;
+  /** Agent info for context generation (orchestrators only) */
+  agentSnapshot?: AgentSnapshot;
+  /** All agents on grid for context generation */
+  allAgents?: AgentSnapshot[];
 }
 
 // ============================================================================
@@ -54,6 +60,10 @@ export interface CreateRequest {
     shell?: string;
     cwd?: string;
     env?: Record<string, string>;
+    /** Agent info for context generation (orchestrators only) */
+    agentSnapshot?: AgentSnapshot;
+    /** All agents on grid for context generation */
+    allAgents?: AgentSnapshot[];
   };
 }
 

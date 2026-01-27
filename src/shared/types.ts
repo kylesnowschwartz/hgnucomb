@@ -103,3 +103,18 @@ export function hexesInRect(
 
   return hexes;
 }
+
+/**
+ * Calculate distance between two hex coordinates.
+ * Uses cube coordinate conversion for accurate distance.
+ *
+ * @param a - First hex coordinate
+ * @param b - Second hex coordinate
+ * @returns Integer distance (number of hex steps)
+ */
+export function hexDistance(a: HexCoordinate, b: HexCoordinate): number {
+  // Convert axial to cube: s = -q - r
+  const as = -a.q - a.r;
+  const bs = -b.q - b.r;
+  return Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs(as - bs));
+}

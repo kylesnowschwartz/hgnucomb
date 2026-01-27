@@ -6,6 +6,29 @@
  */
 
 // ============================================================================
+// Agent snapshot types (for context generation)
+// ============================================================================
+
+export interface HexCoordinate {
+  q: number;
+  r: number;
+}
+
+export type CellType = "terminal" | "orchestrator";
+export type AgentStatus = "idle" | "active" | "paused" | "terminated";
+
+/**
+ * Minimal agent info sent from client when creating a session.
+ */
+export interface AgentSnapshot {
+  agentId: string;
+  cellType: CellType;
+  hex: HexCoordinate;
+  status: AgentStatus;
+  connections: string[];
+}
+
+// ============================================================================
 // Request types (Client -> Server)
 // ============================================================================
 
@@ -18,6 +41,10 @@ export interface CreateRequest {
     shell?: string;
     cwd?: string;
     env?: Record<string, string>;
+    /** Agent info for context generation (orchestrators only) */
+    agentSnapshot?: AgentSnapshot;
+    /** All agents on grid for context generation */
+    allAgents?: AgentSnapshot[];
   };
 }
 

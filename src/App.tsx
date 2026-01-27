@@ -6,6 +6,7 @@ import { WebSocketBridge } from '@terminal/index';
 import { useTerminalStore } from '@state/terminalStore';
 import { useUIStore } from '@state/uiStore';
 import { useAgentStore } from '@state/agentStore';
+import type { AgentSnapshot } from '@shared/context';
 
 function App() {
   const [dimensions, setDimensions] = useState({
@@ -27,7 +28,7 @@ function App() {
   } = useTerminalStore();
 
   const { selectedAgentId, selectAgent } = useUIStore();
-  const { getAgent } = useAgentStore();
+  const { getAgent, getAllAgents } = useAgentStore();
 
   // Initialize bridge on mount
   useEffect(() => {
@@ -81,8 +82,30 @@ function App() {
       HGNUCOMB_CELL_TYPE: agent.cellType,
     };
 
+    // Build snapshots for context generation (orchestrators only)
+    const isOrchestrator = agent.cellType === 'orchestrator';
+    const agentSnapshot: AgentSnapshot | undefined = isOrchestrator
+      ? {
+          agentId: agent.id,
+          cellType: agent.cellType,
+          hex: agent.hex,
+          status: agent.status,
+          connections: agent.connections,
+        }
+      : undefined;
+
+    const allAgents: AgentSnapshot[] | undefined = isOrchestrator
+      ? getAllAgents().map((a) => ({
+          agentId: a.id,
+          cellType: a.cellType,
+          hex: a.hex,
+          status: a.status,
+          connections: a.connections,
+        }))
+      : undefined;
+
     bridge
-      .createSession({ cols: 80, rows: 24, shell, env })
+      .createSession({ cols: 80, rows: 24, shell, env, agentSnapshot, allAgents })
       .then((session) => {
         addSession(session, selectedAgentId);
         setActiveSession(session.sessionId);
@@ -106,6 +129,7 @@ function App() {
     connectionState,
     getSessionForAgent,
     getAgent,
+    getAllAgents,
     addSession,
     appendData,
     setActiveSession,

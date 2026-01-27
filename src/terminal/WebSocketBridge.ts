@@ -211,6 +211,8 @@ export class WebSocketBridge implements TerminalBridge {
         shell: config?.shell,
         cwd: config?.cwd,
         env: config?.env,
+        agentSnapshot: config?.agentSnapshot,
+        allAgents: config?.allAgents,
       },
     };
 
