@@ -10,6 +10,7 @@
 import { execSync } from "child_process";
 import { existsSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
+import { generateMcpConfig, writeMcpConfig } from "./mcp-config.js";
 
 /**
  * Execute git command and return stdout as string.
@@ -139,6 +140,13 @@ export function createWorktree(targetDir: string, agentId: string): WorktreeResu
       };
     }
   }
+
+  // Generate .mcp.json with absolute paths for this worktree
+  // Claude Code searches from CWD upward - worktree is its own git root,
+  // so we must provide the config directly rather than relying on parent repo
+  const mcpConfig = generateMcpConfig(gitRoot, agentId);
+  writeMcpConfig(worktreePath, mcpConfig);
+  console.log(`[Worktree] Generated .mcp.json with absolute paths`);
 
   console.log(`[Worktree] Created: ${worktreePath} on branch ${branchName}`);
   return { success: true, worktreePath, branchName };
