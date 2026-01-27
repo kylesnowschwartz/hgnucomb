@@ -138,6 +138,7 @@ export const agentColors = {
 export const hexGrid = {
   background: palette.mantle,
   hexFill: palette.base,
+  hexFillHover: palette.surface0, // Subtle fill when hovering empty cell
   hexStroke: palette.surface1,
   hexStrokeSelected: palette.pink,
   hexStrokeHover: palette.lavender,

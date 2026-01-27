@@ -24,6 +24,8 @@ interface AgentStore {
   clear: () => void;
   getAgent: (id: string) => AgentState | undefined;
   getAllAgents: () => AgentState[];
+  // Direct spawn (for user-initiated placement, not event-driven)
+  spawnAgent: (hex: HexCoordinate) => string;
 }
 
 export const useAgentStore = create<AgentStore>()((set, get) => ({
@@ -71,4 +73,20 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
   clear: () => set({ agents: new Map() }),
   getAgent: (id) => get().agents.get(id),
   getAllAgents: () => Array.from(get().agents.values()),
+
+  spawnAgent: (hex) => {
+    const id = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    set((s) => ({
+      agents: new Map(s.agents).set(id, {
+        id,
+        role: 'worker', // Default type for now
+        status: 'idle',
+        systemPrompt: '',
+        hex,
+        connections: [],
+      }),
+    }));
+    console.log('[AgentStore] User spawned agent:', id, 'at', hex);
+    return id;
+  },
 }));

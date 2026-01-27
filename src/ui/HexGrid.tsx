@@ -26,8 +26,10 @@ import { hexGrid, agentColors } from '@theme/catppuccin-mocha';
 const STYLE = {
   background: hexGrid.background,
   hexFill: hexGrid.hexFill,
+  hexFillHover: hexGrid.hexFillHover,
   hexStroke: hexGrid.hexStroke,
   hexStrokeSelected: hexGrid.hexStrokeSelected,
+  hexStrokeHover: hexGrid.hexStrokeHover,
   connectionStroke: agentColors.connection,
   originMarkerStroke: hexGrid.originMarker,
   gridStrokeWidth: 1,
@@ -79,10 +81,13 @@ export function HexGrid({
 
   // Agent state - useShallow prevents infinite re-render from new array references
   const agents = useAgentStore(useShallow((s) => s.getAllAgents()));
+  const spawnAgent = useAgentStore((s) => s.spawnAgent);
 
-  // UI state - selected agent for terminal
+  // UI state - selected agent for terminal, hovered hex for visual feedback
   const selectedAgentId = useUIStore((s) => s.selectedAgentId);
   const selectAgent = useUIStore((s) => s.selectAgent);
+  const hoveredHex = useUIStore((s) => s.hoveredHex);
+  const setHoveredHex = useUIStore((s) => s.setHoveredHex);
 
   // Calculate visible hex range based on viewport (for culling)
   const visibleHexes = useMemo(() => {
@@ -173,9 +178,26 @@ export function HexGrid({
         {visibleHexes.map((hex) => {
           const { x, y } = hexToPixel(hex, hexSize);
           const agent = agentByHex.get(`${hex.q},${hex.r}`);
-          const fill = agent ? ROLE_COLORS[agent.role] : STYLE.hexFill;
-          const opacity = agent ? STATUS_OPACITY[agent.status] : 1;
           const isSelected = agent && agent.id === selectedAgentId;
+          const isHovered =
+            hoveredHex && hoveredHex.q === hex.q && hoveredHex.r === hex.r;
+
+          // Fill: agent role color > hover highlight > default
+          const fill = agent
+            ? ROLE_COLORS[agent.role]
+            : isHovered
+              ? STYLE.hexFillHover
+              : STYLE.hexFill;
+
+          // Stroke: selected > hovered > default
+          const stroke = isSelected
+            ? STYLE.hexStrokeSelected
+            : isHovered
+              ? STYLE.hexStrokeHover
+              : STYLE.hexStroke;
+
+          const strokeWidth = isSelected ? 3 : STYLE.gridStrokeWidth;
+          const opacity = agent ? STATUS_OPACITY[agent.status] : 1;
 
           return (
             <RegularPolygon
@@ -185,13 +207,44 @@ export function HexGrid({
               sides={6}
               radius={hexSize}
               fill={fill}
-              stroke={isSelected ? STYLE.hexStrokeSelected : STYLE.hexStroke}
-              strokeWidth={isSelected ? 3 : STYLE.gridStrokeWidth}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
               opacity={opacity}
-              listening={!!agent}
-              onClick={agent ? () => selectAgent(agent.id) : undefined}
-              onTap={agent ? () => selectAgent(agent.id) : undefined}
-              style={agent ? { cursor: 'pointer' } : undefined}
+              listening={true}
+              onClick={() => {
+                if (agent) {
+                  selectAgent(agent.id);
+                } else {
+                  spawnAgent(hex);
+                }
+              }}
+              onTap={() => {
+                if (agent) {
+                  selectAgent(agent.id);
+                } else {
+                  spawnAgent(hex);
+                }
+              }}
+              onDblClick={() => {
+                if (agent) {
+                  selectAgent(agent.id);
+                } else {
+                  // Spawn and immediately select to open terminal
+                  const newAgentId = spawnAgent(hex);
+                  selectAgent(newAgentId);
+                }
+              }}
+              onDblTap={() => {
+                if (agent) {
+                  selectAgent(agent.id);
+                } else {
+                  const newAgentId = spawnAgent(hex);
+                  selectAgent(newAgentId);
+                }
+              }}
+              onMouseEnter={() => setHoveredHex(hex)}
+              onMouseLeave={() => setHoveredHex(null)}
+              style={{ cursor: 'pointer' }}
             />
           );
         })}
