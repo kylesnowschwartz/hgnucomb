@@ -18,6 +18,8 @@ import type {
   ConnectionHandler,
   ClientMessage,
   ServerMessage,
+  McpRequest,
+  McpResponse,
 } from './types.ts';
 
 const DEFAULT_URL = 'ws://localhost:3001';
@@ -37,7 +39,10 @@ interface SessionListeners {
   exit: Set<ExitHandler>;
 }
 
+export type McpRequestHandler = (request: McpRequest) => void;
+
 export class WebSocketBridge implements TerminalBridge {
+  private mcpRequestHandlers = new Set<McpRequestHandler>();
   private ws: WebSocket | null = null;
   private url: string;
   private _connectionState: ConnectionState = 'disconnected';
@@ -302,6 +307,31 @@ export class WebSocketBridge implements TerminalBridge {
     };
   }
 
+  // ============================================================================
+  // MCP Message Handling
+  // ============================================================================
+
+  /**
+   * Subscribe to incoming MCP requests from orchestrator agents.
+   */
+  onMcpRequest(handler: McpRequestHandler): () => void {
+    this.mcpRequestHandlers.add(handler);
+    return () => {
+      this.mcpRequestHandlers.delete(handler);
+    };
+  }
+
+  /**
+   * Send an MCP response back to the requesting agent.
+   */
+  sendMcpResponse(response: McpResponse): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[WebSocketBridge] Cannot send MCP response: not connected');
+      return;
+    }
+    this.ws.send(JSON.stringify(response));
+  }
+
   private nextRequestId(): string {
     return `req-${++this.requestCounter}-${Date.now()}`;
   }
@@ -337,11 +367,17 @@ export class WebSocketBridge implements TerminalBridge {
   }
 
   private handleMessage(raw: string): void {
-    let msg: ServerMessage;
+    let msg: ServerMessage | McpRequest;
     try {
-      msg = JSON.parse(raw) as ServerMessage;
+      msg = JSON.parse(raw);
     } catch {
       console.error('[WebSocketBridge] Invalid JSON:', raw);
+      return;
+    }
+
+    // Route MCP requests to handlers
+    if (msg.type === 'mcp.spawn' || msg.type === 'mcp.getGrid') {
+      this.mcpRequestHandlers.forEach((handler) => handler(msg as McpRequest));
       return;
     }
 

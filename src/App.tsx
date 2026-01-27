@@ -5,8 +5,68 @@ import { TerminalPanel } from '@ui/TerminalPanel';
 import { WebSocketBridge } from '@terminal/index';
 import { useTerminalStore } from '@state/terminalStore';
 import { useUIStore } from '@state/uiStore';
-import { useAgentStore } from '@state/agentStore';
+import { useAgentStore, type AgentState } from '@state/agentStore';
 import type { AgentSnapshot } from '@shared/context';
+import type { McpRequest, McpSpawnResponse, McpGetGridResponse, McpGridAgent } from '@terminal/types';
+import type { HexCoordinate } from '@shared/types';
+import { hexDistance } from '@shared/types';
+
+/**
+ * Hex neighbor offsets in axial coordinates.
+ */
+const HEX_NEIGHBORS = [
+  { q: 1, r: 0 },
+  { q: 1, r: -1 },
+  { q: 0, r: -1 },
+  { q: -1, r: 0 },
+  { q: -1, r: 1 },
+  { q: 0, r: 1 },
+];
+
+/**
+ * Find nearest empty hex to a given position using ring expansion.
+ * Searches distance 1, then 2, etc. until an empty hex is found.
+ */
+function findNearestEmptyHex(center: HexCoordinate, agents: AgentState[]): HexCoordinate {
+  const occupied = new Set(agents.map((a) => `${a.hex.q},${a.hex.r}`));
+
+  // Try rings of increasing distance
+  for (let radius = 1; radius <= 10; radius++) {
+    const ring = getHexRing(center, radius);
+    for (const hex of ring) {
+      if (!occupied.has(`${hex.q},${hex.r}`)) {
+        return hex;
+      }
+    }
+  }
+
+  // Fallback: return adjacent hex even if occupied (shouldn't happen)
+  return { q: center.q + 1, r: center.r };
+}
+
+/**
+ * Get all hexes at exactly a given distance from center.
+ */
+function getHexRing(center: HexCoordinate, radius: number): HexCoordinate[] {
+  if (radius === 0) return [center];
+
+  const results: HexCoordinate[] = [];
+  // Start at "top" of ring and walk around
+  let hex = { q: center.q, r: center.r - radius };
+
+  for (let i = 0; i < 6; i++) {
+    for (let j = 0; j < radius; j++) {
+      results.push({ ...hex });
+      // Move in direction i
+      hex = {
+        q: hex.q + HEX_NEIGHBORS[i].q,
+        r: hex.r + HEX_NEIGHBORS[i].r,
+      };
+    }
+  }
+
+  return results;
+}
 
 function App() {
   const [dimensions, setDimensions] = useState({
@@ -28,7 +88,7 @@ function App() {
   } = useTerminalStore();
 
   const { selectedAgentId, selectAgent } = useUIStore();
-  const { getAgent, getAllAgents } = useAgentStore();
+  const { getAgent, getAllAgents, spawnAgent } = useAgentStore();
 
   // Initialize bridge on mount
   useEffect(() => {
@@ -50,6 +110,119 @@ function App() {
       setBridge(null);
     };
   }, [setBridge, setConnectionState]);
+
+  // Handle MCP requests from orchestrator agents
+  useEffect(() => {
+    if (!bridge) return;
+
+    const handleMcpRequest = (request: McpRequest) => {
+      console.log('[App] MCP request:', request.type, request.payload);
+
+      switch (request.type) {
+        case 'mcp.spawn': {
+          const { callerId, q, r, cellType } = request.payload;
+
+          // Validate caller exists and is orchestrator
+          const caller = getAgent(callerId);
+          if (!caller) {
+            const response: McpSpawnResponse = {
+              type: 'mcp.spawn.result',
+              requestId: request.requestId,
+              payload: { success: false, error: `Caller agent not found: ${callerId}` },
+            };
+            bridge.sendMcpResponse(response);
+            return;
+          }
+
+          if (caller.cellType !== 'orchestrator') {
+            const response: McpSpawnResponse = {
+              type: 'mcp.spawn.result',
+              requestId: request.requestId,
+              payload: { success: false, error: 'Only orchestrators can spawn agents' },
+            };
+            bridge.sendMcpResponse(response);
+            return;
+          }
+
+          // Determine hex position
+          let targetHex = { q: q ?? 0, r: r ?? 0 };
+          if (q === undefined || r === undefined) {
+            // Auto-position near caller using ring expansion
+            targetHex = findNearestEmptyHex(caller.hex, getAllAgents());
+          }
+
+          // Check if hex is occupied
+          const agents = getAllAgents();
+          const occupied = agents.some(
+            (a) => a.hex.q === targetHex.q && a.hex.r === targetHex.r
+          );
+          if (occupied) {
+            const response: McpSpawnResponse = {
+              type: 'mcp.spawn.result',
+              requestId: request.requestId,
+              payload: {
+                success: false,
+                error: `Hex (${targetHex.q}, ${targetHex.r}) is already occupied`,
+              },
+            };
+            bridge.sendMcpResponse(response);
+            return;
+          }
+
+          // Spawn the agent
+          const newAgentId = spawnAgent(targetHex, cellType);
+          const response: McpSpawnResponse = {
+            type: 'mcp.spawn.result',
+            requestId: request.requestId,
+            payload: { success: true, agentId: newAgentId, hex: targetHex },
+          };
+          bridge.sendMcpResponse(response);
+          console.log('[App] MCP spawned agent:', newAgentId, 'at', targetHex);
+          break;
+        }
+
+        case 'mcp.getGrid': {
+          const { callerId, maxDistance = 5 } = request.payload;
+
+          // Validate caller exists
+          const caller = getAgent(callerId);
+          if (!caller) {
+            const response: McpGetGridResponse = {
+              type: 'mcp.getGrid.result',
+              requestId: request.requestId,
+              payload: { success: false, error: `Caller agent not found: ${callerId}` },
+            };
+            bridge.sendMcpResponse(response);
+            return;
+          }
+
+          // Get agents within distance
+          const agents = getAllAgents();
+          const nearbyAgents: McpGridAgent[] = agents
+            .map((a) => ({
+              agentId: a.id,
+              cellType: a.cellType,
+              hex: a.hex,
+              status: a.status,
+              distance: hexDistance(caller.hex, a.hex),
+            }))
+            .filter((a) => a.distance <= maxDistance)
+            .sort((a, b) => a.distance - b.distance);
+
+          const response: McpGetGridResponse = {
+            type: 'mcp.getGrid.result',
+            requestId: request.requestId,
+            payload: { success: true, agents: nearbyAgents },
+          };
+          bridge.sendMcpResponse(response);
+          break;
+        }
+      }
+    };
+
+    const unsub = bridge.onMcpRequest(handleMcpRequest);
+    return unsub;
+  }, [bridge, getAgent, getAllAgents, spawnAgent]);
 
   // When agent selected, ensure terminal session exists
   useEffect(() => {

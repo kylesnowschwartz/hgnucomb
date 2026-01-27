@@ -7,6 +7,10 @@
 
 import * as pty from "node-pty";
 import { execSync } from "child_process";
+import { resolve } from "path";
+
+// Default cwd is repo root (parent of server directory)
+const DEFAULT_CWD = resolve(process.cwd(), "..");
 
 export interface TerminalSessionOptions {
   cols?: number;
@@ -45,7 +49,7 @@ export class TerminalSession {
       name: "xterm-256color",
       cols: this.cols,
       rows: this.rows,
-      cwd: options.cwd ?? process.cwd(),
+      cwd: options.cwd ?? DEFAULT_CWD,
       env: { ...process.env, ...options.env } as Record<string, string>,
     });
 

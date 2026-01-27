@@ -148,3 +148,93 @@ export function isClientMessage(msg: unknown): msg is ClientMessage {
     typeof m.payload === "object"
   );
 }
+
+// ============================================================================
+// MCP Message Types
+// ============================================================================
+
+/**
+ * MCP client registration - identifies a WebSocket client as an MCP server.
+ */
+export interface McpRegisterRequest {
+  type: "mcp.register";
+  payload: {
+    agentId: string;
+  };
+}
+
+/**
+ * MCP spawn request - orchestrator requests spawning a new agent.
+ */
+export interface McpSpawnRequest {
+  type: "mcp.spawn";
+  requestId: string;
+  payload: {
+    callerId: string;
+    q?: number;
+    r?: number;
+    cellType: CellType;
+  };
+}
+
+/**
+ * MCP get grid state request - query agents on the grid.
+ */
+export interface McpGetGridRequest {
+  type: "mcp.getGrid";
+  requestId: string;
+  payload: {
+    callerId: string;
+    maxDistance?: number;
+  };
+}
+
+/**
+ * MCP spawn response - sent back to MCP server.
+ */
+export interface McpSpawnResponse {
+  type: "mcp.spawn.result";
+  requestId: string;
+  payload: {
+    success: boolean;
+    agentId?: string;
+    hex?: HexCoordinate;
+    error?: string;
+  };
+}
+
+/**
+ * Agent info in grid state response.
+ */
+export interface McpGridAgent {
+  agentId: string;
+  cellType: CellType;
+  hex: HexCoordinate;
+  status: AgentStatus;
+  distance: number;
+}
+
+/**
+ * MCP get grid response - sent back to MCP server.
+ */
+export interface McpGetGridResponse {
+  type: "mcp.getGrid.result";
+  requestId: string;
+  payload: {
+    success: boolean;
+    agents?: McpGridAgent[];
+    error?: string;
+  };
+}
+
+export type McpRequest = McpRegisterRequest | McpSpawnRequest | McpGetGridRequest;
+export type McpResponse = McpSpawnResponse | McpGetGridResponse;
+
+/**
+ * Type guard for MCP messages (from MCP server or browser client).
+ */
+export function isMcpMessage(msg: unknown): msg is McpRequest | McpResponse {
+  if (typeof msg !== "object" || msg === null) return false;
+  const m = msg as Record<string, unknown>;
+  return typeof m.type === "string" && m.type.startsWith("mcp.");
+}

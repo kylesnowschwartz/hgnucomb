@@ -11,6 +11,11 @@ import {
   ClientMessage,
   ServerMessage,
   isClientMessage,
+  isMcpMessage,
+  McpRequest,
+  McpResponse,
+  McpSpawnRequest,
+  McpGetGridRequest,
 } from "./protocol.js";
 import {
   generateContext,
@@ -26,6 +31,51 @@ const clientSessions = new Map<WebSocket, Set<string>>();
 
 // Track sessionId -> agentId for context cleanup
 const sessionToAgent = new Map<string, string>();
+
+// ============================================================================
+// MCP Routing
+// ============================================================================
+
+// MCP clients (identified by agentId after registration)
+const mcpClients = new Map<string, WebSocket>();
+
+// Browser clients (non-MCP WebSocket connections)
+const browserClients = new Set<WebSocket>();
+
+// Pending MCP requests waiting for browser response
+interface PendingMcpRequest {
+  mcpWs: WebSocket;
+  agentId: string;
+}
+const pendingMcpRequests = new Map<string, PendingMcpRequest>();
+
+/**
+ * Route an MCP request from MCP server to browser clients.
+ */
+function routeMcpToBrowser(msg: McpSpawnRequest | McpGetGridRequest): void {
+  const json = JSON.stringify(msg);
+  for (const browser of browserClients) {
+    if (browser.readyState === WebSocket.OPEN) {
+      browser.send(json);
+    }
+  }
+}
+
+/**
+ * Route an MCP response from browser back to the requesting MCP server.
+ */
+function routeMcpResponse(msg: McpResponse): void {
+  const pending = pendingMcpRequests.get(msg.requestId);
+  if (!pending) {
+    console.warn(`[MCP] No pending request for: ${msg.requestId}`);
+    return;
+  }
+
+  if (pending.mcpWs.readyState === WebSocket.OPEN) {
+    pending.mcpWs.send(JSON.stringify(msg));
+  }
+  pendingMcpRequests.delete(msg.requestId);
+}
 
 function send(ws: WebSocket, msg: ServerMessage): void {
   if (ws.readyState === WebSocket.OPEN) {
@@ -43,7 +93,11 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
       if (agentSnapshot && agentSnapshot.cellType === "orchestrator" && allAgents) {
         const context = generateContext(agentSnapshot, allAgents);
         const contextPath = writeContextFile(agentSnapshot.agentId, context);
-        finalEnv = { ...env, HGNUCOMB_CONTEXT: contextPath };
+
+        finalEnv = {
+          ...env,
+          HGNUCOMB_CONTEXT: contextPath,
+        };
       }
 
       const { session, sessionId } = manager.create({ cols, rows, shell, cwd, env: finalEnv });
@@ -199,9 +253,20 @@ wss.on("error", (err: NodeJS.ErrnoException) => {
 wss.on("connection", (ws) => {
   console.log("Client connected");
 
+  // Assume browser client until mcp.register received
+  browserClients.add(ws);
+
   ws.on("message", (raw) => {
     try {
       const msg = JSON.parse(raw.toString());
+
+      // Handle MCP messages
+      if (isMcpMessage(msg)) {
+        handleMcpMessage(ws, msg);
+        return;
+      }
+
+      // Handle terminal messages
       if (!isClientMessage(msg)) {
         send(ws, {
           type: "terminal.error",
@@ -221,6 +286,25 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
+    // Clean up browser client
+    browserClients.delete(ws);
+
+    // Clean up MCP client
+    for (const [agentId, mcpWs] of mcpClients.entries()) {
+      if (mcpWs === ws) {
+        mcpClients.delete(agentId);
+        console.log(`[MCP] Agent ${agentId} disconnected`);
+        break;
+      }
+    }
+
+    // Clean up pending MCP requests from this client
+    for (const [requestId, pending] of pendingMcpRequests.entries()) {
+      if (pending.mcpWs === ws) {
+        pendingMcpRequests.delete(requestId);
+      }
+    }
+
     // Clean up all sessions owned by this client
     const sessions = clientSessions.get(ws);
     if (sessions) {
@@ -237,6 +321,39 @@ wss.on("connection", (ws) => {
     console.error("WebSocket error:", err.message);
   });
 });
+
+/**
+ * Handle MCP protocol messages.
+ */
+function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse): void {
+  switch (msg.type) {
+    case "mcp.register": {
+      // This client is an MCP server, not a browser
+      browserClients.delete(ws);
+      mcpClients.set(msg.payload.agentId, ws);
+      console.log(`[MCP] Agent ${msg.payload.agentId} registered`);
+      break;
+    }
+
+    case "mcp.spawn":
+    case "mcp.getGrid": {
+      // MCP server requesting action from browser
+      const agentId = msg.payload.callerId;
+      pendingMcpRequests.set(msg.requestId, { mcpWs: ws, agentId });
+      routeMcpToBrowser(msg);
+      console.log(`[MCP] Routing ${msg.type} from ${agentId} to browser`);
+      break;
+    }
+
+    case "mcp.spawn.result":
+    case "mcp.getGrid.result": {
+      // Browser responding to MCP request
+      routeMcpResponse(msg);
+      console.log(`[MCP] Routing ${msg.type} back to MCP server`);
+      break;
+    }
+  }
+}
 
 console.log(`Terminal WebSocket server listening on ws://localhost:${PORT}`);
 

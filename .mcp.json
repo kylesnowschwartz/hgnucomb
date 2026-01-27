@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "hgnucomb": {
+      "command": "node",
+      "args": ["server/dist/mcp.js"],
+      "env": {
+        "HGNUCOMB_AGENT_ID": "${HGNUCOMB_AGENT_ID}",
+        "HGNUCOMB_WS_URL": "${HGNUCOMB_WS_URL:-ws://localhost:3001}"
+      }
+    }
+  }
+}
