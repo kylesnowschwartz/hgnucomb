@@ -13,8 +13,6 @@
 
 import WebSocket from "ws";
 import type {
-  McpSpawnRequest,
-  McpGetGridRequest,
   McpSpawnResponse,
   McpGetGridResponse,
 } from "./protocol.js";

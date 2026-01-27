@@ -14,14 +14,21 @@ import {
   isMcpMessage,
   McpRequest,
   McpResponse,
+  McpNotification,
   McpSpawnRequest,
   McpGetGridRequest,
+  McpBroadcastRequest,
+  McpReportStatusRequest,
 } from "./protocol.js";
 import {
   generateContext,
   writeContextFile,
   cleanupContextFile,
 } from "./context.js";
+import {
+  createWorktree,
+  removeWorktree,
+} from "./worktree.js";
 
 const PORT = 3001;
 const manager = new TerminalSessionManager();
@@ -52,7 +59,7 @@ const pendingMcpRequests = new Map<string, PendingMcpRequest>();
 /**
  * Route an MCP request from MCP server to browser clients.
  */
-function routeMcpToBrowser(msg: McpSpawnRequest | McpGetGridRequest): void {
+function routeMcpToBrowser(msg: McpSpawnRequest | McpGetGridRequest | McpBroadcastRequest | McpReportStatusRequest): void {
   const json = JSON.stringify(msg);
   for (const browser of browserClients) {
     if (browser.readyState === WebSocket.OPEN) {
@@ -88,19 +95,33 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
     case "terminal.create": {
       const { cols, rows, shell, cwd, env, agentSnapshot, allAgents } = msg.payload;
 
-      // Generate context file for orchestrators
+      // Determine working directory
+      let workingDir = cwd ?? process.cwd();
       let finalEnv = env;
-      if (agentSnapshot && agentSnapshot.cellType === "orchestrator" && allAgents) {
-        const context = generateContext(agentSnapshot, allAgents);
-        const contextPath = writeContextFile(agentSnapshot.agentId, context);
 
-        finalEnv = {
-          ...env,
-          HGNUCOMB_CONTEXT: contextPath,
-        };
+      // For orchestrators: create worktree and set up context
+      if (agentSnapshot && agentSnapshot.cellType === "orchestrator") {
+        // Try to create a worktree for this orchestrator
+        const worktreeResult = createWorktree(workingDir, agentSnapshot.agentId);
+        if (worktreeResult.success && worktreeResult.worktreePath) {
+          workingDir = worktreeResult.worktreePath;
+          console.log(`[Worktree] Agent ${agentSnapshot.agentId} using: ${workingDir}`);
+        }
+
+        // Generate context file
+        if (allAgents) {
+          const context = generateContext(agentSnapshot, allAgents);
+          const contextPath = writeContextFile(agentSnapshot.agentId, context);
+
+          finalEnv = {
+            ...env,
+            HGNUCOMB_CONTEXT: contextPath,
+            HGNUCOMB_WORKTREE: workingDir,
+          };
+        }
       }
 
-      const { session, sessionId } = manager.create({ cols, rows, shell, cwd, env: finalEnv });
+      const { session, sessionId } = manager.create({ cols, rows, shell, cwd: workingDir, env: finalEnv });
 
       // Track session -> agent for context cleanup
       if (agentSnapshot) {
@@ -130,10 +151,11 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
         });
         // Clean up tracking
         sessions?.delete(sessionId);
-        // Clean up context file if this was an orchestrator
+        // Clean up context file and worktree if this was an orchestrator
         const agentId = sessionToAgent.get(sessionId);
         if (agentId) {
           cleanupContextFile(agentId);
+          removeWorktree(process.cwd(), agentId);
           sessionToAgent.delete(sessionId);
         }
       });
@@ -205,10 +227,11 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
       const disposed = manager.dispose(sessionId);
       if (disposed) {
         clientSessions.get(ws)?.delete(sessionId);
-        // Clean up context file if this was an orchestrator
+        // Clean up context file and worktree if this was an orchestrator
         const agentId = sessionToAgent.get(sessionId);
         if (agentId) {
           cleanupContextFile(agentId);
+          removeWorktree(process.cwd(), agentId);
           sessionToAgent.delete(sessionId);
         }
         send(ws, {
@@ -325,7 +348,7 @@ wss.on("connection", (ws) => {
 /**
  * Handle MCP protocol messages.
  */
-function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse): void {
+function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNotification): void {
   switch (msg.type) {
     case "mcp.register": {
       // This client is an MCP server, not a browser
@@ -336,7 +359,9 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse): void {
     }
 
     case "mcp.spawn":
-    case "mcp.getGrid": {
+    case "mcp.getGrid":
+    case "mcp.broadcast":
+    case "mcp.reportStatus": {
       // MCP server requesting action from browser
       const agentId = msg.payload.callerId;
       pendingMcpRequests.set(msg.requestId, { mcpWs: ws, agentId });
@@ -346,7 +371,9 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse): void {
     }
 
     case "mcp.spawn.result":
-    case "mcp.getGrid.result": {
+    case "mcp.getGrid.result":
+    case "mcp.broadcast.result":
+    case "mcp.reportStatus.result": {
       // Browser responding to MCP request
       routeMcpResponse(msg);
       console.log(`[MCP] Routing ${msg.type} back to MCP server`);

@@ -2,14 +2,23 @@ import { useEffect, useState, useCallback } from 'react';
 import { HexGrid } from '@ui/HexGrid';
 import { ControlPanel } from '@ui/ControlPanel';
 import { TerminalPanel } from '@ui/TerminalPanel';
+import { EventLog } from '@ui/EventLog';
 import { WebSocketBridge } from '@terminal/index';
 import { useTerminalStore } from '@state/terminalStore';
 import { useUIStore } from '@state/uiStore';
 import { useAgentStore, type AgentState } from '@state/agentStore';
 import type { AgentSnapshot } from '@shared/context';
-import type { McpRequest, McpSpawnResponse, McpGetGridResponse, McpGridAgent } from '@terminal/types';
+import type {
+  McpRequest,
+  McpSpawnResponse,
+  McpGetGridResponse,
+  McpGridAgent,
+  McpBroadcastResponse,
+  McpReportStatusResponse,
+} from '@terminal/types';
 import type { HexCoordinate } from '@shared/types';
 import { hexDistance, getHexRing } from '@shared/types';
+import { useEventLogStore } from '@state/eventLogStore';
 
 /**
  * Find nearest empty hex to a given position using ring expansion.
@@ -52,7 +61,8 @@ function App() {
   } = useTerminalStore();
 
   const { selectedAgentId, selectAgent } = useUIStore();
-  const { getAgent, getAllAgents, spawnAgent } = useAgentStore();
+  const { getAgent, getAllAgents, spawnAgent, updateDetailedStatus } = useAgentStore();
+  const { addBroadcast, addStatusChange, addSpawn } = useEventLogStore();
 
   // Initialize bridge on mount
   useEffect(() => {
@@ -135,6 +145,7 @@ function App() {
 
           // Spawn the agent
           const newAgentId = spawnAgent(targetHex, cellType);
+          addSpawn(newAgentId, cellType, targetHex);
           const response: McpSpawnResponse = {
             type: 'mcp.spawn.result',
             requestId: request.requestId,
@@ -181,12 +192,76 @@ function App() {
           bridge.sendMcpResponse(response);
           break;
         }
+
+        case 'mcp.broadcast': {
+          const { callerId, radius, broadcastType, broadcastPayload } = request.payload;
+
+          // Validate caller exists
+          const caller = getAgent(callerId);
+          if (!caller) {
+            const response: McpBroadcastResponse = {
+              type: 'mcp.broadcast.result',
+              requestId: request.requestId,
+              payload: { success: false, delivered: 0, recipients: [], error: `Caller agent not found: ${callerId}` },
+            };
+            bridge.sendMcpResponse(response);
+            return;
+          }
+
+          // Find agents within radius (excluding sender)
+          const agents = getAllAgents();
+          const recipients = agents
+            .filter((a) => a.id !== callerId)
+            .filter((a) => hexDistance(caller.hex, a.hex) <= radius)
+            .map((a) => a.id);
+
+          // Log the broadcast event
+          addBroadcast(callerId, caller.hex, broadcastType, radius, recipients.length, broadcastPayload);
+
+          const response: McpBroadcastResponse = {
+            type: 'mcp.broadcast.result',
+            requestId: request.requestId,
+            payload: { success: true, delivered: recipients.length, recipients },
+          };
+          bridge.sendMcpResponse(response);
+          console.log('[App] Broadcast from', callerId, 'type:', broadcastType, 'delivered:', recipients.length);
+          break;
+        }
+
+        case 'mcp.reportStatus': {
+          const { callerId, state, message } = request.payload;
+
+          // Update agent status
+          const previousStatus = updateDetailedStatus(callerId, state, message);
+
+          if (previousStatus === undefined) {
+            const response: McpReportStatusResponse = {
+              type: 'mcp.reportStatus.result',
+              requestId: request.requestId,
+              payload: { success: false, error: `Agent not found: ${callerId}` },
+            };
+            bridge.sendMcpResponse(response);
+            return;
+          }
+
+          // Log the status change
+          addStatusChange(callerId, state, message, previousStatus);
+
+          const response: McpReportStatusResponse = {
+            type: 'mcp.reportStatus.result',
+            requestId: request.requestId,
+            payload: { success: true },
+          };
+          bridge.sendMcpResponse(response);
+          console.log('[App] Status update:', callerId, previousStatus, '->', state);
+          break;
+        }
       }
     };
 
     const unsub = bridge.onMcpRequest(handleMcpRequest);
     return unsub;
-  }, [bridge, getAgent, getAllAgents, spawnAgent]);
+  }, [bridge, getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addBroadcast, addStatusChange, addSpawn]);
 
   // When agent selected, ensure terminal session exists
   useEffect(() => {
@@ -296,6 +371,7 @@ function App() {
     <>
       <HexGrid width={dimensions.width} height={dimensions.height} />
       <ControlPanel />
+      <EventLog />
       {activeSessionId && selectedAgentId && (
         <TerminalPanel sessionId={activeSessionId} onClose={handleCloseTerminal} />
       )}

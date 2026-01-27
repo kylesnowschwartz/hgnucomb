@@ -376,7 +376,12 @@ export class WebSocketBridge implements TerminalBridge {
     }
 
     // Route MCP requests to handlers
-    if (msg.type === 'mcp.spawn' || msg.type === 'mcp.getGrid') {
+    if (
+      msg.type === 'mcp.spawn' ||
+      msg.type === 'mcp.getGrid' ||
+      msg.type === 'mcp.broadcast' ||
+      msg.type === 'mcp.reportStatus'
+    ) {
       this.mcpRequestHandlers.forEach((handler) => handler(msg as McpRequest));
       return;
     }

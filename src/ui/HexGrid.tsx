@@ -10,15 +10,17 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { Stage, Layer, Line, RegularPolygon } from 'react-konva';
+import { Stage, Layer, Line, RegularPolygon, Circle } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { hexToPixel, hexesInRect } from '@shared/types';
 import { useAgentStore, type AgentState } from '@state/agentStore';
 import { useUIStore } from '@state/uiStore';
 import { useTerminalStore } from '@state/terminalStore';
+import { useEventLogStore } from '@state/eventLogStore';
 import { useShallow } from 'zustand/shallow';
 import type { AgentRole, AgentStatus, CellType } from '@protocol/types';
-import { hexGrid, agentColors } from '@theme/catppuccin-mocha';
+import type { DetailedStatus } from '@terminal/types';
+import { hexGrid, agentColors, palette } from '@theme/catppuccin-mocha';
 
 // ============================================================================
 // Style Constants
@@ -55,6 +57,17 @@ const STATUS_OPACITY: Record<AgentStatus, number> = {
   offline: 0.3,
 };
 
+// Status badge colors - 7-state model
+const DETAILED_STATUS_COLORS: Record<DetailedStatus, string> = {
+  idle: palette.overlay0,           // Gray
+  working: palette.blue,            // Blue
+  waiting_input: palette.yellow,    // Yellow
+  waiting_permission: palette.peach,// Peach (distinct from yellow)
+  done: palette.green,              // Green
+  stuck: palette.maroon,            // Maroon
+  error: palette.red,               // Red
+};
+
 // ============================================================================
 // Component Props
 // ============================================================================
@@ -88,6 +101,10 @@ export function HexGrid({
 
   // Terminal cleanup
   const removeSessionForAgent = useTerminalStore((s) => s.removeSessionForAgent);
+
+  // Event logging
+  const addSpawn = useEventLogStore((s) => s.addSpawn);
+  const addKill = useEventLogStore((s) => s.addKill);
 
   // UI state - selected agent for terminal, hovered hex for visual feedback
   const selectedAgentId = useUIStore((s) => s.selectedAgentId);
@@ -232,7 +249,9 @@ export function HexGrid({
                 if (agent) {
                   selectAgent(agent.id);
                 } else {
-                  spawnAgent(hex, getCellType(e.evt.shiftKey));
+                  const cellType = getCellType(e.evt.shiftKey);
+                  const newAgentId = spawnAgent(hex, cellType);
+                  addSpawn(newAgentId, cellType, hex);
                 }
               }}
               onTap={() => {
@@ -240,7 +259,8 @@ export function HexGrid({
                   selectAgent(agent.id);
                 } else {
                   // Touch events don't have shiftKey, default to terminal
-                  spawnAgent(hex, 'terminal');
+                  const newAgentId = spawnAgent(hex, 'terminal');
+                  addSpawn(newAgentId, 'terminal', hex);
                 }
               }}
               onDblClick={(e) => {
@@ -250,7 +270,9 @@ export function HexGrid({
                   selectAgent(agent.id);
                 } else {
                   // Spawn and immediately select to open terminal
-                  const newAgentId = spawnAgent(hex, getCellType(e.evt.shiftKey));
+                  const cellType = getCellType(e.evt.shiftKey);
+                  const newAgentId = spawnAgent(hex, cellType);
+                  addSpawn(newAgentId, cellType, hex);
                   selectAgent(newAgentId);
                 }
               }}
@@ -259,6 +281,7 @@ export function HexGrid({
                   selectAgent(agent.id);
                 } else {
                   const newAgentId = spawnAgent(hex, 'terminal');
+                  addSpawn(newAgentId, 'terminal', hex);
                   selectAgent(newAgentId);
                 }
               }}
@@ -271,7 +294,8 @@ export function HexGrid({
                   if (selectedAgentId === agent.id) {
                     selectAgent(null);
                   }
-                  // Clean up terminal session (if exists) then remove agent
+                  // Log kill event, clean up terminal session, remove agent
+                  addKill(agent.id);
                   removeSessionForAgent(agent.id);
                   removeAgent(agent.id);
                 }
@@ -279,6 +303,29 @@ export function HexGrid({
               onMouseEnter={() => setHoveredHex(hex)}
               onMouseLeave={() => setHoveredHex(null)}
               style={{ cursor: 'pointer' }}
+            />
+          );
+        })}
+
+        {/* Render status badges for agents */}
+        {agents.map((agent) => {
+          const { x, y } = hexToPixel(agent.hex, hexSize);
+          const badgeColor = DETAILED_STATUS_COLORS[agent.detailedStatus];
+          const badgeRadius = 6;
+          // Position badge at top-right of hex
+          const badgeX = x + hexSize * 0.5;
+          const badgeY = y - hexSize * 0.5;
+
+          return (
+            <Circle
+              key={`badge-${agent.id}`}
+              x={badgeX}
+              y={badgeY}
+              radius={badgeRadius}
+              fill={badgeColor}
+              stroke={palette.crust}
+              strokeWidth={1}
+              listening={false}
             />
           );
         })}

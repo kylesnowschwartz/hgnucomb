@@ -9,12 +9,17 @@ import type {
   DespawnPayload,
 } from '@protocol/types';
 import type { HexCoordinate } from '@shared/types';
+import type { DetailedStatus } from '@terminal/types';
 
 export interface AgentState {
   id: string;
   role: AgentRole;
   cellType: CellType;
   status: AgentStatus;
+  /** Fine-grained 7-state status for orchestrators */
+  detailedStatus: DetailedStatus;
+  /** Optional status message from report_status */
+  statusMessage?: string;
   systemPrompt: string;
   hex: HexCoordinate;
   connections: string[];
@@ -30,6 +35,8 @@ interface AgentStore {
   spawnAgent: (hex: HexCoordinate, cellType?: CellType) => string;
   // Remove agent (for user-initiated kill)
   removeAgent: (id: string) => void;
+  // Update detailed status (from report_status MCP tool)
+  updateDetailedStatus: (agentId: string, status: DetailedStatus, message?: string) => DetailedStatus | undefined;
 }
 
 export const useAgentStore = create<AgentStore>()((set, get) => ({
@@ -45,6 +52,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
             role: p.role,
             cellType: p.role === 'orchestrator' ? 'orchestrator' : 'terminal',
             status: 'idle',
+            detailedStatus: 'idle',
             systemPrompt: p.systemPrompt,
             hex: p.hex,
             connections: p.connections,
@@ -89,6 +97,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         role,
         cellType,
         status: 'idle',
+        detailedStatus: 'idle',
         systemPrompt: '',
         hex,
         connections: [],
@@ -105,5 +114,23 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       return { agents: next };
     });
     console.log('[AgentStore] Removed agent:', id);
+  },
+
+  updateDetailedStatus: (agentId, status, message) => {
+    const existing = get().agents.get(agentId);
+    if (!existing) {
+      console.warn('[AgentStore] Cannot update status: agent not found:', agentId);
+      return undefined;
+    }
+    const previousStatus = existing.detailedStatus;
+    set((s) => ({
+      agents: new Map(s.agents).set(agentId, {
+        ...existing,
+        detailedStatus: status,
+        statusMessage: message,
+      }),
+    }));
+    console.log('[AgentStore] Status updated:', agentId, previousStatus, '->', status);
+    return previousStatus;
   },
 }));

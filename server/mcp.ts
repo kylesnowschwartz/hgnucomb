@@ -15,10 +15,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import WebSocket from "ws";
 import type {
-  McpSpawnRequest,
-  McpGetGridRequest,
   McpSpawnResponse,
   McpGetGridResponse,
+  McpBroadcastResponse,
+  McpReportStatusResponse,
+  DetailedStatus,
 } from "./protocol.js";
 
 const WS_URL = process.env.HGNUCOMB_WS_URL ?? "ws://localhost:3001";
@@ -233,6 +234,121 @@ mcpServer.tool(
           {
             type: "text",
             text: `Found ${agents.length} agents:\n${lines.join("\n")}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Tool: broadcast
+mcpServer.tool(
+  "broadcast",
+  "Send a message to all agents within a specified hex radius. Recipients must be within the radius to receive.",
+  {
+    radius: z
+      .number()
+      .min(1)
+      .max(10)
+      .describe("Hex radius for broadcast (1-10)"),
+    type: z
+      .string()
+      .describe("Message type identifier (e.g., 'status_update', 'request_help')"),
+    payload: z
+      .unknown()
+      .optional()
+      .describe("Message payload (any JSON-serializable data)"),
+  },
+  async ({ radius, type, payload }) => {
+    try {
+      const result = await sendRequest<McpBroadcastResponse["payload"]>("mcp.broadcast", {
+        radius,
+        broadcastType: type,
+        broadcastPayload: payload ?? null,
+      });
+
+      if (!result.success) {
+        return {
+          content: [{ type: "text", text: `Broadcast failed: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      if (result.delivered === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Broadcast sent but no agents within radius ${radius}`,
+            },
+          ],
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Broadcast delivered to ${result.delivered} agents: ${result.recipients.join(", ")}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Tool: report_status
+mcpServer.tool(
+  "report_status",
+  "Report your current status to the hgnucomb UI. Status badge will update on the hex grid.",
+  {
+    state: z
+      .enum(["idle", "working", "waiting_input", "waiting_permission", "done", "stuck", "error"])
+      .describe("Current status: idle (at prompt), working (executing), waiting_input (needs user input), waiting_permission (needs Y/N), done (task complete), stuck (needs help), error (failed)"),
+    message: z
+      .string()
+      .optional()
+      .describe("Optional message explaining the status"),
+  },
+  async ({ state, message }) => {
+    try {
+      const result = await sendRequest<McpReportStatusResponse["payload"]>("mcp.reportStatus", {
+        state: state as DetailedStatus,
+        message,
+      });
+
+      if (!result.success) {
+        return {
+          content: [{ type: "text", text: `Status report failed: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Status updated to: ${state}${message ? ` (${message})` : ""}`,
           },
         ],
       };

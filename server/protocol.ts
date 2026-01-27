@@ -227,13 +227,125 @@ export interface McpGetGridResponse {
   };
 }
 
-export type McpRequest = McpRegisterRequest | McpSpawnRequest | McpGetGridRequest;
-export type McpResponse = McpSpawnResponse | McpGetGridResponse;
+// ============================================================================
+// MCP Broadcast Types (Phase 5.1)
+// ============================================================================
+
+/**
+ * MCP broadcast request - agent sends message to nearby agents within radius.
+ */
+export interface McpBroadcastRequest {
+  type: "mcp.broadcast";
+  requestId: string;
+  payload: {
+    callerId: string;
+    radius: number;
+    broadcastType: string;
+    broadcastPayload: unknown;
+  };
+}
+
+/**
+ * MCP broadcast response - sent back to MCP server.
+ */
+export interface McpBroadcastResponse {
+  type: "mcp.broadcast.result";
+  requestId: string;
+  payload: {
+    success: boolean;
+    delivered: number;
+    recipients: string[];
+    error?: string;
+  };
+}
+
+/**
+ * MCP broadcast delivery - sent to recipient agents.
+ */
+export interface McpBroadcastDelivery {
+  type: "mcp.broadcast.delivery";
+  payload: {
+    senderId: string;
+    senderHex: HexCoordinate;
+    broadcastType: string;
+    broadcastPayload: unknown;
+  };
+}
+
+// ============================================================================
+// MCP Status Types (Phase 5.2)
+// ============================================================================
+
+/**
+ * Detailed agent status - 7-state model for fine-grained observability.
+ */
+export type DetailedStatus =
+  | "idle"           // At prompt, waiting for command
+  | "working"        // Actively executing
+  | "waiting_input"  // Needs user to type something
+  | "waiting_permission" // Needs Y/N approval
+  | "done"           // Finished assigned task
+  | "stuck"          // Explicitly requested help
+  | "error";         // Critical failure
+
+/**
+ * MCP report_status request - agent reports its current state.
+ */
+export interface McpReportStatusRequest {
+  type: "mcp.reportStatus";
+  requestId: string;
+  payload: {
+    callerId: string;
+    state: DetailedStatus;
+    message?: string;
+  };
+}
+
+/**
+ * MCP report_status response - sent back to MCP server.
+ */
+export interface McpReportStatusResponse {
+  type: "mcp.reportStatus.result";
+  requestId: string;
+  payload: {
+    success: boolean;
+    error?: string;
+  };
+}
+
+/**
+ * Status update notification - broadcast to browser clients.
+ */
+export interface McpStatusUpdateNotification {
+  type: "mcp.statusUpdate";
+  payload: {
+    agentId: string;
+    state: DetailedStatus;
+    message?: string;
+  };
+}
+
+export type McpRequest =
+  | McpRegisterRequest
+  | McpSpawnRequest
+  | McpGetGridRequest
+  | McpBroadcastRequest
+  | McpReportStatusRequest;
+
+export type McpResponse =
+  | McpSpawnResponse
+  | McpGetGridResponse
+  | McpBroadcastResponse
+  | McpReportStatusResponse;
+
+export type McpNotification =
+  | McpBroadcastDelivery
+  | McpStatusUpdateNotification;
 
 /**
  * Type guard for MCP messages (from MCP server or browser client).
  */
-export function isMcpMessage(msg: unknown): msg is McpRequest | McpResponse {
+export function isMcpMessage(msg: unknown): msg is McpRequest | McpResponse | McpNotification {
   if (typeof msg !== "object" || msg === null) return false;
   const m = msg as Record<string, unknown>;
   return typeof m.type === "string" && m.type.startsWith("mcp.");

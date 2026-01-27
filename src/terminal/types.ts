@@ -225,5 +225,104 @@ export interface McpGetGridResponse {
   };
 }
 
-export type McpRequest = McpSpawnRequest | McpGetGridRequest;
-export type McpResponse = McpSpawnResponse | McpGetGridResponse;
+// ============================================================================
+// MCP Broadcast Types (Phase 5.1)
+// ============================================================================
+
+/**
+ * MCP broadcast request - routed from MCP server via WS server.
+ */
+export interface McpBroadcastRequest {
+  type: 'mcp.broadcast';
+  requestId: string;
+  payload: {
+    callerId: string;
+    radius: number;
+    broadcastType: string;
+    broadcastPayload: unknown;
+  };
+}
+
+/**
+ * MCP broadcast response - sent from browser to MCP server via WS server.
+ */
+export interface McpBroadcastResponse {
+  type: 'mcp.broadcast.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    delivered: number;
+    recipients: string[];
+    error?: string;
+  };
+}
+
+/**
+ * MCP broadcast delivery - sent to recipient agents.
+ */
+export interface McpBroadcastDelivery {
+  type: 'mcp.broadcast.delivery';
+  payload: {
+    senderId: string;
+    senderHex: HexCoordinate;
+    broadcastType: string;
+    broadcastPayload: unknown;
+  };
+}
+
+// ============================================================================
+// MCP Status Types (Phase 5.2)
+// ============================================================================
+
+/**
+ * Detailed agent status - 7-state model for fine-grained observability.
+ */
+export type DetailedStatus =
+  | 'idle'
+  | 'working'
+  | 'waiting_input'
+  | 'waiting_permission'
+  | 'done'
+  | 'stuck'
+  | 'error';
+
+/**
+ * MCP report_status request - routed from MCP server via WS server.
+ */
+export interface McpReportStatusRequest {
+  type: 'mcp.reportStatus';
+  requestId: string;
+  payload: {
+    callerId: string;
+    state: DetailedStatus;
+    message?: string;
+  };
+}
+
+/**
+ * MCP report_status response - sent from browser to MCP server via WS server.
+ */
+export interface McpReportStatusResponse {
+  type: 'mcp.reportStatus.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    error?: string;
+  };
+}
+
+/**
+ * Status update notification - broadcast to browser clients.
+ */
+export interface McpStatusUpdateNotification {
+  type: 'mcp.statusUpdate';
+  payload: {
+    agentId: string;
+    state: DetailedStatus;
+    message?: string;
+  };
+}
+
+export type McpRequest = McpSpawnRequest | McpGetGridRequest | McpBroadcastRequest | McpReportStatusRequest;
+export type McpResponse = McpSpawnResponse | McpGetGridResponse | McpBroadcastResponse | McpReportStatusResponse;
+export type McpNotification = McpBroadcastDelivery | McpStatusUpdateNotification;
