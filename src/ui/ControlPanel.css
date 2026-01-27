@@ -15,6 +15,27 @@
   flex-direction: column;
 }
 
+.control-panel__header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--ctp-surface0);
+  border-bottom: 1px solid var(--ctp-surface1);
+  border-radius: 8px 8px 0 0;
+  cursor: grab;
+  user-select: none;
+}
+
+.control-panel__header:active {
+  cursor: grabbing;
+}
+
+.control-panel__title {
+  color: var(--ctp-text);
+  font-weight: 600;
+  font-size: 13px;
+}
+
 .control-panel__log {
   max-height: 200px;
   overflow-y: auto;

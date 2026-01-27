@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Git worktrees for orchestrator agents
+.worktrees/
+
+# Local MCP config (copy .mcp.json.example to .mcp.json)
+.mcp.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -10,6 +10,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { useTerminalStore } from '@state/terminalStore';
+import { useDraggable } from '@hooks/useDraggable';
 import { xtermTheme } from '@theme/catppuccin-mocha';
 import './fonts.css';
 import './TerminalPanel.css';
@@ -31,6 +32,9 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
   const fitAddonRef = useRef<FitAddon | null>(null);
   const bridge = useTerminalStore((s) => s.bridge);
   const getSession = useTerminalStore((s) => s.getSession);
+
+  // Draggable panel - starts top-left
+  const { handleMouseDown, style: dragStyle } = useDraggable({ initialX: 20, initialY: 20 });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -120,8 +124,8 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
   }, [sessionId, bridge, onClose, getSession]);
 
   return (
-    <div className="terminal-panel">
-      <div className="terminal-panel__header">
+    <div className="terminal-panel" style={dragStyle}>
+      <div className="terminal-panel__header" onMouseDown={handleMouseDown}>
         <span className="terminal-panel__title">Terminal - {sessionId}</span>
         <button className="terminal-panel__close" onClick={onClose}>
           &times;

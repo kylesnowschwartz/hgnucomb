@@ -1,7 +1,7 @@
 /**
  * Git worktree management for orchestrator agents.
  *
- * Each orchestrator gets its own worktree in {repo}/.hgnucomb/agents/{agentId}/
+ * Each orchestrator gets its own worktree in {repo}/.worktrees/{agentId}/
  * This provides branch isolation so agents don't step on each other's changes.
  *
  * Graceful degradation: non-git repos skip worktree, use normal CWD.
@@ -79,7 +79,7 @@ export interface WorktreeResult {
 /**
  * Create a git worktree for an orchestrator agent.
  *
- * Location: {gitRoot}/.hgnucomb/agents/{agentId}/
+ * Location: {gitRoot}/.worktrees/{agentId}/
  * Branch: hgnucomb/{agentId}
  *
  * @param targetDir - Directory to create worktree for (usually project root)
@@ -94,9 +94,9 @@ export function createWorktree(targetDir: string, agentId: string): WorktreeResu
     return { success: true, worktreePath: targetDir }; // Graceful degradation
   }
 
-  // Create .hgnucomb/agents directory if needed
-  const agentsDir = join(gitRoot, ".hgnucomb", "agents");
-  const worktreePath = join(agentsDir, agentId);
+  // Create .worktrees directory if needed
+  const worktreesDir = join(gitRoot, ".worktrees");
+  const worktreePath = join(worktreesDir, agentId);
 
   // Check if worktree already exists
   if (existsSync(worktreePath)) {
@@ -109,11 +109,11 @@ export function createWorktree(targetDir: string, agentId: string): WorktreeResu
   }
 
   try {
-    mkdirSync(agentsDir, { recursive: true });
+    mkdirSync(worktreesDir, { recursive: true });
   } catch (err) {
     return {
       success: false,
-      error: `Failed to create agents directory: ${err instanceof Error ? err.message : String(err)}`,
+      error: `Failed to create worktrees directory: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 
@@ -158,7 +158,7 @@ export function removeWorktree(targetDir: string, agentId: string): WorktreeResu
     return { success: true };
   }
 
-  const worktreePath = join(gitRoot, ".hgnucomb", "agents", agentId);
+  const worktreePath = join(gitRoot, ".worktrees", agentId);
 
   // Check if worktree exists
   if (!existsSync(worktreePath)) {
@@ -204,17 +204,17 @@ export function listWorktrees(targetDir: string): string[] {
   const gitRoot = getGitRoot(targetDir);
   if (!gitRoot) return [];
 
-  const agentsDir = join(gitRoot, ".hgnucomb", "agents");
-  if (!existsSync(agentsDir)) return [];
+  const worktreesDir = join(gitRoot, ".worktrees");
+  if (!existsSync(worktreesDir)) return [];
 
   const result = gitExec(["worktree", "list", "--porcelain"], gitRoot);
   if (!result) return [];
 
-  // Parse porcelain output - look for worktrees in our agents dir
+  // Parse porcelain output - look for worktrees in our .worktrees dir
   const worktrees: string[] = [];
   const lines = result.split("\n");
   for (const line of lines) {
-    if (line.startsWith("worktree ") && line.includes(".hgnucomb/agents/")) {
+    if (line.startsWith("worktree ") && line.includes(".worktrees/")) {
       const path = line.replace("worktree ", "");
       worktrees.push(path);
     }

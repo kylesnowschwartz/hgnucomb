@@ -14,6 +14,7 @@ import type {
 } from '@protocol/types';
 import { useAgentStore } from '@state/agentStore';
 import { useTaskStore } from '@state/taskStore';
+import { useDraggable } from '@hooks/useDraggable';
 import './ControlPanel.css';
 
 /**
@@ -64,6 +65,12 @@ export function ControlPanel() {
   const playerRef = useRef<ScriptPlayer | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
+  // Draggable panel - starts bottom-right
+  const { handleMouseDown, style: dragStyle } = useDraggable({
+    initialX: window.innerWidth - 340,
+    initialY: window.innerHeight - 320,
+  });
+
   // Auto-scroll to bottom when new events arrive
   useEffect(() => {
     if (logRef.current) {
@@ -107,7 +114,10 @@ export function ControlPanel() {
   }, []);
 
   return (
-    <div className="control-panel">
+    <div className="control-panel" style={dragStyle}>
+      <div className="control-panel__header" onMouseDown={handleMouseDown}>
+        <span className="control-panel__title">Demo Player</span>
+      </div>
       <div className="control-panel__log" ref={logRef}>
         {events.length === 0 ? (
           <div className="control-panel__log--empty">

@@ -31,6 +31,7 @@
       "@protocol/*": ["src/protocol/*"],
       "@ui/*": ["src/ui/*"],
       "@state/*": ["src/state/*"],
+      "@hooks/*": ["src/hooks/*"],
       "@terminal/*": ["src/terminal/*"],
       "@theme/*": ["src/theme/*"]
     }

@@ -7,6 +7,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useEventLogStore, type LogEvent } from '@state/eventLogStore';
 import { useShallow } from 'zustand/shallow';
+import { useDraggable } from '@hooks/useDraggable';
 import { palette } from '@theme/catppuccin-mocha';
 import './EventLog.css';
 
@@ -67,6 +68,12 @@ export function EventLog({ maxHeight = 200 }: EventLogProps) {
   const [showLifecycle, setShowLifecycle] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
 
+  // Draggable panel - starts bottom-left (maxHeight ~280px total including header)
+  const { handleMouseDown, style: dragStyle } = useDraggable({
+    initialX: 16,
+    initialY: window.innerHeight - 280,
+  });
+
   // Auto-scroll to bottom on new events
   useEffect(() => {
     if (logRef.current) {
@@ -81,8 +88,8 @@ export function EventLog({ maxHeight = 200 }: EventLogProps) {
   });
 
   return (
-    <div className="event-log">
-      <div className="event-log__header">
+    <div className="event-log" style={dragStyle}>
+      <div className="event-log__header" onMouseDown={handleMouseDown}>
         <span className="event-log__title">Events</span>
         <div className="event-log__filters">
           <label className="event-log__filter">

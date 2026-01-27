@@ -23,6 +23,12 @@
   padding: 8px 12px;
   background: var(--ctp-surface0);
   border-bottom: 1px solid var(--ctp-surface1);
+  cursor: grab;
+  user-select: none;
+}
+
+.event-log__header:active {
+  cursor: grabbing;
 }
 
 .event-log__title {
