@@ -3,6 +3,7 @@ import type {
   Message,
   AgentStatus,
   AgentRole,
+  CellType,
   SpawnPayload,
   StatusPayload,
   DespawnPayload,
@@ -12,6 +13,7 @@ import type { HexCoordinate } from '@shared/types';
 export interface AgentState {
   id: string;
   role: AgentRole;
+  cellType: CellType;
   status: AgentStatus;
   systemPrompt: string;
   hex: HexCoordinate;
@@ -25,7 +27,9 @@ interface AgentStore {
   getAgent: (id: string) => AgentState | undefined;
   getAllAgents: () => AgentState[];
   // Direct spawn (for user-initiated placement, not event-driven)
-  spawnAgent: (hex: HexCoordinate) => string;
+  spawnAgent: (hex: HexCoordinate, cellType?: CellType) => string;
+  // Remove agent (for user-initiated kill)
+  removeAgent: (id: string) => void;
 }
 
 export const useAgentStore = create<AgentStore>()((set, get) => ({
@@ -39,6 +43,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
           agents: new Map(s.agents).set(p.agentId, {
             id: p.agentId,
             role: p.role,
+            cellType: p.role === 'orchestrator' ? 'orchestrator' : 'terminal',
             status: 'idle',
             systemPrompt: p.systemPrompt,
             hex: p.hex,
@@ -74,19 +79,31 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
   getAgent: (id) => get().agents.get(id),
   getAllAgents: () => Array.from(get().agents.values()),
 
-  spawnAgent: (hex) => {
+  spawnAgent: (hex, cellType = 'terminal') => {
     const id = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    // Role maps from cellType: orchestrator cells are orchestrators, terminal cells are workers
+    const role: AgentRole = cellType === 'orchestrator' ? 'orchestrator' : 'worker';
     set((s) => ({
       agents: new Map(s.agents).set(id, {
         id,
-        role: 'worker', // Default type for now
+        role,
+        cellType,
         status: 'idle',
         systemPrompt: '',
         hex,
         connections: [],
       }),
     }));
-    console.log('[AgentStore] User spawned agent:', id, 'at', hex);
+    console.log('[AgentStore] User spawned agent:', id, 'type:', cellType, 'at', hex);
     return id;
+  },
+
+  removeAgent: (id) => {
+    set((s) => {
+      const next = new Map(s.agents);
+      next.delete(id);
+      return { agents: next };
+    });
+    console.log('[AgentStore] Removed agent:', id);
   },
 }));

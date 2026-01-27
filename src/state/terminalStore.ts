@@ -41,6 +41,7 @@ interface TerminalStore {
   // Actions
   addSession: (info: TerminalSessionInfo, agentId?: string | null) => void;
   removeSession: (sessionId: string) => void;
+  removeSessionForAgent: (agentId: string) => void;
   appendData: (sessionId: string, data: string) => void;
   markExited: (sessionId: string, exitCode: number) => void;
   setActiveSession: (sessionId: string | null) => void;
@@ -105,6 +106,23 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
       };
     });
     console.log('[TerminalStore] Session removed:', sessionId);
+  },
+
+  removeSessionForAgent: (agentId) => {
+    const { agentToSession, bridge } = get();
+    const sessionId = agentToSession.get(agentId);
+    if (!sessionId) return;
+
+    // Kill the PTY process
+    if (bridge) {
+      bridge.disposeSession(sessionId).catch((err) => {
+        console.error('[TerminalStore] Failed to dispose session:', err);
+      });
+    }
+
+    // Clean up store state
+    get().removeSession(sessionId);
+    console.log('[TerminalStore] Cleaned up session for agent:', agentId);
   },
 
   appendData: (sessionId, data) => {

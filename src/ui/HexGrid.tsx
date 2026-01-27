@@ -15,8 +15,9 @@ import type { KonvaEventObject } from 'konva/lib/Node';
 import { hexToPixel, hexesInRect } from '@shared/types';
 import { useAgentStore, type AgentState } from '@state/agentStore';
 import { useUIStore } from '@state/uiStore';
+import { useTerminalStore } from '@state/terminalStore';
 import { useShallow } from 'zustand/shallow';
-import type { AgentRole, AgentStatus } from '@protocol/types';
+import type { AgentRole, AgentStatus, CellType } from '@protocol/types';
 import { hexGrid, agentColors } from '@theme/catppuccin-mocha';
 
 // ============================================================================
@@ -30,6 +31,7 @@ const STYLE = {
   hexStroke: hexGrid.hexStroke,
   hexStrokeSelected: hexGrid.hexStrokeSelected,
   hexStrokeHover: hexGrid.hexStrokeHover,
+  hexStrokeOrchestrator: hexGrid.hexStrokeOrchestrator,
   connectionStroke: agentColors.connection,
   originMarkerStroke: hexGrid.originMarker,
   gridStrokeWidth: 1,
@@ -82,6 +84,10 @@ export function HexGrid({
   // Agent state - useShallow prevents infinite re-render from new array references
   const agents = useAgentStore(useShallow((s) => s.getAllAgents()));
   const spawnAgent = useAgentStore((s) => s.spawnAgent);
+  const removeAgent = useAgentStore((s) => s.removeAgent);
+
+  // Terminal cleanup
+  const removeSessionForAgent = useTerminalStore((s) => s.removeSessionForAgent);
 
   // UI state - selected agent for terminal, hovered hex for visual feedback
   const selectedAgentId = useUIStore((s) => s.selectedAgentId);
@@ -171,6 +177,7 @@ export function HexGrid({
       y={position.y}
       onWheel={handleWheel}
       onDragEnd={handleDragEnd}
+      onContextMenu={(e) => e.evt.preventDefault()}
       style={{ background: STYLE.background }}
     >
       <Layer>
@@ -181,6 +188,7 @@ export function HexGrid({
           const isSelected = agent && agent.id === selectedAgentId;
           const isHovered =
             hoveredHex && hoveredHex.q === hex.q && hoveredHex.r === hex.r;
+          const isOrchestrator = agent?.cellType === 'orchestrator';
 
           // Fill: agent role color > hover highlight > default
           const fill = agent
@@ -189,15 +197,22 @@ export function HexGrid({
               ? STYLE.hexFillHover
               : STYLE.hexFill;
 
-          // Stroke: selected > hovered > default
+          // Stroke: selected > orchestrator > hovered > default
           const stroke = isSelected
             ? STYLE.hexStrokeSelected
-            : isHovered
-              ? STYLE.hexStrokeHover
-              : STYLE.hexStroke;
+            : isOrchestrator
+              ? STYLE.hexStrokeOrchestrator
+              : isHovered
+                ? STYLE.hexStrokeHover
+                : STYLE.hexStroke;
 
-          const strokeWidth = isSelected ? 3 : STYLE.gridStrokeWidth;
+          // Selected = thick, orchestrator = medium, default = thin
+          const strokeWidth = isSelected ? 3 : isOrchestrator ? 2 : STYLE.gridStrokeWidth;
           const opacity = agent ? STATUS_OPACITY[agent.status] : 1;
+
+          /** Determine cell type from modifier keys */
+          const getCellType = (shiftKey: boolean): CellType =>
+            shiftKey ? 'orchestrator' : 'terminal';
 
           return (
             <RegularPolygon
@@ -211,26 +226,27 @@ export function HexGrid({
               strokeWidth={strokeWidth}
               opacity={opacity}
               listening={true}
-              onClick={() => {
+              onClick={(e) => {
                 if (agent) {
                   selectAgent(agent.id);
                 } else {
-                  spawnAgent(hex);
+                  spawnAgent(hex, getCellType(e.evt.shiftKey));
                 }
               }}
               onTap={() => {
                 if (agent) {
                   selectAgent(agent.id);
                 } else {
-                  spawnAgent(hex);
+                  // Touch events don't have shiftKey, default to terminal
+                  spawnAgent(hex, 'terminal');
                 }
               }}
-              onDblClick={() => {
+              onDblClick={(e) => {
                 if (agent) {
                   selectAgent(agent.id);
                 } else {
                   // Spawn and immediately select to open terminal
-                  const newAgentId = spawnAgent(hex);
+                  const newAgentId = spawnAgent(hex, getCellType(e.evt.shiftKey));
                   selectAgent(newAgentId);
                 }
               }}
@@ -238,8 +254,21 @@ export function HexGrid({
                 if (agent) {
                   selectAgent(agent.id);
                 } else {
-                  const newAgentId = spawnAgent(hex);
+                  const newAgentId = spawnAgent(hex, 'terminal');
                   selectAgent(newAgentId);
+                }
+              }}
+              onContextMenu={(e) => {
+                e.evt.preventDefault();
+                console.log('[HexGrid] Right-click on hex:', hex, 'agent:', agent?.id);
+                if (agent) {
+                  // Deselect if this was selected
+                  if (selectedAgentId === agent.id) {
+                    selectAgent(null);
+                  }
+                  // Clean up terminal session before removing agent
+                  removeSessionForAgent(agent.id);
+                  removeAgent(agent.id);
                 }
               }}
               onMouseEnter={() => setHoveredHex(hex)}
