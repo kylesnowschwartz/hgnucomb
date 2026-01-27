@@ -5,6 +5,7 @@ import { TerminalPanel } from '@ui/TerminalPanel';
 import { WebSocketBridge } from '@terminal/index';
 import { useTerminalStore } from '@state/terminalStore';
 import { useUIStore } from '@state/uiStore';
+import { useAgentStore } from '@state/agentStore';
 
 function App() {
   const [dimensions, setDimensions] = useState({
@@ -26,6 +27,7 @@ function App() {
   } = useTerminalStore();
 
   const { selectedAgentId, selectAgent } = useUIStore();
+  const { getAgent } = useAgentStore();
 
   // Initialize bridge on mount
   useEffect(() => {
@@ -65,8 +67,22 @@ function App() {
     }
 
     // Create new session for agent
+    const agent = getAgent(selectedAgentId);
+    if (!agent) {
+      console.error('[App] Agent not found:', selectedAgentId);
+      return;
+    }
+
+    // Orchestrators spawn Claude CLI, terminals spawn default shell
+    const shell = agent.cellType === 'orchestrator' ? 'claude' : undefined;
+    const env = {
+      HGNUCOMB_AGENT_ID: agent.id,
+      HGNUCOMB_HEX: `${agent.hex.q},${agent.hex.r}`,
+      HGNUCOMB_CELL_TYPE: agent.cellType,
+    };
+
     bridge
-      .createSession({ cols: 80, rows: 24 })
+      .createSession({ cols: 80, rows: 24, shell, env })
       .then((session) => {
         addSession(session, selectedAgentId);
         setActiveSession(session.sessionId);
@@ -89,6 +105,7 @@ function App() {
     bridge,
     connectionState,
     getSessionForAgent,
+    getAgent,
     addSession,
     appendData,
     setActiveSession,

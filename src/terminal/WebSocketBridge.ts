@@ -210,6 +210,7 @@ export class WebSocketBridge implements TerminalBridge {
         rows: config?.rows,
         shell: config?.shell,
         cwd: config?.cwd,
+        env: config?.env,
       },
     };
 

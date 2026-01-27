@@ -6,6 +6,7 @@
  */
 
 import * as pty from "node-pty";
+import { execSync } from "child_process";
 
 export interface TerminalSessionOptions {
   cols?: number;
@@ -28,6 +29,17 @@ export class TerminalSession {
     this.cols = options.cols ?? 80;
     this.rows = options.rows ?? 24;
     const shell = options.shell ?? process.env.SHELL ?? "bash";
+
+    // Verify Claude CLI exists before attempting to spawn
+    if (shell === "claude") {
+      try {
+        execSync("which claude", { stdio: "ignore" });
+      } catch {
+        throw new Error(
+          "Claude CLI not found. Install: npm i -g @anthropic-ai/claude-code"
+        );
+      }
+    }
 
     this.ptyProcess = pty.spawn(shell, [], {
       name: "xterm-256color",

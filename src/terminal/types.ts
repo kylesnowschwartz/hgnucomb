@@ -30,6 +30,7 @@ export interface TerminalSessionConfig {
   rows?: number;
   shell?: string;
   cwd?: string;
+  env?: Record<string, string>;
 }
 
 // ============================================================================
@@ -52,6 +53,7 @@ export interface CreateRequest {
     rows?: number;
     shell?: string;
     cwd?: string;
+    env?: Record<string, string>;
   };
 }
 

@@ -28,8 +28,8 @@ function send(ws: WebSocket, msg: ServerMessage): void {
 function handleMessage(ws: WebSocket, msg: ClientMessage): void {
   switch (msg.type) {
     case "terminal.create": {
-      const { cols, rows, shell, cwd } = msg.payload;
-      const { session, sessionId } = manager.create({ cols, rows, shell, cwd });
+      const { cols, rows, shell, cwd, env } = msg.payload;
+      const { session, sessionId } = manager.create({ cols, rows, shell, cwd, env });
 
       // Track session for this client
       let sessions = clientSessions.get(ws);

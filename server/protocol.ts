@@ -17,6 +17,7 @@ export interface CreateRequest {
     rows?: number;
     shell?: string;
     cwd?: string;
+    env?: Record<string, string>;
   };
 }
 
