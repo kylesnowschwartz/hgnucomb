@@ -118,3 +118,53 @@ export function hexDistance(a: HexCoordinate, b: HexCoordinate): number {
   const bs = -b.q - b.r;
   return Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs(as - bs));
 }
+
+/**
+ * Hex neighbor offsets in axial coordinates.
+ * Order: E, NE, NW, W, SW, SE (clockwise from east)
+ */
+export const HEX_NEIGHBORS: readonly HexCoordinate[] = [
+  { q: 1, r: 0 },
+  { q: 1, r: -1 },
+  { q: 0, r: -1 },
+  { q: -1, r: 0 },
+  { q: -1, r: 1 },
+  { q: 0, r: 1 },
+];
+
+/**
+ * Get all hexes at exactly a given distance from center.
+ * Returns hexes in ring order, walking the perimeter clockwise.
+ *
+ * Algorithm: Start at a corner (radius steps in direction 4 from center),
+ * then walk the perimeter by taking radius steps in each of the 6 directions.
+ * Reference: https://www.redblobgames.com/grids/hexagons/#rings
+ *
+ * @param center - Center hex coordinate
+ * @param radius - Distance from center (must be >= 0)
+ * @returns Array of hex coordinates forming the ring (6*radius hexes)
+ */
+export function getHexRing(center: HexCoordinate, radius: number): HexCoordinate[] {
+  if (radius === 0) return [center];
+
+  const results: HexCoordinate[] = [];
+
+  // Start at corner: go radius steps in direction 4 (SW)
+  let hex = {
+    q: center.q + HEX_NEIGHBORS[4].q * radius,
+    r: center.r + HEX_NEIGHBORS[4].r * radius,
+  };
+
+  // Walk the perimeter: radius steps in each of 6 directions
+  for (let i = 0; i < 6; i++) {
+    for (let j = 0; j < radius; j++) {
+      results.push({ ...hex });
+      hex = {
+        q: hex.q + HEX_NEIGHBORS[i].q,
+        r: hex.r + HEX_NEIGHBORS[i].r,
+      };
+    }
+  }
+
+  return results;
+}

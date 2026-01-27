@@ -9,19 +9,7 @@ import { useAgentStore, type AgentState } from '@state/agentStore';
 import type { AgentSnapshot } from '@shared/context';
 import type { McpRequest, McpSpawnResponse, McpGetGridResponse, McpGridAgent } from '@terminal/types';
 import type { HexCoordinate } from '@shared/types';
-import { hexDistance } from '@shared/types';
-
-/**
- * Hex neighbor offsets in axial coordinates.
- */
-const HEX_NEIGHBORS = [
-  { q: 1, r: 0 },
-  { q: 1, r: -1 },
-  { q: 0, r: -1 },
-  { q: -1, r: 0 },
-  { q: -1, r: 1 },
-  { q: 0, r: 1 },
-];
+import { hexDistance, getHexRing } from '@shared/types';
 
 /**
  * Find nearest empty hex to a given position using ring expansion.
@@ -42,30 +30,6 @@ function findNearestEmptyHex(center: HexCoordinate, agents: AgentState[]): HexCo
 
   // Fallback: return adjacent hex even if occupied (shouldn't happen)
   return { q: center.q + 1, r: center.r };
-}
-
-/**
- * Get all hexes at exactly a given distance from center.
- */
-function getHexRing(center: HexCoordinate, radius: number): HexCoordinate[] {
-  if (radius === 0) return [center];
-
-  const results: HexCoordinate[] = [];
-  // Start at "top" of ring and walk around
-  let hex = { q: center.q, r: center.r - radius };
-
-  for (let i = 0; i < 6; i++) {
-    for (let j = 0; j < radius; j++) {
-      results.push({ ...hex });
-      // Move in direction i
-      hex = {
-        q: hex.q + HEX_NEIGHBORS[i].q,
-        r: hex.r + HEX_NEIGHBORS[i].r,
-      };
-    }
-  }
-
-  return results;
 }
 
 function App() {

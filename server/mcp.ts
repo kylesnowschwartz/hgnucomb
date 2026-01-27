@@ -152,7 +152,8 @@ mcpServer.tool(
     r: z.number().optional().describe("Hex row (optional - auto-positions if omitted)"),
     cellType: z
       .enum(["terminal", "orchestrator"])
-      .describe("Type of cell to spawn"),
+      .default("terminal")
+      .describe("Type of cell to spawn (default: terminal)"),
   },
   async ({ q, r, cellType }) => {
     try {

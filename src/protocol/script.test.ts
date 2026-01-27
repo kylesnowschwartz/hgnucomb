@@ -199,9 +199,10 @@ describe('ScriptPlayer', () => {
   });
 
   describe('buildDemoScript', () => {
-    it('creates 9 events', () => {
+    it('creates 14 events', () => {
       const script = buildDemoScript(0);
-      expect(script).toHaveLength(9);
+      // 5 spawns + 3 assigns + 3 progress + 3 completes = 14
+      expect(script).toHaveLength(14);
     });
 
     it('uses provided delay between events', () => {
@@ -209,7 +210,7 @@ describe('ScriptPlayer', () => {
       // First event has delay 0, rest have delay 500
       expect(script[0].delay).toBe(0);
       expect(script[1].delay).toBe(500);
-      expect(script[8].delay).toBe(500);
+      expect(script[13].delay).toBe(500);
     });
 
     it('produces deterministic event IDs', () => {
@@ -227,11 +228,16 @@ describe('ScriptPlayer', () => {
         'agent.spawn', // orchestrator
         'agent.spawn', // worker-1
         'agent.spawn', // worker-2
+        'agent.spawn', // worker-3
+        'agent.spawn', // specialist-1
         'task.assign', // task-1
         'task.assign', // task-2
+        'task.assign', // task-3
         'task.progress', // task-1 50%
         'task.progress', // task-2 50%
+        'task.progress', // task-3 75%
         'task.complete', // task-1
+        'task.complete', // task-3
         'task.complete', // task-2
       ]);
     });
@@ -245,10 +251,13 @@ describe('ScriptPlayer', () => {
           return { id: payload.agentId, hex: payload.hex };
         });
 
+      // Orchestrator at center, workers/specialist in ring 1
       expect(spawns).toEqual([
         { id: 'orchestrator-1', hex: { q: 0, r: 0 } },
         { id: 'worker-1', hex: { q: 1, r: 0 } },
-        { id: 'worker-2', hex: { q: -1, r: 0 } },
+        { id: 'worker-2', hex: { q: 0, r: 1 } },
+        { id: 'worker-3', hex: { q: -1, r: 1 } },
+        { id: 'specialist-1', hex: { q: -1, r: 0 } },
       ]);
     });
   });
