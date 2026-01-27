@@ -227,6 +227,8 @@ export function HexGrid({
               opacity={opacity}
               listening={true}
               onClick={(e) => {
+                // Only respond to left-click (button 0)
+                if (e.evt.button !== 0) return;
                 if (agent) {
                   selectAgent(agent.id);
                 } else {
@@ -242,6 +244,8 @@ export function HexGrid({
                 }
               }}
               onDblClick={(e) => {
+                // Only respond to left-click (button 0)
+                if (e.evt.button !== 0) return;
                 if (agent) {
                   selectAgent(agent.id);
                 } else {
@@ -260,13 +264,14 @@ export function HexGrid({
               }}
               onContextMenu={(e) => {
                 e.evt.preventDefault();
-                console.log('[HexGrid] Right-click on hex:', hex, 'agent:', agent?.id);
+                e.evt.stopPropagation();
+                e.cancelBubble = true; // Prevent Konva event bubbling
                 if (agent) {
                   // Deselect if this was selected
                   if (selectedAgentId === agent.id) {
                     selectAgent(null);
                   }
-                  // Clean up terminal session before removing agent
+                  // Clean up terminal session (if exists) then remove agent
                   removeSessionForAgent(agent.id);
                   removeAgent(agent.id);
                 }
