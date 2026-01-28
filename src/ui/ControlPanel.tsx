@@ -9,7 +9,7 @@ import {
   type StoreAccess,
 } from '@integration/IntegrationTestRunner';
 import type { TestLogEntry, RunnerState } from '@integration/types';
-import { createThreeWorkerTest } from '@integration/scripts/threeWorkerTask';
+import { TEST_REGISTRY, getTestById } from '@integration/registry';
 import './ControlPanel.css';
 
 // ============================================================================
@@ -47,6 +47,9 @@ export function ControlPanel() {
     log: [],
   });
   const runnerRef = useRef<IntegrationTestRunner | null>(null);
+
+  // Test selection state
+  const [selectedTestId, setSelectedTestId] = useState(TEST_REGISTRY[0]?.id ?? '');
 
   // Log container ref for auto-scroll
   const logRef = useRef<HTMLDivElement>(null);
@@ -90,6 +93,12 @@ export function ControlPanel() {
 
     if (runnerState.isRunning) return;
 
+    const testEntry = getTestById(selectedTestId);
+    if (!testEntry) {
+      console.error('[ControlPanel] No test found for ID:', selectedTestId);
+      return;
+    }
+
     // Clear existing agents
     useAgentStore.getState().clear();
     useEventLogStore.getState().clear();
@@ -106,8 +115,8 @@ export function ControlPanel() {
       setRunnerState(state);
     });
 
-    // Run the full three-worker test
-    const test = createThreeWorkerTest(storeAccess);
+    // Run the selected test
+    const test = testEntry.factory(storeAccess);
     try {
       const result = await runner.run(test);
       console.log('[ControlPanel] Test result:', result);
@@ -116,7 +125,7 @@ export function ControlPanel() {
     } finally {
       unsub();
     }
-  }, [bridge, storeAccess, runnerState.isRunning]);
+  }, [bridge, storeAccess, runnerState.isRunning, selectedTestId]);
 
   const handleStop = useCallback(() => {
     if (runnerRef.current) {
@@ -135,11 +144,27 @@ export function ControlPanel() {
         <span className="control-panel__title">Integration Test</span>
       </div>
 
+      {/* Test selector */}
+      <div className="control-panel__selector">
+        <select
+          className="control-panel__select"
+          value={selectedTestId}
+          onChange={(e) => setSelectedTestId(e.target.value)}
+          disabled={runnerState.isRunning}
+        >
+          {TEST_REGISTRY.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Log display */}
       <div className="control-panel__log" ref={logRef}>
         {runnerState.log.length === 0 ? (
           <div className="control-panel__log--empty">
-            Click Run to start the three-worker test.
+            Select a test and click Run to start.
           </div>
         ) : (
           runnerState.log.map((entry, index) => (

@@ -38,5 +38,11 @@ export {
 } from './conditions';
 export type { ConditionStores } from './conditions';
 
+// Test registry
+export { TEST_REGISTRY, getTestById } from './registry';
+export type { TestEntry } from './registry';
+
 // Test scripts
 export { createThreeWorkerTest, createOrchestratorStatusTest } from './scripts/threeWorkerTask';
+export { createBilateralCommunicationTest, createTaskAssignmentTest } from './scripts/bilateralCommunication';
+export { createMultiCycleDemoTest } from './scripts/multiCycleDemo';

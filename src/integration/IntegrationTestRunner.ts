@@ -40,6 +40,13 @@ export const TIMEOUTS = {
 // Store Access Interface
 // ============================================================================
 
+export interface SpawnOptions {
+  initialPrompt?: string;
+  parentId?: string;
+  task?: string;
+  taskDetails?: string;
+}
+
 /**
  * Interface for accessing Zustand stores during tests.
  * Decouples runner from specific store implementations.
@@ -47,7 +54,7 @@ export const TIMEOUTS = {
 export interface StoreAccess {
   getAgent: (id: string) => AgentState | undefined;
   getAllAgents: () => AgentState[];
-  spawnAgent: (hex: HexCoordinate, cellType: 'terminal' | 'orchestrator' | 'worker', initialPrompt?: string) => string;
+  spawnAgent: (hex: HexCoordinate, cellType: 'terminal' | 'orchestrator' | 'worker', options?: SpawnOptions) => string;
   getEvents: () => LogEvent[];
   getSessionForAgent: (agentId: string) => { sessionId: string } | undefined;
   selectAgent: (agentId: string | null) => void;
@@ -125,7 +132,7 @@ export class IntegrationTestRunner {
    */
   async spawnOrchestrator(hex: HexCoordinate, initialPrompt?: string): Promise<string> {
     this.log('info', `Spawning orchestrator at (${hex.q}, ${hex.r})${initialPrompt ? ' with initial prompt' : ''}`);
-    const agentId = this.stores.spawnAgent(hex, 'orchestrator', initialPrompt);
+    const agentId = this.stores.spawnAgent(hex, 'orchestrator', { initialPrompt });
     this.lastOrchestratorId = agentId;
 
     // Select the agent to open the terminal panel

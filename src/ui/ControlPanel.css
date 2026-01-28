@@ -36,6 +36,36 @@
   font-size: 13px;
 }
 
+.control-panel__selector {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ctp-surface0);
+}
+
+.control-panel__select {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--ctp-surface1);
+  border-radius: 4px;
+  background: var(--ctp-base);
+  color: var(--ctp-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.control-panel__select:hover:not(:disabled) {
+  border-color: var(--ctp-overlay0);
+}
+
+.control-panel__select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-panel__select:focus {
+  outline: none;
+  border-color: var(--ctp-blue);
+}
+
 .control-panel__log {
   max-height: 200px;
   overflow-y: auto;
