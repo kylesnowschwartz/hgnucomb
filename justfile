@@ -21,8 +21,10 @@ install:
 lint:
     pnpm lint
 
-# Run tests
+# Run typecheck, lint, and tests
 test:
+    pnpm typecheck
+    pnpm lint
     pnpm test
 
 # Run tests in watch mode
