@@ -21,6 +21,14 @@ install:
 lint:
     pnpm lint
 
+# Run tests
+test:
+    pnpm test
+
+# Run tests in watch mode
+test-watch:
+    pnpm test:watch
+
 # Build for production
 build:
     pnpm build

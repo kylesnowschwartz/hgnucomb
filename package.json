@@ -10,7 +10,9 @@
     "dev:all": "concurrently -n ui,pty -c blue,green \"pnpm dev\" \"pnpm dev:server\"",
     "build": "pnpm theme && tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
