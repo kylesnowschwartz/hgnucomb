@@ -31,7 +31,8 @@ const STYLE = {
   hexFill: hexGrid.hexFill,
   hexFillHover: hexGrid.hexFillHover,
   hexStroke: hexGrid.hexStroke,
-  hexStrokeSelected: hexGrid.hexStrokeSelected,
+  hexStrokeSelected: hexGrid.hexStrokeSelected, // Panel open (pink)
+  hexStrokeFocused: hexGrid.hexStrokeFocused, // Cell selection (yellow)
   hexStrokeHover: hexGrid.hexStrokeHover,
   hexStrokeOrchestrator: hexGrid.hexStrokeOrchestrator,
   hexStrokeWorker: hexGrid.hexStrokeWorker,
@@ -106,11 +107,13 @@ export function HexGrid({
   const addSpawn = useEventLogStore((s) => s.addSpawn);
   const addKill = useEventLogStore((s) => s.addKill);
 
-  // UI state - selected agent for terminal, hovered hex for visual feedback
+  // UI state - selected agent for terminal, hovered hex for visual feedback, selected hex for focus
   const selectedAgentId = useUIStore((s) => s.selectedAgentId);
   const selectAgent = useUIStore((s) => s.selectAgent);
   const hoveredHex = useUIStore((s) => s.hoveredHex);
   const setHoveredHex = useUIStore((s) => s.setHoveredHex);
+  const selectedHex = useUIStore((s) => s.selectedHex);
+  const selectHex = useUIStore((s) => s.selectHex);
 
   // Calculate visible hex range based on viewport (for culling)
   const visibleHexes = useMemo(() => {
@@ -194,6 +197,12 @@ export function HexGrid({
       y={position.y}
       onWheel={handleWheel}
       onDragEnd={handleDragEnd}
+      onClick={(e) => {
+        // Click on background (Stage itself) = clear selection
+        if (e.target === e.target.getStage()) {
+          selectHex(null);
+        }
+      }}
       onContextMenu={(e) => e.evt.preventDefault()}
       style={{ background: STYLE.background }}
     >
@@ -202,7 +211,9 @@ export function HexGrid({
         {visibleHexes.map((hex) => {
           const { x, y } = hexToPixel(hex, hexSize);
           const agent = agentByHex.get(`${hex.q},${hex.r}`);
-          const isSelected = agent && agent.id === selectedAgentId;
+          const isPanelOpen = agent && agent.id === selectedAgentId;
+          const isFocused =
+            selectedHex && selectedHex.q === hex.q && selectedHex.r === hex.r;
           const isHovered =
             hoveredHex && hoveredHex.q === hex.q && hoveredHex.r === hex.r;
           const isOrchestrator = agent?.cellType === 'orchestrator';
@@ -216,19 +227,27 @@ export function HexGrid({
               ? STYLE.hexFillHover
               : STYLE.hexFill;
 
-          // Stroke: selected > orchestrator > worker > hovered > default
-          const stroke = isSelected
+          // Stroke priority: panel-open (pink) > focused (yellow) > orchestrator > worker > hovered > default
+          const stroke = isPanelOpen
             ? STYLE.hexStrokeSelected
-            : isOrchestrator
-              ? STYLE.hexStrokeOrchestrator
-              : isWorker
-                ? STYLE.hexStrokeWorker
-                : isHovered
-                  ? STYLE.hexStrokeHover
-                  : STYLE.hexStroke;
+            : isFocused
+              ? STYLE.hexStrokeFocused
+              : isOrchestrator
+                ? STYLE.hexStrokeOrchestrator
+                : isWorker
+                  ? STYLE.hexStrokeWorker
+                  : isHovered
+                    ? STYLE.hexStrokeHover
+                    : STYLE.hexStroke;
 
-          // Selected = thick, Claude agents = medium, default = thin
-          const strokeWidth = isSelected ? 3 : isClaudeAgent ? 2 : STYLE.gridStrokeWidth;
+          // Stroke width: panel-open = thick, focused = medium-thick, Claude agents = medium, default = thin
+          const strokeWidth = isPanelOpen
+            ? 3
+            : isFocused
+              ? 2.5
+              : isClaudeAgent
+                ? 2
+                : STYLE.gridStrokeWidth;
           const opacity = agent ? STATUS_OPACITY[agent.status] : 1;
 
           /** Determine cell type from modifier keys */
@@ -250,34 +269,25 @@ export function HexGrid({
               onClick={(e) => {
                 // Only respond to left-click (button 0)
                 if (e.evt.button !== 0) return;
-                if (agent) {
-                  selectAgent(agent.id);
-                } else {
-                  const cellType = getCellType(e.evt.shiftKey);
-                  const newAgentId = spawnAgent(hex, cellType);
-                  addSpawn(newAgentId, cellType, hex);
-                }
+                // Single click = select cell only (no spawn, no panel open)
+                selectHex(hex);
               }}
               onTap={() => {
-                if (agent) {
-                  selectAgent(agent.id);
-                } else {
-                  // Touch events don't have shiftKey, default to terminal
-                  const newAgentId = spawnAgent(hex, 'terminal');
-                  addSpawn(newAgentId, 'terminal', hex);
-                }
+                // Touch: select cell only
+                selectHex(hex);
               }}
               onDblClick={(e) => {
                 // Only respond to left-click (button 0)
                 if (e.evt.button !== 0) return;
                 if (agent) {
+                  // Double-click occupied = open panel
                   selectAgent(agent.id);
                 } else {
-                  // Spawn and immediately select to open terminal
+                  // Double-click empty = spawn + select (don't open panel)
                   const cellType = getCellType(e.evt.shiftKey);
                   const newAgentId = spawnAgent(hex, cellType);
                   addSpawn(newAgentId, cellType, hex);
-                  selectAgent(newAgentId);
+                  selectHex(hex);
                 }
               }}
               onDblTap={() => {
@@ -286,7 +296,7 @@ export function HexGrid({
                 } else {
                   const newAgentId = spawnAgent(hex, 'terminal');
                   addSpawn(newAgentId, 'terminal', hex);
-                  selectAgent(newAgentId);
+                  selectHex(hex);
                 }
               }}
               onContextMenu={(e) => {
@@ -297,6 +307,10 @@ export function HexGrid({
                   // Deselect if this was selected
                   if (selectedAgentId === agent.id) {
                     selectAgent(null);
+                  }
+                  // Clear hex selection if this hex was focused
+                  if (isFocused) {
+                    selectHex(null);
                   }
                   // Log kill event, clean up terminal session, remove agent
                   addKill(agent.id);

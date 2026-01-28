@@ -139,7 +139,8 @@ export const hexGrid = {
   hexFill: palette.base,
   hexFillHover: palette.surface0, // Subtle fill when hovering empty cell
   hexStroke: palette.surface1,
-  hexStrokeSelected: palette.pink,
+  hexStrokeSelected: palette.pink, // Panel open (pink)
+  hexStrokeFocused: palette.yellow, // Cell selection (yellow)
   hexStrokeHover: palette.lavender,
   hexStrokeOrchestrator: palette.sapphire, // Distinct border for orchestrator cells
   hexStrokeWorker: palette.teal, // Distinct border for worker cells

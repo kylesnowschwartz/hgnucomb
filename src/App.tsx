@@ -31,7 +31,7 @@ function App() {
     getSessionForAgent,
   } = useTerminalStore();
 
-  const { selectedAgentId, selectAgent } = useUIStore();
+  const { selectedAgentId, selectAgent, selectedHex, clearSelection } = useUIStore();
   const { getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addMessageToInbox, getMessages } = useAgentStore();
   const { addBroadcast, addStatusChange, addSpawn } = useEventLogStore();
 
@@ -357,6 +357,31 @@ function App() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Keyboard shortcuts for hex selection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape: clear selection (only when panel not open)
+      if (e.key === 'Escape' && !activeSessionId) {
+        clearSelection();
+        return;
+      }
+
+      // Enter: open panel for agent at selected hex
+      if (e.key === 'Enter' && selectedHex) {
+        const agents = getAllAgents();
+        const agentAtHex = agents.find(
+          (a) => a.hex.q === selectedHex.q && a.hex.r === selectedHex.r
+        );
+        if (agentAtHex) {
+          selectAgent(agentAtHex.id);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedHex, activeSessionId, clearSelection, selectAgent, getAllAgents]);
 
   const handleCloseTerminal = useCallback(async () => {
     // Just deselect agent - keep session alive in background
