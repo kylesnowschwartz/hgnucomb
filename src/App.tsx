@@ -7,7 +7,7 @@ import { WebSocketBridge } from '@features/terminal/index';
 import { useTerminalStore } from '@features/terminal/terminalStore';
 import { useUIStore } from '@features/controls/uiStore';
 import { useAgentStore, type AgentState } from '@features/agents/agentStore';
-import { agentToSnapshot } from './shared/snapshot';
+import { agentToSnapshot } from '@features/agents/snapshot';
 import { useEventLogStore } from '@features/events/eventLogStore';
 import { useShallow } from 'zustand/shallow';
 import { createMcpHandler, type McpHandlerDeps } from './handlers/mcpHandler';

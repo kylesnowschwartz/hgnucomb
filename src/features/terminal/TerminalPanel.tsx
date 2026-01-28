@@ -12,7 +12,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { useTerminalStore } from './terminalStore';
 import { useDraggable } from '@features/grid/useDraggable';
 import { xtermTheme } from '@theme/catppuccin-mocha';
-import '../../ui/fonts.css';
+import './fonts.css';
 import './TerminalPanel.css';
 
 // Catppuccin Latte theme with transparent background for panel integration

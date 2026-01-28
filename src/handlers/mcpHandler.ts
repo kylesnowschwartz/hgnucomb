@@ -5,7 +5,7 @@
  * Extracted from App.tsx to reduce component bloat.
  */
 
-import type { WebSocketBridge } from '@features/terminal/WebSocketBridge';
+import type { TerminalBridge } from '@features/terminal/TerminalBridge';
 import type { AgentState } from '@features/agents/agentStore';
 import type {
   McpRequest,
@@ -110,7 +110,7 @@ function findNearestEmptyHex(
  */
 export function createMcpHandler(
   deps: McpHandlerDeps,
-  bridge: WebSocketBridge
+  bridge: TerminalBridge
 ): (request: McpRequest) => void {
   const {
     getAgent,
