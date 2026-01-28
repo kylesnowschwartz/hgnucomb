@@ -99,9 +99,15 @@ export function ControlPanel() {
       return;
     }
 
-    // Clear existing agents
+    // Clear all state (server + client) for clean test run
+    try {
+      await bridge.clearSessions();
+    } catch (err) {
+      console.warn('[ControlPanel] Failed to clear server sessions:', err);
+    }
     useAgentStore.getState().clear();
     useEventLogStore.getState().clear();
+    clearAgentsFromLocalStorage();
 
     // Create runner if needed
     if (!runnerRef.current) {
