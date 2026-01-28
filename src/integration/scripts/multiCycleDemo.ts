@@ -4,13 +4,13 @@
  * Demonstrates full bilateral communication across multiple cycles:
  * 1. Orchestrator spawns worker 1 with task "Count files"
  * 2. Worker 1 reports result back to parent
- * 3. Orchestrator polls inbox, receives result
+ * 3. Orchestrator receives result via push notification (IMAP IDLE style)
  * 4. Orchestrator spawns worker 2 with task "Check disk space"
  * 5. Worker 2 reports result back to parent
- * 6. Orchestrator polls inbox, receives result
+ * 6. Orchestrator receives result via push notification
  * 7. Orchestrator reports done
  *
- * This shows the complete cycle: spawn -> task -> result -> inbox -> repeat
+ * This shows the complete cycle: spawn -> task -> result -> push notify -> repeat
  */
 
 import type { IntegrationTest } from '../types';
@@ -19,35 +19,29 @@ import { TIMEOUTS } from '../IntegrationTestRunner';
 
 /**
  * Orchestrator prompt for multi-cycle workflow.
- * Uses explicit waits and inbox polling between cycles.
+ * Uses await_worker to poll until worker completes.
+ *
+ * CRITICAL: Do NOT report "done" until BOTH await_worker calls have returned.
  */
-const ORCHESTRATOR_PROMPT = `You are an orchestrator running a multi-cycle test.
-
-Execute these steps IN ORDER:
+const ORCHESTRATOR_PROMPT = `You are an orchestrator. Execute these steps IN EXACT ORDER:
 
 CYCLE 1:
-1. Use spawn_agent with task="Count files" to spawn worker 1
-2. Wait 10 seconds for the worker to complete
-3. Use get_messages to poll your inbox for the result
-4. Log what you received (if anything)
+1. spawn_agent with task="Count files" - save the agentId
+2. await_worker with workerId=<that agentId> - WAIT for it to return
+3. Log what await_worker returned
 
 CYCLE 2:
-5. Use spawn_agent with task="Check disk space" to spawn worker 2
-6. Wait 10 seconds for the worker to complete
-7. Use get_messages to poll your inbox for the result
-8. Log what you received (if anything)
+4. spawn_agent with task="Check disk space" - save the agentId
+5. await_worker with workerId=<that agentId> - WAIT for it to return
+6. Log what await_worker returned
 
-FINISH:
-9. Use report_status with status="done" and message="Both cycles complete"
+FINISH (only after BOTH await_worker calls have completed):
+7. report_status with state="done" message="Both cycles complete"
 
-CRITICAL RULES:
-- Do NOT create any files
-- Do NOT modify any code
-- Only use MCP tools: spawn_agent, get_messages, report_status
-- Execute immediately without questions
-- Wait the full 10 seconds between spawning and polling
-
-Begin now.`;
+RULES:
+- Do NOT report "done" until BOTH await_worker calls have returned
+- Do NOT create files
+- Execute immediately`;
 
 /**
  * Create the multi-cycle demo integration test.
@@ -60,7 +54,7 @@ export function createMultiCycleDemoTest(stores: ConditionStores): IntegrationTe
   return {
     config: {
       name: 'Multi-Cycle Demo',
-      description: 'Full bilateral loop: spawn, task, result, inbox polling across 2 cycles',
+      description: 'Full bilateral loop: spawn, task, result, push notification across 2 cycles',
       timeout: 8 * 60 * 1000, // 8 minutes total
     },
     steps: [
@@ -134,24 +128,8 @@ export function createMultiCycleDemoTest(stores: ConditionStores): IntegrationTe
         },
       },
 
-      // Step 6: Wait for orchestrator to have result from worker 1
-      {
-        type: 'wait_condition',
-        condition: {
-          description: 'orchestrator inbox has result from worker 1',
-          predicate: () => {
-            if (!orchestratorId || !worker1Id) return false;
-            const orchestrator = stores.getAgent(orchestratorId);
-            if (!orchestrator?.inbox) return false;
-            return orchestrator.inbox.some(
-              (m) => m.from === worker1Id && m.type === 'result'
-            );
-          },
-          timeout: TIMEOUTS.statusReports,
-        },
-      },
-
-      // Step 7: Wait for worker 2 to spawn with task
+      // Step 6: Wait for worker 2 to spawn with task
+      // (This implies orchestrator received worker 1's result and moved to cycle 2)
       {
         type: 'wait_condition',
         condition: {
@@ -172,7 +150,7 @@ export function createMultiCycleDemoTest(stores: ConditionStores): IntegrationTe
         },
       },
 
-      // Step 8: Assert worker 2 has correct parent
+      // Step 7: Assert worker 2 has correct parent
       {
         type: 'assert',
         description: 'worker 2 has correct parent',
@@ -183,7 +161,7 @@ export function createMultiCycleDemoTest(stores: ConditionStores): IntegrationTe
         },
       },
 
-      // Step 9: Wait for worker 2 to report done
+      // Step 8: Wait for worker 2 to report done
       {
         type: 'wait_condition',
         condition: {
@@ -197,24 +175,8 @@ export function createMultiCycleDemoTest(stores: ConditionStores): IntegrationTe
         },
       },
 
-      // Step 10: Wait for orchestrator to have result from worker 2
-      {
-        type: 'wait_condition',
-        condition: {
-          description: 'orchestrator inbox has result from worker 2',
-          predicate: () => {
-            if (!orchestratorId || !worker2Id) return false;
-            const orchestrator = stores.getAgent(orchestratorId);
-            if (!orchestrator?.inbox) return false;
-            return orchestrator.inbox.some(
-              (m) => m.from === worker2Id && m.type === 'result'
-            );
-          },
-          timeout: TIMEOUTS.statusReports,
-        },
-      },
-
-      // Step 11: Wait for orchestrator to report done
+      // Step 9: Wait for orchestrator to report done
+      // (This implies it received and processed both workers' results)
       {
         type: 'wait_condition',
         condition: {
@@ -228,7 +190,7 @@ export function createMultiCycleDemoTest(stores: ConditionStores): IntegrationTe
         },
       },
 
-      // Step 12: Assert 2 workers exist with done status
+      // Step 10: Assert 2 workers exist with done status
       {
         type: 'assert',
         description: '2 workers exist with done status',
@@ -239,16 +201,20 @@ export function createMultiCycleDemoTest(stores: ConditionStores): IntegrationTe
         },
       },
 
-      // Step 13: Assert orchestrator inbox has 2 result messages
+      // Step 11: Final verification - all agents completed successfully
+      // Note: inbox is auto-consumed, so we verify via status not inbox contents
       {
         type: 'assert',
-        description: 'orchestrator inbox has 2 result messages',
+        description: 'all agents completed successfully',
         predicate: () => {
           if (!orchestratorId) return false;
           const orchestrator = stores.getAgent(orchestratorId);
-          if (!orchestrator?.inbox) return false;
-          const resultMessages = orchestrator.inbox.filter((m) => m.type === 'result');
-          return resultMessages.length === 2;
+          const workers = stores.getAllAgents().filter((a) => a.cellType === 'worker');
+          return (
+            orchestrator?.detailedStatus === 'done' &&
+            workers.length === 2 &&
+            workers.every((w) => w.detailedStatus === 'done')
+          );
         },
       },
     ],

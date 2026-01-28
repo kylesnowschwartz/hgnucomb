@@ -415,6 +415,66 @@ export interface McpGetMessagesResponse {
   };
 }
 
-export type McpRequest = McpSpawnRequest | McpGetGridRequest | McpBroadcastRequest | McpReportStatusRequest | McpReportResultRequest | McpGetMessagesRequest;
-export type McpResponse = McpSpawnResponse | McpGetGridResponse | McpBroadcastResponse | McpReportStatusResponse | McpReportResultResponse | McpGetMessagesResponse;
-export type McpNotification = McpBroadcastDelivery | McpStatusUpdateNotification;
+// ============================================================================
+// Inbox Push Notification Types
+// ============================================================================
+
+/**
+ * Inbox notification - sent to MCP server to wake pending get_messages(wait=true).
+ * This is sent FROM server TO MCP client when new messages arrive.
+ */
+export interface McpInboxNotification {
+  type: 'mcp.inbox.notification';
+  payload: {
+    agentId: string;
+    messageCount: number;
+    latestTimestamp: string;
+  };
+}
+
+/**
+ * Inbox updated message - sent FROM browser TO server when messages are added.
+ * Server routes this to the recipient's MCP connection.
+ */
+export interface InboxUpdatedMessage {
+  type: 'inbox.updated';
+  payload: {
+    agentId: string;
+    messageCount: number;
+    latestTimestamp: string;
+  };
+}
+
+// ============================================================================
+// Worker Status Types (Two-Phase Coordination)
+// ============================================================================
+
+/**
+ * MCP get_worker_status request - orchestrator checks a worker's status.
+ */
+export interface McpGetWorkerStatusRequest {
+  type: 'mcp.getWorkerStatus';
+  requestId: string;
+  payload: {
+    callerId: string;
+    workerId: string;
+  };
+}
+
+/**
+ * MCP get_worker_status response - returns worker's detailed status.
+ */
+export interface McpGetWorkerStatusResponse {
+  type: 'mcp.getWorkerStatus.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    status?: DetailedStatus;
+    message?: string;
+    error?: string;
+  };
+}
+
+export type McpRequest = McpSpawnRequest | McpGetGridRequest | McpBroadcastRequest | McpReportStatusRequest | McpReportResultRequest | McpGetMessagesRequest | McpGetWorkerStatusRequest;
+export type McpResponse = McpSpawnResponse | McpGetGridResponse | McpBroadcastResponse | McpReportStatusResponse | McpReportResultResponse | McpGetMessagesResponse | McpGetWorkerStatusResponse;
+export type McpNotification = McpBroadcastDelivery | McpStatusUpdateNotification | McpInboxNotification;

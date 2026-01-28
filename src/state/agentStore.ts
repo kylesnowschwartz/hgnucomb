@@ -151,11 +151,32 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       console.warn('[AgentStore] Cannot get messages: agent not found:', agentId);
       return [];
     }
+
+    let messagesToReturn: AgentMessage[];
+    let remainingMessages: AgentMessage[];
+
     if (!since) {
-      return existing.inbox;
+      // Return all messages, clear inbox
+      messagesToReturn = existing.inbox;
+      remainingMessages = [];
+    } else {
+      // Return messages after timestamp, keep older ones
+      const sinceTime = new Date(since).getTime();
+      messagesToReturn = existing.inbox.filter((m) => new Date(m.timestamp).getTime() > sinceTime);
+      remainingMessages = existing.inbox.filter((m) => new Date(m.timestamp).getTime() <= sinceTime);
     }
-    // Filter messages after the given timestamp
-    const sinceTime = new Date(since).getTime();
-    return existing.inbox.filter((m) => new Date(m.timestamp).getTime() > sinceTime);
+
+    // Auto-consume: remove returned messages from inbox
+    if (messagesToReturn.length > 0) {
+      set((s) => ({
+        agents: new Map(s.agents).set(agentId, {
+          ...existing,
+          inbox: remainingMessages,
+        }),
+      }));
+      console.log('[AgentStore] Consumed', messagesToReturn.length, 'messages from inbox:', agentId);
+    }
+
+    return messagesToReturn;
   },
 }));

@@ -84,12 +84,30 @@ Agents interact with the grid via MCP:
 | Tool | Purpose |
 |------|---------|
 | `get_identity` | Get your own agent ID, cell type, parent ID, hex coordinates |
-| `spawn_agent` | Create child agent at hex coordinates |
+| `spawn_agent` | Create child agent (returns immediately with agentId) |
+| `get_worker_status` | Check a worker's current status (orchestrators only) |
+| `await_worker` | Wait for worker to complete (polls status, returns with messages) |
 | `get_grid_state` | Query grid: all agents, or filtered by distance |
 | `broadcast` | Send message to agents within radius |
-| `report_status` | Update agent's displayed status badge |
-| `report_result` | Send task result to parent orchestrator (workers) |
-| `get_messages` | Check inbox for messages from children/peers |
+| `report_status` | Update status badge (UI observability). See semantics below. |
+| `report_result` | Send task result to parent orchestrator (workers only) |
+| `get_messages` | Get inbox messages (use for broadcasts, not worker results) |
+
+**Two-Phase Worker Coordination Pattern:**
+1. `spawn_agent(task=...)` → returns `agentId` immediately
+2. `await_worker(workerId=<agentId>)` → polls status until done/error, returns status + messages
+
+This is preferred over `get_messages(wait=true)` because workers take 10-30s to boot Claude CLI.
+
+**Status Semantics (`report_status`):**
+Status is for UI observability - it shows humans what each agent is doing. It's self-reported and has no effect on system behavior.
+
+| Agent Type | When to report `done` |
+|------------|----------------------|
+| Worker | After calling `report_result` to parent |
+| Orchestrator | After ALL spawned workers have completed (use `await_worker` first) |
+
+Reporting `done` prematurely (e.g., right after spawning workers) is semantically incorrect - your mission isn't complete yet.
 
 ## Key Patterns
 

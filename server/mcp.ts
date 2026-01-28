@@ -26,6 +26,7 @@ import type {
   McpReportStatusResponse,
   McpReportResultResponse,
   McpGetMessagesResponse,
+  McpGetWorkerStatusResponse,
   DetailedStatus,
   AgentMessage,
 } from "./protocol.js";
@@ -109,8 +110,27 @@ async function connectWebSocket(): Promise<void> {
   });
 }
 
-function handleWsMessage(msg: McpSpawnResponse | McpGetGridResponse): void {
-  if (!msg.requestId) return;
+// Pending wait for inbox notification (used by get_messages with wait=true)
+let pendingInboxWait: {
+  resolve: () => void;
+  timeout: NodeJS.Timeout;
+} | null = null;
+
+function handleWsMessage(msg: McpSpawnResponse | McpGetGridResponse | { type: string; payload?: unknown }): void {
+  // Handle inbox notification - wake any pending get_messages(wait=true)
+  if (msg.type === 'mcp.inbox.notification') {
+    console.error(`[MCP] Received inbox notification, pendingInboxWait=${pendingInboxWait ? 'SET' : 'null'}`);
+    if (pendingInboxWait) {
+      console.error("[MCP] Waking pending get_messages...");
+      const pending = pendingInboxWait;
+      pendingInboxWait = null;  // Clear first to prevent double-wake
+      clearTimeout(pending.timeout);
+      pending.resolve();
+    }
+    return;
+  }
+
+  if (!('requestId' in msg) || !msg.requestId) return;
 
   const pending = pendingRequests.get(msg.requestId);
   if (!pending) {
@@ -363,15 +383,18 @@ mcpServer.tool(
 // Tool: report_status
 mcpServer.tool(
   "report_status",
-  "Report your current status to the hgnucomb UI. Status badge will update on the hex grid.",
+  `Update your status badge on the hex grid (UI observability for humans).
+
+Workers: Report "done" AFTER calling report_result to your parent.
+Orchestrators: Report "done" ONLY when your entire mission is complete, including waiting for all spawned workers via await_worker.`,
   {
     state: z
       .enum(["idle", "working", "waiting_input", "waiting_permission", "done", "stuck", "error"])
-      .describe("Current status: idle (at prompt), working (executing), waiting_input (needs user input), waiting_permission (needs Y/N), done (task complete), stuck (needs help), error (failed)"),
+      .describe("idle=waiting, working=executing, waiting_input=needs text, waiting_permission=needs Y/N, done=mission complete, stuck=needs help, error=failed"),
     message: z
       .string()
       .optional()
-      .describe("Optional message explaining the status"),
+      .describe("Short explanation of current state"),
   },
   async ({ state, message }) => {
     try {
@@ -467,12 +490,41 @@ mcpServer.tool(
 // Tool: get_messages
 mcpServer.tool(
   "get_messages",
-  "Get messages from your inbox. Use this to poll for results from spawned workers or broadcasts from nearby agents.",
+  "Get and consume messages from your inbox. Messages are deleted after reading (auto-consume). Use wait=true to block until a message arrives (IMAP IDLE style). Returns immediately if messages exist.",
   {
     since: z.string().optional().describe("ISO timestamp - only return messages after this time"),
+    wait: z.boolean().optional().describe("Block until a message arrives (default: false)"),
+    timeout: z.number().optional().describe("Wait timeout in milliseconds (default: 30000, max: 60000)"),
   },
-  async ({ since }) => {
+  async ({ since, wait, timeout }) => {
+    const waitTimeout = Math.min(timeout ?? 30000, 60000);
+    // Accept any truthy value for wait (handles string "true" if MCP passes it wrong)
+    const shouldWait = Boolean(wait);
+
+    console.error(`[MCP] get_messages called: wait=${JSON.stringify(wait)} (${typeof wait}), shouldWait=${shouldWait}, timeout=${waitTimeout}`);
+
+    /**
+     * Format messages for response.
+     */
+    const formatMessages = (messages: AgentMessage[]) => {
+      if (messages.length === 0) {
+        return {
+          content: [{ type: "text" as const, text: "No new messages in inbox" }],
+        };
+      }
+
+      const formatted = messages.map((m: AgentMessage) => {
+        const payload = JSON.stringify(m.payload, null, 2);
+        return `[${m.timestamp}] From: ${m.from} Type: ${m.type}\n${payload}`;
+      }).join("\n\n");
+
+      return {
+        content: [{ type: "text" as const, text: `${messages.length} message(s):\n\n${formatted}` }],
+      };
+    };
+
     try {
+      // Check current inbox first
       const result = await sendRequest<McpGetMessagesResponse["payload"]>("mcp.getMessages", {
         since,
       });
@@ -485,25 +537,45 @@ mcpServer.tool(
       }
 
       const messages = result.messages ?? [];
-      if (messages.length === 0) {
-        return {
-          content: [{ type: "text", text: "No new messages in inbox" }],
-        };
+      console.error(`[MCP] get_messages initial check: ${messages.length} messages`);
+
+      // If we have messages or not waiting, return immediately
+      if (messages.length > 0 || !shouldWait) {
+        console.error(`[MCP] get_messages returning immediately: messages=${messages.length}, shouldWait=${shouldWait}`);
+        return formatMessages(messages);
       }
 
-      const formatted = messages.map((m: AgentMessage) => {
-        const payload = JSON.stringify(m.payload, null, 2);
-        return `[${m.timestamp}] From: ${m.from} Type: ${m.type}\n${payload}`;
-      }).join("\n\n");
+      // No messages and wait=true: block until notification or timeout
+      console.error(`[MCP] get_messages: BLOCKING - waiting for inbox notification (timeout: ${waitTimeout}ms)`);
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `${messages.length} message(s):\n\n${formatted}`,
+      return new Promise((resolve) => {
+        const timeoutId = setTimeout(() => {
+          console.error("[MCP] get_messages: TIMEOUT reached");
+          pendingInboxWait = null;
+          resolve({ content: [{ type: "text" as const, text: "No messages (timeout)" }] });
+        }, waitTimeout);
+
+        pendingInboxWait = {
+          resolve: async () => {
+            console.error("[MCP] get_messages: WOKEN by inbox notification, re-fetching...");
+            clearTimeout(timeoutId);
+            pendingInboxWait = null;
+            // Re-fetch messages after notification
+            try {
+              const newResult = await sendRequest<McpGetMessagesResponse["payload"]>("mcp.getMessages", { since });
+              console.error(`[MCP] get_messages: re-fetch got ${newResult.messages?.length ?? 0} messages`);
+              resolve(formatMessages(newResult.messages ?? []));
+            } catch (err) {
+              console.error(`[MCP] get_messages: re-fetch error: ${err}`);
+              resolve({
+                content: [{ type: "text" as const, text: `Error fetching messages: ${err instanceof Error ? err.message : String(err)}` }],
+                isError: true,
+              });
+            }
           },
-        ],
-      };
+          timeout: timeoutId,
+        };
+      });
     } catch (err) {
       return {
         content: [
@@ -538,6 +610,157 @@ mcpServer.tool(
           text: JSON.stringify(identity, null, 2),
         },
       ],
+    };
+  }
+);
+
+// Tool: get_worker_status
+mcpServer.tool(
+  "get_worker_status",
+  "Check the current status of a worker agent you spawned. Only works for your own workers.",
+  {
+    workerId: z.string().describe("The agent ID of the worker to check"),
+  },
+  async ({ workerId }) => {
+    // Permission check: only orchestrators can check worker status
+    if (!canSpawn()) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Permission denied: Only orchestrators can check worker status. You are a ${CELL_TYPE}.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    try {
+      const result = await sendRequest<McpGetWorkerStatusResponse["payload"]>("mcp.getWorkerStatus", {
+        workerId,
+      });
+
+      if (!result.success) {
+        return {
+          content: [{ type: "text", text: `Failed to get worker status: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              workerId,
+              status: result.status,
+              statusMessage: result.message,
+              isComplete: result.status === 'done' || result.status === 'error',
+            }, null, 2),
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Tool: await_worker
+mcpServer.tool(
+  "await_worker",
+  "Wait for a worker to complete. Polls status every 2s until done/error or timeout. Returns final status and any messages. Use this instead of get_messages to wait for worker results.",
+  {
+    workerId: z.string().describe("Worker agent ID to wait for"),
+    timeout: z.number().optional().default(120000).describe("Timeout in ms (default: 120000, max: 300000)"),
+    pollInterval: z.number().optional().default(2000).describe("Poll interval in ms (default: 2000, min: 500)"),
+  },
+  async ({ workerId, timeout, pollInterval }) => {
+    // Permission check: only orchestrators can await workers
+    if (!canSpawn()) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Permission denied: Only orchestrators can await workers. You are a ${CELL_TYPE}.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const effectiveTimeout = Math.min(timeout ?? 120000, 300000);
+    const interval = Math.max(pollInterval ?? 2000, 500);
+    const deadline = Date.now() + effectiveTimeout;
+
+    console.error(`[MCP] await_worker: starting poll for ${workerId}, timeout=${effectiveTimeout}ms, interval=${interval}ms`);
+
+    while (Date.now() < deadline) {
+      try {
+        const statusResult = await sendRequest<McpGetWorkerStatusResponse["payload"]>("mcp.getWorkerStatus", {
+          workerId,
+        });
+
+        if (!statusResult.success) {
+          return {
+            content: [{ type: "text", text: `Worker check failed: ${statusResult.error}` }],
+            isError: true,
+          };
+        }
+
+        console.error(`[MCP] await_worker: worker ${workerId} status=${statusResult.status}`);
+
+        // Worker finished - get any messages
+        if (statusResult.status === 'done' || statusResult.status === 'error') {
+          console.error(`[MCP] await_worker: worker ${workerId} completed with status=${statusResult.status}`);
+
+          // Fetch messages from inbox
+          const messagesResult = await sendRequest<McpGetMessagesResponse["payload"]>("mcp.getMessages", {});
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  workerId,
+                  status: statusResult.status,
+                  statusMessage: statusResult.message,
+                  hasResult: (messagesResult.messages?.length ?? 0) > 0,
+                  messages: messagesResult.messages ?? [],
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        // Wait before next poll
+        await new Promise(resolve => setTimeout(resolve, interval));
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error polling worker: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+
+    // Timeout
+    console.error(`[MCP] await_worker: timeout waiting for worker ${workerId}`);
+    return {
+      content: [{ type: "text", text: `Timeout waiting for worker ${workerId} after ${effectiveTimeout}ms` }],
+      isError: true,
     };
   }
 );

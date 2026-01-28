@@ -20,6 +20,7 @@ import type {
   ServerMessage,
   McpRequest,
   McpResponse,
+  InboxUpdatedMessage,
 } from './types.ts';
 
 const DEFAULT_URL = 'ws://localhost:3001';
@@ -338,6 +339,23 @@ export class WebSocketBridge implements TerminalBridge {
     this.ws.send(JSON.stringify(response));
   }
 
+  /**
+   * Send inbox notification to server, which routes to the agent's MCP server.
+   * This wakes any pending get_messages(wait=true) call.
+   */
+  sendInboxNotification(payload: {
+    agentId: string;
+    messageCount: number;
+    latestTimestamp: string;
+  }): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[WebSocketBridge] Cannot send inbox notification: not connected');
+      return;
+    }
+    const msg: InboxUpdatedMessage = { type: 'inbox.updated', payload };
+    this.ws.send(JSON.stringify(msg));
+  }
+
   private nextRequestId(): string {
     return `req-${++this.requestCounter}-${Date.now()}`;
   }
@@ -388,7 +406,8 @@ export class WebSocketBridge implements TerminalBridge {
       msg.type === 'mcp.broadcast' ||
       msg.type === 'mcp.reportStatus' ||
       msg.type === 'mcp.reportResult' ||
-      msg.type === 'mcp.getMessages'
+      msg.type === 'mcp.getMessages' ||
+      msg.type === 'mcp.getWorkerStatus'
     ) {
       this.mcpRequestHandlers.forEach((handler) => handler(msg as McpRequest));
       return;

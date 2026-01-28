@@ -339,6 +339,32 @@ export interface McpStatusUpdateNotification {
   };
 }
 
+/**
+ * MCP get_worker_status request - orchestrator checks a worker's current status.
+ */
+export interface McpGetWorkerStatusRequest {
+  type: "mcp.getWorkerStatus";
+  requestId: string;
+  payload: {
+    callerId: string;
+    workerId: string;
+  };
+}
+
+/**
+ * MCP get_worker_status response - returns worker's detailed status.
+ */
+export interface McpGetWorkerStatusResponse {
+  type: "mcp.getWorkerStatus.result";
+  requestId: string;
+  payload: {
+    success: boolean;
+    status?: DetailedStatus;
+    message?: string;
+    error?: string;
+  };
+}
+
 export type McpRequest =
   | McpRegisterRequest
   | McpSpawnRequest
@@ -346,7 +372,8 @@ export type McpRequest =
   | McpBroadcastRequest
   | McpReportStatusRequest
   | McpReportResultRequest
-  | McpGetMessagesRequest;
+  | McpGetMessagesRequest
+  | McpGetWorkerStatusRequest;
 
 export type McpResponse =
   | McpSpawnResponse
@@ -354,11 +381,43 @@ export type McpResponse =
   | McpBroadcastResponse
   | McpReportStatusResponse
   | McpReportResultResponse
-  | McpGetMessagesResponse;
+  | McpGetMessagesResponse
+  | McpGetWorkerStatusResponse;
+
+// ============================================================================
+// Inbox Push Notification Types
+// ============================================================================
+
+/**
+ * Inbox notification - sent to MCP server to wake pending get_messages(wait=true).
+ * This is sent FROM server TO MCP client when new messages arrive.
+ */
+export interface McpInboxNotification {
+  type: 'mcp.inbox.notification';
+  payload: {
+    agentId: string;
+    messageCount: number;
+    latestTimestamp: string;
+  };
+}
+
+/**
+ * Inbox updated message - sent FROM browser TO server when messages are added.
+ * Server routes this to the recipient's MCP connection.
+ */
+export interface InboxUpdatedMessage {
+  type: 'inbox.updated';
+  payload: {
+    agentId: string;
+    messageCount: number;
+    latestTimestamp: string;
+  };
+}
 
 export type McpNotification =
   | McpBroadcastDelivery
-  | McpStatusUpdateNotification;
+  | McpStatusUpdateNotification
+  | McpInboxNotification;
 
 // ============================================================================
 // Bilateral Communication Types (Task Assignment & Results)
@@ -440,8 +499,8 @@ export interface McpGetMessagesResponse {
 /**
  * Type guard for MCP messages (from MCP server or browser client).
  */
-export function isMcpMessage(msg: unknown): msg is McpRequest | McpResponse | McpNotification {
+export function isMcpMessage(msg: unknown): msg is McpRequest | McpResponse | McpNotification | InboxUpdatedMessage {
   if (typeof msg !== "object" || msg === null) return false;
   const m = msg as Record<string, unknown>;
-  return typeof m.type === "string" && m.type.startsWith("mcp.");
+  return typeof m.type === "string" && (m.type.startsWith("mcp.") || m.type === "inbox.updated");
 }

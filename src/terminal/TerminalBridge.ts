@@ -95,4 +95,13 @@ export interface TerminalBridge {
    * Send an MCP response back to the requesting agent.
    */
   sendMcpResponse(response: McpResponse): void;
+
+  /**
+   * Send inbox notification to wake an agent's pending get_messages(wait=true).
+   */
+  sendInboxNotification(payload: {
+    agentId: string;
+    messageCount: number;
+    latestTimestamp: string;
+  }): void;
 }

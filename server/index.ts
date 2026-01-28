@@ -21,6 +21,8 @@ import {
   McpReportStatusRequest,
   McpReportResultRequest,
   McpGetMessagesRequest,
+  McpGetWorkerStatusRequest,
+  InboxUpdatedMessage,
 } from "./protocol.js";
 import {
   generateContext,
@@ -61,7 +63,7 @@ const pendingMcpRequests = new Map<string, PendingMcpRequest>();
 /**
  * Route an MCP request from MCP server to browser clients.
  */
-function routeMcpToBrowser(msg: McpSpawnRequest | McpGetGridRequest | McpBroadcastRequest | McpReportStatusRequest | McpReportResultRequest | McpGetMessagesRequest): void {
+function routeMcpToBrowser(msg: McpSpawnRequest | McpGetGridRequest | McpBroadcastRequest | McpReportStatusRequest | McpReportResultRequest | McpGetMessagesRequest | McpGetWorkerStatusRequest): void {
   const json = JSON.stringify(msg);
   for (const browser of browserClients) {
     if (browser.readyState === WebSocket.OPEN) {
@@ -84,6 +86,22 @@ function routeMcpResponse(msg: McpResponse): void {
     pending.mcpWs.send(JSON.stringify(msg));
   }
   pendingMcpRequests.delete(msg.requestId);
+}
+
+/**
+ * Send inbox notification to an agent's MCP server.
+ * This wakes any pending get_messages(wait=true) call.
+ */
+function notifyAgentInbox(agentId: string, messageCount: number, latestTimestamp: string): void {
+  const mcpWs = mcpClients.get(agentId);
+  if (!mcpWs || mcpWs.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  mcpWs.send(JSON.stringify({
+    type: 'mcp.inbox.notification',
+    payload: { agentId, messageCount, latestTimestamp },
+  }));
+  console.log(`[MCP] Inbox notification sent to ${agentId}`);
 }
 
 function send(ws: WebSocket, msg: ServerMessage): void {
@@ -393,7 +411,7 @@ wss.on("connection", (ws) => {
 /**
  * Handle MCP protocol messages.
  */
-function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNotification): void {
+function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNotification | InboxUpdatedMessage): void {
   switch (msg.type) {
     case "mcp.register": {
       // This client is an MCP server, not a browser
@@ -403,12 +421,20 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       break;
     }
 
+    case "inbox.updated": {
+      // Browser notifying that an agent's inbox has new messages
+      const { agentId, messageCount, latestTimestamp } = msg.payload;
+      notifyAgentInbox(agentId, messageCount, latestTimestamp);
+      break;
+    }
+
     case "mcp.spawn":
     case "mcp.getGrid":
     case "mcp.broadcast":
     case "mcp.reportStatus":
     case "mcp.reportResult":
-    case "mcp.getMessages": {
+    case "mcp.getMessages":
+    case "mcp.getWorkerStatus": {
       // MCP server requesting action from browser
       const agentId = msg.payload.callerId;
       pendingMcpRequests.set(msg.requestId, { mcpWs: ws, agentId });
@@ -422,7 +448,8 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
     case "mcp.broadcast.result":
     case "mcp.reportStatus.result":
     case "mcp.reportResult.result":
-    case "mcp.getMessages.result": {
+    case "mcp.getMessages.result":
+    case "mcp.getWorkerStatus.result": {
       // Browser responding to MCP request
       routeMcpResponse(msg);
       console.log(`[MCP] Routing ${msg.type} back to MCP server`);
