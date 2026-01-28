@@ -1,9 +1,9 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { useAgentStore, clearAgentsFromLocalStorage } from '@state/agentStore';
-import { useTerminalStore } from '@state/terminalStore';
-import { useEventLogStore } from '@state/eventLogStore';
-import { useUIStore } from '@state/uiStore';
-import { useDraggable } from '@hooks/useDraggable';
+import { useAgentStore, clearAgentsFromLocalStorage } from '@features/agents/agentStore';
+import { useTerminalStore } from '@features/terminal/terminalStore';
+import { useEventLogStore } from '@features/events/eventLogStore';
+import { useUIStore } from './uiStore';
+import { useDraggable } from '@features/grid/useDraggable';
 import {
   IntegrationTestRunner,
   type StoreAccess,

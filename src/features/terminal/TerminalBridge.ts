@@ -16,7 +16,7 @@ import type {
   McpRequest,
   McpResponse,
   SessionInfo,
-} from './types.ts';
+} from '@shared/protocol';
 
 export interface TerminalBridge {
   /**

@@ -5,10 +5,9 @@
  */
 
 import type { WaitCondition } from './types';
-import type { AgentState } from '@state/agentStore';
-import type { LogEvent } from '@state/eventLogStore';
-import type { CellType } from '@shared/context';
-import type { DetailedStatus } from '@terminal/types';
+import type { AgentState } from '@features/agents/agentStore';
+import type { LogEvent } from '@features/events/eventLogStore';
+import type { CellType, DetailedStatus } from '@shared/types';
 import { TIMEOUTS } from './IntegrationTestRunner';
 
 // ============================================================================

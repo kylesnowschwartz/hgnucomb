@@ -13,13 +13,13 @@ import { useState, useCallback, useMemo } from 'react';
 import { Stage, Layer, Line, RegularPolygon, Circle } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { hexToPixel, hexesInRect } from '@shared/types';
-import { useAgentStore, type AgentState } from '@state/agentStore';
-import { useUIStore } from '@state/uiStore';
-import { useTerminalStore } from '@state/terminalStore';
-import { useEventLogStore } from '@state/eventLogStore';
+import type { AgentStatus, CellType, DetailedStatus } from '@shared/types';
+import { useAgentStore, type AgentState } from '@features/agents/agentStore';
+import { useUIStore } from '@features/controls/uiStore';
+import { useTerminalStore } from '@features/terminal/terminalStore';
+import { useEventLogStore } from '@features/events/eventLogStore';
 import { useShallow } from 'zustand/shallow';
-import type { AgentRole, AgentStatus, CellType } from '@protocol/types';
-import type { DetailedStatus } from '@terminal/types';
+import type { AgentRole } from '@protocol/types';
 import { hexGrid, agentColors, palette } from '@theme/catppuccin-mocha';
 
 // ============================================================================

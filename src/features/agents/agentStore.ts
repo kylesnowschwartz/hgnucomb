@@ -1,12 +1,13 @@
 import { create } from 'zustand';
+import type { AgentRole } from '@protocol/types';
 import type {
+  HexCoordinate,
   AgentStatus,
-  AgentRole,
   CellType,
-} from '@protocol/types';
-import type { HexCoordinate } from '@shared/types';
-import type { DetailedStatus, AgentMessage } from '@terminal/types';
-import { useEventLogStore } from './eventLogStore';
+  DetailedStatus,
+} from '@shared/types';
+import type { AgentMessage } from '@shared/protocol';
+import { useEventLogStore } from '@features/events/eventLogStore';
 
 // localStorage key for persisting agent state
 const STORAGE_KEY = 'hgnucomb:agents';

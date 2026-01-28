@@ -1,50 +1,16 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { HexGrid } from '@ui/HexGrid';
-import { ControlPanel } from '@ui/ControlPanel';
-import { TerminalPanel } from '@ui/TerminalPanel';
-import { EventLog } from '@ui/EventLog';
-import { WebSocketBridge } from '@terminal/index';
-import { useTerminalStore } from '@state/terminalStore';
-import { useUIStore } from '@state/uiStore';
-import { useAgentStore, type AgentState } from '@state/agentStore';
-import type {
-  McpRequest,
-  McpSpawnResponse,
-  McpGetGridResponse,
-  McpGridAgent,
-  McpBroadcastResponse,
-  McpReportStatusResponse,
-  McpReportResultResponse,
-  McpGetMessagesResponse,
-  McpGetWorkerStatusResponse,
-  AgentMessage,
-} from '@terminal/types';
-import type { HexCoordinate } from '@shared/types';
-import { hexDistance, getHexRing } from '@shared/types';
-import { agentToSnapshot } from '@shared/snapshot';
-import { useEventLogStore } from '@state/eventLogStore';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { HexGrid } from '@features/grid/HexGrid';
+import { ControlPanel } from '@features/controls/ControlPanel';
+import { TerminalPanel } from '@features/terminal/TerminalPanel';
+import { EventLog } from '@features/events/EventLog';
+import { WebSocketBridge } from '@features/terminal/index';
+import { useTerminalStore } from '@features/terminal/terminalStore';
+import { useUIStore } from '@features/controls/uiStore';
+import { useAgentStore, type AgentState } from '@features/agents/agentStore';
+import { agentToSnapshot } from './shared/snapshot';
+import { useEventLogStore } from '@features/events/eventLogStore';
 import { useShallow } from 'zustand/shallow';
-
-/**
- * Find nearest empty hex to a given position using ring expansion.
- * Searches distance 1, then 2, etc. until an empty hex is found.
- */
-function findNearestEmptyHex(center: HexCoordinate, agents: AgentState[]): HexCoordinate {
-  const occupied = new Set(agents.map((a) => `${a.hex.q},${a.hex.r}`));
-
-  // Try rings of increasing distance
-  for (let radius = 1; radius <= 10; radius++) {
-    const ring = getHexRing(center, radius);
-    for (const hex of ring) {
-      if (!occupied.has(`${hex.q},${hex.r}`)) {
-        return hex;
-      }
-    }
-  }
-
-  // Fallback: return adjacent hex even if occupied (shouldn't happen)
-  return { q: center.q + 1, r: center.r };
-}
+import { createMcpHandler, type McpHandlerDeps } from './handlers/mcpHandler';
 
 function App() {
   const [dimensions, setDimensions] = useState({
@@ -213,344 +179,28 @@ function App() {
     };
   }, [setBridge, setConnectionState, rehydrateFromServer]);
 
+  // MCP handler dependencies - memoized to avoid recreating handler
+  const mcpDeps: McpHandlerDeps = useMemo(
+    () => ({
+      getAgent,
+      getAllAgents,
+      spawnAgent,
+      updateDetailedStatus,
+      addMessageToInbox,
+      getMessages,
+      addBroadcast,
+      addStatusChange,
+      addSpawn,
+    }),
+    [getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addMessageToInbox, getMessages, addBroadcast, addStatusChange, addSpawn]
+  );
+
   // Handle MCP requests from orchestrator agents
   useEffect(() => {
     if (!bridge) return;
-
-    const handleMcpRequest = (request: McpRequest) => {
-      console.log('[App] MCP request:', request.type, request.payload);
-
-      switch (request.type) {
-        case 'mcp.spawn': {
-          const { callerId, q, r, cellType, task, instructions, taskDetails } = request.payload;
-
-          // Validate caller exists and is orchestrator
-          const caller = getAgent(callerId);
-          if (!caller) {
-            const response: McpSpawnResponse = {
-              type: 'mcp.spawn.result',
-              requestId: request.requestId,
-              payload: { success: false, error: `Caller agent not found: ${callerId}` },
-            };
-            bridge.sendMcpResponse(response);
-            return;
-          }
-
-          if (caller.cellType !== 'orchestrator') {
-            const response: McpSpawnResponse = {
-              type: 'mcp.spawn.result',
-              requestId: request.requestId,
-              payload: { success: false, error: 'Only orchestrators can spawn agents' },
-            };
-            bridge.sendMcpResponse(response);
-            return;
-          }
-
-          // Determine hex position
-          let targetHex = { q: q ?? 0, r: r ?? 0 };
-          if (q === undefined || r === undefined) {
-            // Auto-position near caller using ring expansion
-            targetHex = findNearestEmptyHex(caller.hex, getAllAgents());
-          }
-
-          // Check if hex is occupied
-          const agents = getAllAgents();
-          const occupied = agents.some(
-            (a) => a.hex.q === targetHex.q && a.hex.r === targetHex.r
-          );
-          if (occupied) {
-            const response: McpSpawnResponse = {
-              type: 'mcp.spawn.result',
-              requestId: request.requestId,
-              payload: {
-                success: false,
-                error: `Hex (${targetHex.q}, ${targetHex.r}) is already occupied`,
-              },
-            };
-            bridge.sendMcpResponse(response);
-            return;
-          }
-
-          // Spawn the agent with task assignment and instructions
-          // Store parentHex at spawn time - don't rely on lookup later
-          const newAgentId = spawnAgent(targetHex, cellType, {
-            parentId: callerId,
-            parentHex: caller.hex,
-            task,
-            instructions,
-            taskDetails,
-          });
-          addSpawn(newAgentId, cellType, targetHex);
-          const response: McpSpawnResponse = {
-            type: 'mcp.spawn.result',
-            requestId: request.requestId,
-            payload: { success: true, agentId: newAgentId, hex: targetHex },
-          };
-          bridge.sendMcpResponse(response);
-          console.log('[App] MCP spawned agent:', newAgentId, 'at', targetHex, task ? `task: ${task}` : '', instructions ? 'with instructions' : '');
-          break;
-        }
-
-        case 'mcp.getGrid': {
-          const { callerId, maxDistance = 5 } = request.payload;
-
-          // Validate caller exists
-          const caller = getAgent(callerId);
-          if (!caller) {
-            const response: McpGetGridResponse = {
-              type: 'mcp.getGrid.result',
-              requestId: request.requestId,
-              payload: { success: false, error: `Caller agent not found: ${callerId}` },
-            };
-            bridge.sendMcpResponse(response);
-            return;
-          }
-
-          // Get agents within distance
-          const agents = getAllAgents();
-          const nearbyAgents: McpGridAgent[] = agents
-            .map((a) => ({
-              agentId: a.id,
-              cellType: a.cellType,
-              hex: a.hex,
-              status: a.status,
-              distance: hexDistance(caller.hex, a.hex),
-            }))
-            .filter((a) => a.distance <= maxDistance)
-            .sort((a, b) => a.distance - b.distance);
-
-          const response: McpGetGridResponse = {
-            type: 'mcp.getGrid.result',
-            requestId: request.requestId,
-            payload: { success: true, agents: nearbyAgents },
-          };
-          bridge.sendMcpResponse(response);
-          break;
-        }
-
-        case 'mcp.broadcast': {
-          const { callerId, radius, broadcastType, broadcastPayload } = request.payload;
-
-          // Validate caller exists
-          const caller = getAgent(callerId);
-          if (!caller) {
-            const response: McpBroadcastResponse = {
-              type: 'mcp.broadcast.result',
-              requestId: request.requestId,
-              payload: { success: false, delivered: 0, recipients: [], error: `Caller agent not found: ${callerId}` },
-            };
-            bridge.sendMcpResponse(response);
-            return;
-          }
-
-          // Find agents within radius (excluding sender)
-          const agents = getAllAgents();
-          const recipients = agents
-            .filter((a) => a.id !== callerId)
-            .filter((a) => hexDistance(caller.hex, a.hex) <= radius)
-            .map((a) => a.id);
-
-          // Log the broadcast event
-          addBroadcast(callerId, caller.hex, broadcastType, radius, recipients.length, broadcastPayload);
-
-          // Deliver to recipient inboxes and send push notifications
-          for (const recipientId of recipients) {
-            const broadcastMessage: AgentMessage = {
-              id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-              from: callerId,
-              type: 'broadcast',
-              payload: { broadcastType, broadcastPayload },
-              timestamp: new Date().toISOString(),
-            };
-            const wasAdded = addMessageToInbox(recipientId, broadcastMessage);
-            if (wasAdded) {
-              // Send push notification to wake recipient's get_messages(wait=true)
-              const recipient = getAgent(recipientId);
-              bridge.sendInboxNotification({
-                agentId: recipientId,
-                messageCount: recipient?.inbox.length ?? 1,
-                latestTimestamp: broadcastMessage.timestamp,
-              });
-            }
-          }
-
-          const response: McpBroadcastResponse = {
-            type: 'mcp.broadcast.result',
-            requestId: request.requestId,
-            payload: { success: true, delivered: recipients.length, recipients },
-          };
-          bridge.sendMcpResponse(response);
-          console.log('[App] Broadcast from', callerId, 'type:', broadcastType, 'delivered:', recipients.length);
-          break;
-        }
-
-        case 'mcp.reportStatus': {
-          const { callerId, state, message } = request.payload;
-
-          // Update agent status
-          const previousStatus = updateDetailedStatus(callerId, state, message);
-
-          if (previousStatus === undefined) {
-            const response: McpReportStatusResponse = {
-              type: 'mcp.reportStatus.result',
-              requestId: request.requestId,
-              payload: { success: false, error: `Agent not found: ${callerId}` },
-            };
-            bridge.sendMcpResponse(response);
-            return;
-          }
-
-          // Log the status change
-          addStatusChange(callerId, state, message, previousStatus);
-
-          const response: McpReportStatusResponse = {
-            type: 'mcp.reportStatus.result',
-            requestId: request.requestId,
-            payload: { success: true },
-          };
-          bridge.sendMcpResponse(response);
-          console.log('[App] Status update:', callerId, previousStatus, '->', state);
-          break;
-        }
-
-        case 'mcp.reportResult': {
-          const { callerId, parentId, result, success, message } = request.payload;
-
-          // Validate parent exists
-          const parent = getAgent(parentId);
-          if (!parent) {
-            const response: McpReportResultResponse = {
-              type: 'mcp.reportResult.result',
-              requestId: request.requestId,
-              payload: { success: false, error: `Parent agent not found: ${parentId}` },
-            };
-            bridge.sendMcpResponse(response);
-            return;
-          }
-
-          // Create message for parent's inbox
-          const agentMessage: AgentMessage = {
-            id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            from: callerId,
-            type: 'result',
-            payload: { result, success, message },
-            timestamp: new Date().toISOString(),
-          };
-
-          // Add to parent's inbox
-          const added = addMessageToInbox(parentId, agentMessage);
-          if (!added) {
-            const response: McpReportResultResponse = {
-              type: 'mcp.reportResult.result',
-              requestId: request.requestId,
-              payload: { success: false, error: `Failed to add message to parent inbox` },
-            };
-            bridge.sendMcpResponse(response);
-            return;
-          }
-
-          // Send push notification to wake parent's get_messages(wait=true)
-          const updatedParent = getAgent(parentId);
-          bridge.sendInboxNotification({
-            agentId: parentId,
-            messageCount: updatedParent?.inbox.length ?? 1,
-            latestTimestamp: agentMessage.timestamp,
-          });
-
-          const response: McpReportResultResponse = {
-            type: 'mcp.reportResult.result',
-            requestId: request.requestId,
-            payload: { success: true },
-          };
-          bridge.sendMcpResponse(response);
-          console.log('[App] Result reported from', callerId, 'to parent', parentId, 'success:', success);
-          break;
-        }
-
-        case 'mcp.getMessages': {
-          const { callerId, since } = request.payload;
-
-          // Get messages from caller's inbox
-          const messages = getMessages(callerId, since);
-
-          const response: McpGetMessagesResponse = {
-            type: 'mcp.getMessages.result',
-            requestId: request.requestId,
-            payload: { success: true, messages },
-          };
-          bridge.sendMcpResponse(response);
-          console.log('[App] Get messages for', callerId, 'count:', messages.length);
-          break;
-        }
-
-        case 'mcp.getWorkerStatus': {
-          const { callerId, workerId } = request.payload;
-
-          // Validate caller exists and is orchestrator
-          const caller = getAgent(callerId);
-          if (!caller) {
-            const response: McpGetWorkerStatusResponse = {
-              type: 'mcp.getWorkerStatus.result',
-              requestId: request.requestId,
-              payload: { success: false, error: `Caller agent not found: ${callerId}` },
-            };
-            bridge.sendMcpResponse(response);
-            return;
-          }
-
-          if (caller.cellType !== 'orchestrator') {
-            const response: McpGetWorkerStatusResponse = {
-              type: 'mcp.getWorkerStatus.result',
-              requestId: request.requestId,
-              payload: { success: false, error: 'Only orchestrators can check worker status' },
-            };
-            bridge.sendMcpResponse(response);
-            return;
-          }
-
-          // Get the worker
-          const worker = getAgent(workerId);
-          if (!worker) {
-            const response: McpGetWorkerStatusResponse = {
-              type: 'mcp.getWorkerStatus.result',
-              requestId: request.requestId,
-              payload: { success: false, error: `Worker not found: ${workerId}` },
-            };
-            bridge.sendMcpResponse(response);
-            return;
-          }
-
-          // Verify caller is the worker's parent
-          if (worker.parentId !== callerId) {
-            const response: McpGetWorkerStatusResponse = {
-              type: 'mcp.getWorkerStatus.result',
-              requestId: request.requestId,
-              payload: { success: false, error: `Worker ${workerId} is not your child` },
-            };
-            bridge.sendMcpResponse(response);
-            return;
-          }
-
-          // Return worker status
-          const response: McpGetWorkerStatusResponse = {
-            type: 'mcp.getWorkerStatus.result',
-            requestId: request.requestId,
-            payload: {
-              success: true,
-              status: worker.detailedStatus,
-              message: worker.statusMessage,
-            },
-          };
-          bridge.sendMcpResponse(response);
-          console.log('[App] Worker status:', workerId, worker.detailedStatus);
-          break;
-        }
-      }
-    };
-
-    const unsub = bridge.onMcpRequest(handleMcpRequest);
-    return unsub;
-  }, [bridge, getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addBroadcast, addStatusChange, addSpawn, addMessageToInbox, getMessages]);
+    const handler = createMcpHandler(mcpDeps, bridge);
+    return bridge.onMcpRequest(handler);
+  }, [bridge, mcpDeps]);
 
   // Create terminal session for an agent (without activating it)
   const createSessionForAgent = useCallback(

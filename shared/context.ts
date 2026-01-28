@@ -5,27 +5,10 @@
  * This gives the agent awareness of its position, nearby agents, and capabilities.
  */
 
-import type { HexCoordinate } from './types.ts';
+import type { HexCoordinate, CellType, AgentStatus } from './types.ts';
 
-// ============================================================================
-// Agent Snapshot (sent from client to server)
-// ============================================================================
-
-export type CellType = 'terminal' | 'orchestrator' | 'worker';
-/** Agent operational status - must match protocol/types.ts */
-export type AgentStatus = 'idle' | 'working' | 'blocked' | 'offline';
-
-/**
- * Minimal agent info sent from client when creating a session.
- * Contains everything needed to build context.
- */
-export interface AgentSnapshot {
-  agentId: string;
-  cellType: CellType;
-  hex: HexCoordinate;
-  status: AgentStatus;
-  connections: string[];
-}
+// Re-export for convenience
+export type { HexCoordinate, CellType, AgentStatus };
 
 // ============================================================================
 // Context JSON Schema (written to file for orchestrator)

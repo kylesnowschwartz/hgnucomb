@@ -11,7 +11,7 @@ import { execSync } from "child_process";
 import { existsSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
 import { generateMcpConfig, writeMcpConfig } from "./mcp-config.js";
-import type { CellType } from "./protocol.js";
+import type { CellType } from "@shared/types.ts";
 
 /**
  * Execute git command and return stdout as string.

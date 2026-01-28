@@ -7,12 +7,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@shared': resolve(__dirname, 'src/shared'),
+      '@shared': resolve(__dirname, 'shared'),
       '@protocol': resolve(__dirname, 'src/protocol'),
-      '@ui': resolve(__dirname, 'src/ui'),
-      '@state': resolve(__dirname, 'src/state'),
-      '@hooks': resolve(__dirname, 'src/hooks'),
-      '@terminal': resolve(__dirname, 'src/terminal'),
+      '@features': resolve(__dirname, 'src/features'),
       '@theme': resolve(__dirname, 'src/theme'),
       '@integration': resolve(__dirname, 'src/integration'),
     },

@@ -22,7 +22,7 @@ import type {
   McpResponse,
   InboxUpdatedMessage,
   SessionInfo,
-} from './types.ts';
+} from '@shared/protocol';
 
 const DEFAULT_URL = 'ws://localhost:3001';
 const REQUEST_TIMEOUT_MS = 10000;

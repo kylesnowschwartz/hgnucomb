@@ -7,8 +7,7 @@
  */
 
 import { create } from 'zustand';
-import type { HexCoordinate } from '@shared/types';
-import type { DetailedStatus } from '@terminal/types';
+import type { HexCoordinate, DetailedStatus } from '@shared/types';
 
 // ============================================================================
 // Event Types

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getHexRing, hexDistance } from './types';
+import { getHexRing, hexDistance } from '@shared/types';
 
 describe('getHexRing', () => {
   it('returns center for radius 0', () => {

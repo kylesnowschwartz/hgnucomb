@@ -2,8 +2,8 @@
  * Helper function for converting agent state to snapshot format.
  */
 
-import type { AgentState } from '@state/agentStore';
-import type { AgentSnapshot } from '@shared/context';
+import type { AgentState } from '@features/agents/agentStore';
+import type { AgentSnapshot } from '@shared/types';
 
 /**
  * Convert an agent state to a minimal snapshot for context generation.

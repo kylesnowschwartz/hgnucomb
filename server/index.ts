@@ -7,11 +7,9 @@
 
 import { WebSocketServer, WebSocket } from "ws";
 import { TerminalSessionManager } from "./manager.js";
-import {
+import type {
   ClientMessage,
   ServerMessage,
-  isClientMessage,
-  isMcpMessage,
   McpRequest,
   McpResponse,
   McpNotification,
@@ -24,7 +22,8 @@ import {
   McpGetWorkerStatusRequest,
   InboxUpdatedMessage,
   StoredAgentMetadata,
-} from "./protocol.js";
+} from "@shared/protocol.ts";
+import { isClientMessage, isMcpMessage } from "@shared/protocol.ts";
 import {
   generateContext,
   writeContextFile,

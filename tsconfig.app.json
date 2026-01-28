@@ -27,15 +27,12 @@
     /* Path aliases */
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"],
+      "@shared/*": ["shared/*"],
       "@protocol/*": ["src/protocol/*"],
-      "@ui/*": ["src/ui/*"],
-      "@state/*": ["src/state/*"],
-      "@hooks/*": ["src/hooks/*"],
-      "@terminal/*": ["src/terminal/*"],
+      "@features/*": ["src/features/*"],
       "@theme/*": ["src/theme/*"],
       "@integration/*": ["src/integration/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "shared"]
 }

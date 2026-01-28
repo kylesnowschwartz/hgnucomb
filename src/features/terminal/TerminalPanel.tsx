@@ -9,10 +9,10 @@ import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
-import { useTerminalStore } from '@state/terminalStore';
-import { useDraggable } from '@hooks/useDraggable';
+import { useTerminalStore } from './terminalStore';
+import { useDraggable } from '@features/grid/useDraggable';
 import { xtermTheme } from '@theme/catppuccin-mocha';
-import './fonts.css';
+import '../../ui/fonts.css';
 import './TerminalPanel.css';
 
 // Catppuccin Latte theme with transparent background for panel integration

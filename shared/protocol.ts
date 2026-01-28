@@ -1,14 +1,31 @@
 /**
- * Client-side terminal protocol types.
+ * WebSocket message protocol for terminal sessions and MCP communication.
  *
- * These mirror server/protocol.ts but are duplicated because the server
- * is a separate package. Keeping them in sync is a manual process.
+ * Client -> Server: requests with optional requestId for correlation
+ * Server -> Client: responses (with requestId) or streaming data (no requestId)
  */
 
-import type { AgentSnapshot } from '@shared/context.ts';
+import type {
+  HexCoordinate,
+  CellType,
+  AgentStatus,
+  DetailedStatus,
+  AgentSnapshot,
+  StoredAgentMetadata,
+} from './types.ts';
+
+// Re-export types needed by consumers
+export type {
+  HexCoordinate,
+  CellType,
+  AgentStatus,
+  DetailedStatus,
+  AgentSnapshot,
+  StoredAgentMetadata,
+};
 
 // ============================================================================
-// Connection State
+// Client-side Connection State
 // ============================================================================
 
 export type ConnectionState =
@@ -18,7 +35,7 @@ export type ConnectionState =
   | 'reconnecting';
 
 // ============================================================================
-// Session Info
+// Session Types
 // ============================================================================
 
 export interface TerminalSessionInfo {
@@ -33,25 +50,30 @@ export interface TerminalSessionConfig {
   shell?: string;
   cwd?: string;
   env?: Record<string, string>;
-  /** Agent info for context generation (orchestrators only) */
   agentSnapshot?: AgentSnapshot;
-  /** All agents on grid for context generation */
   allAgents?: AgentSnapshot[];
-  /** Initial prompt passed as CLI arg to Claude */
   initialPrompt?: string;
-  /** Task assignment for worker agents */
   task?: string;
-  /** Instructions (prompt) for worker agents - sent as initial prompt */
   instructions?: string;
   taskDetails?: string;
-  /** Parent agent ID for workers spawned by orchestrators */
   parentId?: string;
-  /** Parent hex for context generation */
   parentHex?: HexCoordinate;
 }
 
+/**
+ * Session info returned from sessions.list - everything needed to restore state.
+ */
+export interface SessionInfo {
+  sessionId: string;
+  agent: StoredAgentMetadata | null;
+  buffer: string[];
+  cols: number;
+  rows: number;
+  exited: boolean;
+}
+
 // ============================================================================
-// Callback Types
+// Callback Types (client-side)
 // ============================================================================
 
 export type DataHandler = (data: string) => void;
@@ -71,20 +93,13 @@ export interface CreateRequest {
     shell?: string;
     cwd?: string;
     env?: Record<string, string>;
-    /** Agent info for context generation (orchestrators only) */
     agentSnapshot?: AgentSnapshot;
-    /** All agents on grid for context generation */
     allAgents?: AgentSnapshot[];
-    /** Initial prompt passed as CLI arg to Claude */
     initialPrompt?: string;
-    /** Task assignment for worker agents */
     task?: string;
-    /** Instructions (prompt) for worker agents - sent as initial prompt */
     instructions?: string;
     taskDetails?: string;
-    /** Parent agent ID for workers spawned by orchestrators */
     parentId?: string;
-    /** Parent hex for context generation */
     parentHex?: HexCoordinate;
   };
 }
@@ -116,10 +131,6 @@ export interface DisposeRequest {
   };
 }
 
-// ============================================================================
-// Session Persistence Types
-// ============================================================================
-
 export interface SessionsListRequest {
   type: 'sessions.list';
   requestId: string;
@@ -130,37 +141,6 @@ export interface SessionsClearRequest {
   type: 'sessions.clear';
   requestId: string;
   payload: Record<string, never>;
-}
-
-/**
- * Stored agent metadata - everything needed to restore grid state.
- */
-export interface StoredAgentMetadata {
-  agentId: string;
-  cellType: CellType;
-  hex: HexCoordinate;
-  status: AgentStatus;
-  connections: string[];
-  parentId?: string;
-  parentHex?: HexCoordinate;
-  task?: string;
-  taskDetails?: string;
-  initialPrompt?: string;
-  instructions?: string;
-  detailedStatus?: DetailedStatus;
-  statusMessage?: string;
-}
-
-/**
- * Session info returned from sessions.list - everything needed to restore state.
- */
-export interface SessionInfo {
-  sessionId: string;
-  agent: StoredAgentMetadata | null;
-  buffer: string[];
-  cols: number;
-  rows: number;
-  exited: boolean;
 }
 
 export type ClientMessage =
@@ -218,9 +198,6 @@ export interface ErrorMessage {
   };
 }
 
-/**
- * Response to sessions.list - all active sessions with their state.
- */
 export interface SessionsListResponse {
   type: 'sessions.list.result';
   requestId: string;
@@ -229,9 +206,6 @@ export interface SessionsListResponse {
   };
 }
 
-/**
- * Response to sessions.clear.
- */
 export interface SessionsClearResponse {
   type: 'sessions.clear.result';
   requestId: string;
@@ -250,15 +224,34 @@ export type ServerMessage =
   | SessionsClearResponse;
 
 // ============================================================================
-// MCP Message Types (browser <-> server routing)
+// Type Guards
 // ============================================================================
 
-import type { HexCoordinate } from '@shared/types.ts';
-import type { CellType, AgentStatus } from '@shared/context.ts';
+export function isClientMessage(msg: unknown): msg is ClientMessage {
+  if (typeof msg !== 'object' || msg === null) return false;
+  const m = msg as Record<string, unknown>;
+  return (
+    typeof m.type === 'string' &&
+    (m.type.startsWith('terminal.') || m.type.startsWith('sessions.')) &&
+    typeof m.payload === 'object'
+  );
+}
 
-/**
- * MCP spawn request - routed from MCP server via WS server.
- */
+// ============================================================================
+// MCP Registration
+// ============================================================================
+
+export interface McpRegisterRequest {
+  type: 'mcp.register';
+  payload: {
+    agentId: string;
+  };
+}
+
+// ============================================================================
+// MCP Spawn Types
+// ============================================================================
+
 export interface McpSpawnRequest {
   type: 'mcp.spawn';
   requestId: string;
@@ -273,21 +266,6 @@ export interface McpSpawnRequest {
   };
 }
 
-/**
- * MCP get grid state request - routed from MCP server via WS server.
- */
-export interface McpGetGridRequest {
-  type: 'mcp.getGrid';
-  requestId: string;
-  payload: {
-    callerId: string;
-    maxDistance?: number;
-  };
-}
-
-/**
- * MCP spawn response - sent from browser to MCP server via WS server.
- */
 export interface McpSpawnResponse {
   type: 'mcp.spawn.result';
   requestId: string;
@@ -299,9 +277,19 @@ export interface McpSpawnResponse {
   };
 }
 
-/**
- * Agent info in grid state response.
- */
+// ============================================================================
+// MCP Grid State Types
+// ============================================================================
+
+export interface McpGetGridRequest {
+  type: 'mcp.getGrid';
+  requestId: string;
+  payload: {
+    callerId: string;
+    maxDistance?: number;
+  };
+}
+
 export interface McpGridAgent {
   agentId: string;
   cellType: CellType;
@@ -310,9 +298,6 @@ export interface McpGridAgent {
   distance: number;
 }
 
-/**
- * MCP get grid response - sent from browser to MCP server via WS server.
- */
 export interface McpGetGridResponse {
   type: 'mcp.getGrid.result';
   requestId: string;
@@ -324,12 +309,9 @@ export interface McpGetGridResponse {
 }
 
 // ============================================================================
-// MCP Broadcast Types (Phase 5.1)
+// MCP Broadcast Types
 // ============================================================================
 
-/**
- * MCP broadcast request - routed from MCP server via WS server.
- */
 export interface McpBroadcastRequest {
   type: 'mcp.broadcast';
   requestId: string;
@@ -341,9 +323,6 @@ export interface McpBroadcastRequest {
   };
 }
 
-/**
- * MCP broadcast response - sent from browser to MCP server via WS server.
- */
 export interface McpBroadcastResponse {
   type: 'mcp.broadcast.result';
   requestId: string;
@@ -355,9 +334,6 @@ export interface McpBroadcastResponse {
   };
 }
 
-/**
- * MCP broadcast delivery - sent to recipient agents.
- */
 export interface McpBroadcastDelivery {
   type: 'mcp.broadcast.delivery';
   payload: {
@@ -369,24 +345,9 @@ export interface McpBroadcastDelivery {
 }
 
 // ============================================================================
-// MCP Status Types (Phase 5.2)
+// MCP Status Types
 // ============================================================================
 
-/**
- * Detailed agent status - 7-state model for fine-grained observability.
- */
-export type DetailedStatus =
-  | 'idle'
-  | 'working'
-  | 'waiting_input'
-  | 'waiting_permission'
-  | 'done'
-  | 'stuck'
-  | 'error';
-
-/**
- * MCP report_status request - routed from MCP server via WS server.
- */
 export interface McpReportStatusRequest {
   type: 'mcp.reportStatus';
   requestId: string;
@@ -397,9 +358,6 @@ export interface McpReportStatusRequest {
   };
 }
 
-/**
- * MCP report_status response - sent from browser to MCP server via WS server.
- */
 export interface McpReportStatusResponse {
   type: 'mcp.reportStatus.result';
   requestId: string;
@@ -409,9 +367,6 @@ export interface McpReportStatusResponse {
   };
 }
 
-/**
- * Status update notification - broadcast to browser clients.
- */
 export interface McpStatusUpdateNotification {
   type: 'mcp.statusUpdate';
   payload: {
@@ -421,13 +376,37 @@ export interface McpStatusUpdateNotification {
   };
 }
 
+export interface McpGetWorkerStatusRequest {
+  type: 'mcp.getWorkerStatus';
+  requestId: string;
+  payload: {
+    callerId: string;
+    workerId: string;
+  };
+}
+
+export interface McpGetWorkerStatusResponse {
+  type: 'mcp.getWorkerStatus.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    status?: DetailedStatus;
+    message?: string;
+    error?: string;
+  };
+}
+
 // ============================================================================
-// Bilateral Communication Types (Task Assignment & Results)
+// MCP Result Types (Worker -> Orchestrator)
 // ============================================================================
 
-/**
- * Message stored in agent inbox - results from workers or broadcasts.
- */
+export interface TaskAssignment {
+  taskId: string;
+  description: string;
+  details?: string;
+  assignedBy: string;
+}
+
 export interface AgentMessage {
   id: string;
   from: string;
@@ -436,9 +415,6 @@ export interface AgentMessage {
   timestamp: string;
 }
 
-/**
- * MCP report_result request - worker reports task completion to parent.
- */
 export interface McpReportResultRequest {
   type: 'mcp.reportResult';
   requestId: string;
@@ -451,9 +427,6 @@ export interface McpReportResultRequest {
   };
 }
 
-/**
- * MCP report_result response - sent back to worker.
- */
 export interface McpReportResultResponse {
   type: 'mcp.reportResult.result';
   requestId: string;
@@ -463,9 +436,6 @@ export interface McpReportResultResponse {
   };
 }
 
-/**
- * MCP get_messages request - agent polls its inbox.
- */
 export interface McpGetMessagesRequest {
   type: 'mcp.getMessages';
   requestId: string;
@@ -475,9 +445,6 @@ export interface McpGetMessagesRequest {
   };
 }
 
-/**
- * MCP get_messages response - messages from inbox.
- */
 export interface McpGetMessagesResponse {
   type: 'mcp.getMessages.result';
   requestId: string;
@@ -489,13 +456,9 @@ export interface McpGetMessagesResponse {
 }
 
 // ============================================================================
-// Inbox Push Notification Types
+// Inbox Notification Types
 // ============================================================================
 
-/**
- * Inbox notification - sent to MCP server to wake pending get_messages(wait=true).
- * This is sent FROM server TO MCP client when new messages arrive.
- */
 export interface McpInboxNotification {
   type: 'mcp.inbox.notification';
   payload: {
@@ -505,10 +468,6 @@ export interface McpInboxNotification {
   };
 }
 
-/**
- * Inbox updated message - sent FROM browser TO server when messages are added.
- * Server routes this to the recipient's MCP connection.
- */
 export interface InboxUpdatedMessage {
   type: 'inbox.updated';
   payload: {
@@ -519,35 +478,40 @@ export interface InboxUpdatedMessage {
 }
 
 // ============================================================================
-// Worker Status Types (Two-Phase Coordination)
+// MCP Aggregate Types
 // ============================================================================
 
-/**
- * MCP get_worker_status request - orchestrator checks a worker's status.
- */
-export interface McpGetWorkerStatusRequest {
-  type: 'mcp.getWorkerStatus';
-  requestId: string;
-  payload: {
-    callerId: string;
-    workerId: string;
-  };
-}
+export type McpRequest =
+  | McpRegisterRequest
+  | McpSpawnRequest
+  | McpGetGridRequest
+  | McpBroadcastRequest
+  | McpReportStatusRequest
+  | McpReportResultRequest
+  | McpGetMessagesRequest
+  | McpGetWorkerStatusRequest;
 
-/**
- * MCP get_worker_status response - returns worker's detailed status.
- */
-export interface McpGetWorkerStatusResponse {
-  type: 'mcp.getWorkerStatus.result';
-  requestId: string;
-  payload: {
-    success: boolean;
-    status?: DetailedStatus;
-    message?: string;
-    error?: string;
-  };
-}
+export type McpResponse =
+  | McpSpawnResponse
+  | McpGetGridResponse
+  | McpBroadcastResponse
+  | McpReportStatusResponse
+  | McpReportResultResponse
+  | McpGetMessagesResponse
+  | McpGetWorkerStatusResponse;
 
-export type McpRequest = McpSpawnRequest | McpGetGridRequest | McpBroadcastRequest | McpReportStatusRequest | McpReportResultRequest | McpGetMessagesRequest | McpGetWorkerStatusRequest;
-export type McpResponse = McpSpawnResponse | McpGetGridResponse | McpBroadcastResponse | McpReportStatusResponse | McpReportResultResponse | McpGetMessagesResponse | McpGetWorkerStatusResponse;
-export type McpNotification = McpBroadcastDelivery | McpStatusUpdateNotification | McpInboxNotification;
+export type McpNotification =
+  | McpBroadcastDelivery
+  | McpStatusUpdateNotification
+  | McpInboxNotification;
+
+export function isMcpMessage(
+  msg: unknown
+): msg is McpRequest | McpResponse | McpNotification | InboxUpdatedMessage {
+  if (typeof msg !== 'object' || msg === null) return false;
+  const m = msg as Record<string, unknown>;
+  return (
+    typeof m.type === 'string' &&
+    (m.type.startsWith('mcp.') || m.type === 'inbox.updated')
+  );
+}

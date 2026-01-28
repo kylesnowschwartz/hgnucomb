@@ -9,7 +9,7 @@ export type {
   DataHandler,
   ExitHandler,
   ConnectionHandler,
-} from './types.ts';
+} from '@shared/protocol';
 
 export type { TerminalBridge } from './TerminalBridge.ts';
 

@@ -8,10 +8,10 @@
  * 4. Verify expected outcomes
  */
 
-import type { TerminalBridge } from '@terminal/TerminalBridge';
+import type { TerminalBridge } from '@features/terminal/TerminalBridge';
 import type { HexCoordinate } from '@shared/types';
-import type { AgentState } from '@state/agentStore';
-import type { LogEvent } from '@state/eventLogStore';
+import type { AgentState } from '@features/agents/agentStore';
+import type { LogEvent } from '@features/events/eventLogStore';
 import type {
   IntegrationTest,
   TestResult,

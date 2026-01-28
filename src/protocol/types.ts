@@ -7,7 +7,10 @@
  * @see .agent-history/context-packet-task1-event-protocol.md
  */
 
-import type { HexCoordinate } from '@shared/types';
+import type { HexCoordinate, CellType, AgentStatus } from '@shared/types';
+
+// Re-export for consumers
+export type { CellType, AgentStatus };
 
 // ============================================================================
 // Message Type Discriminant
@@ -28,12 +31,6 @@ export type MessageType =
 
 /** Role classification for agents */
 export type AgentRole = 'orchestrator' | 'worker';
-
-/** Cell type determines behavior: terminal = shell, orchestrator = Claude agent (full tools), worker = Claude agent (limited tools) */
-export type CellType = 'terminal' | 'orchestrator' | 'worker';
-
-/** Agent operational status */
-export type AgentStatus = 'idle' | 'working' | 'blocked' | 'offline';
 
 /**
  * Payload for agent.spawn events.

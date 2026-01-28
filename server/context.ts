@@ -6,82 +6,15 @@
  */
 
 import { writeFileSync, unlinkSync, existsSync } from "node:fs";
+import type { AgentSnapshot, HexCoordinate } from "@shared/types.ts";
+import { hexDistance } from "@shared/types.ts";
 import type {
-  AgentSnapshot,
-  HexCoordinate,
-  CellType,
-  AgentStatus,
-} from "./protocol.js";
-
-// ============================================================================
-// Context JSON Schema (duplicated from src/shared/context.ts for server)
-// ============================================================================
-
-interface ContextAgent {
-  agentId: string;
-  cellType: CellType;
-  hex: HexCoordinate;
-  status: AgentStatus;
-  distance: number;
-  isParent?: boolean;
-}
-
-interface ContextConnection {
-  from: string;
-  to: string;
-  type: "parent-child" | "sibling" | "communication";
-}
-
-interface ContextGrid {
-  agents: ContextAgent[];
-  connections: ContextConnection[];
-}
-
-interface ContextSelf {
-  agentId: string;
-  cellType: CellType;
-  hex: HexCoordinate;
-  status: AgentStatus;
-}
-
-interface ContextCapabilities {
-  canSpawn: boolean;
-  canMessage: boolean;
-  maxChildren: number;
-}
-
-interface ContextTask {
-  taskId: string;
-  description: string;
-  details?: string;
-  assignedBy: string;
-}
-
-interface ContextParent {
-  agentId: string;
-  hex?: HexCoordinate;
-}
-
-interface HgnucombContext {
-  jsonrpc: "2.0";
-  context: {
-    self: ContextSelf;
-    grid: ContextGrid;
-    task: ContextTask | null;
-    parent: ContextParent | null;
-    capabilities: ContextCapabilities;
-  };
-}
-
-// ============================================================================
-// Hex distance calculation (duplicated from src/shared/types.ts)
-// ============================================================================
-
-function hexDistance(a: HexCoordinate, b: HexCoordinate): number {
-  const as = -a.q - a.r;
-  const bs = -b.q - b.r;
-  return Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs(as - bs));
-}
+  ContextAgent,
+  ContextConnection,
+  ContextTask,
+  ContextParent,
+  HgnucombContext,
+} from "@shared/context.ts";
 
 // ============================================================================
 // Context generation

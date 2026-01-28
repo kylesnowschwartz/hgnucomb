@@ -5,9 +5,9 @@
  */
 
 import { useRef, useEffect, useState } from 'react';
-import { useEventLogStore, type LogEvent } from '@state/eventLogStore';
+import { useEventLogStore, type LogEvent } from './eventLogStore';
 import { useShallow } from 'zustand/shallow';
-import { useDraggable } from '@hooks/useDraggable';
+import { useDraggable } from '@features/grid/useDraggable';
 import { palette } from '@theme/catppuccin-mocha';
 import './EventLog.css';
 

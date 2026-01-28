@@ -10,7 +10,7 @@ import type {
   ConnectionState,
   TerminalBridge,
   TerminalSessionInfo,
-} from '@terminal/index.ts';
+} from './index.ts';
 
 const MAX_BUFFER_CHUNKS = 1000;
 

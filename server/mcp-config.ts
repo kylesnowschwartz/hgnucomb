@@ -24,7 +24,7 @@
 
 import { writeFileSync } from "fs";
 import { join } from "path";
-import type { CellType } from "./protocol.js";
+import type { CellType } from "@shared/types.ts";
 
 export interface GeneratedMcpConfig {
   mcpServers: {
