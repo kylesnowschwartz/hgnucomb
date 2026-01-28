@@ -81,16 +81,17 @@ function App() {
       console.log('[App] Rehydrating state from server...');
       const sessions = await ws.listSessions();
 
+      // Server is truth - always clear client state first, then restore from server
+      useAgentStore.getState().clear();
+      sessionCreationInitiated.current.clear();
+      // Note: clearing agentStore triggers localStorage persist (now empty)
+
       if (sessions.length === 0) {
-        console.log('[App] No existing sessions to restore');
+        console.log('[App] No existing sessions to restore (server fresh)');
         return;
       }
 
       console.log('[App] Found', sessions.length, 'session(s) to restore');
-
-      // Clear current state and reinitialize from server (server is truth)
-      useAgentStore.getState().clear();
-      sessionCreationInitiated.current.clear();
 
       for (const session of sessions) {
         if (!session.agent) {
