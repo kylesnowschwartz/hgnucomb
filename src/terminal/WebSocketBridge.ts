@@ -219,6 +219,11 @@ export class WebSocketBridge implements TerminalBridge {
         agentSnapshot: config?.agentSnapshot,
         allAgents: config?.allAgents,
         initialPrompt: config?.initialPrompt,
+        task: config?.task,
+        instructions: config?.instructions,
+        taskDetails: config?.taskDetails,
+        parentId: config?.parentId,
+        parentHex: config?.parentHex,
       },
     };
 
@@ -381,7 +386,9 @@ export class WebSocketBridge implements TerminalBridge {
       msg.type === 'mcp.spawn' ||
       msg.type === 'mcp.getGrid' ||
       msg.type === 'mcp.broadcast' ||
-      msg.type === 'mcp.reportStatus'
+      msg.type === 'mcp.reportStatus' ||
+      msg.type === 'mcp.reportResult' ||
+      msg.type === 'mcp.getMessages'
     ) {
       this.mcpRequestHandlers.forEach((handler) => handler(msg as McpRequest));
       return;

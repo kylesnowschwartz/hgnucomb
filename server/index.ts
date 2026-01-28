@@ -19,6 +19,8 @@ import {
   McpGetGridRequest,
   McpBroadcastRequest,
   McpReportStatusRequest,
+  McpReportResultRequest,
+  McpGetMessagesRequest,
 } from "./protocol.js";
 import {
   generateContext,
@@ -59,7 +61,7 @@ const pendingMcpRequests = new Map<string, PendingMcpRequest>();
 /**
  * Route an MCP request from MCP server to browser clients.
  */
-function routeMcpToBrowser(msg: McpSpawnRequest | McpGetGridRequest | McpBroadcastRequest | McpReportStatusRequest): void {
+function routeMcpToBrowser(msg: McpSpawnRequest | McpGetGridRequest | McpBroadcastRequest | McpReportStatusRequest | McpReportResultRequest | McpGetMessagesRequest): void {
   const json = JSON.stringify(msg);
   for (const browser of browserClients) {
     if (browser.readyState === WebSocket.OPEN) {
@@ -93,7 +95,7 @@ function send(ws: WebSocket, msg: ServerMessage): void {
 function handleMessage(ws: WebSocket, msg: ClientMessage): void {
   switch (msg.type) {
     case "terminal.create": {
-      const { cols, rows, shell, cwd, env, agentSnapshot, allAgents, initialPrompt } = msg.payload;
+      const { cols, rows, shell, cwd, env, agentSnapshot, allAgents, initialPrompt, instructions, task, taskDetails, parentId, parentHex } = msg.payload;
 
       // Determine working directory
       let workingDir = cwd ?? process.cwd();
@@ -109,9 +111,14 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
           console.log(`[Worktree] Agent ${agentSnapshot.agentId} (${agentSnapshot.cellType}) using: ${workingDir}`);
         }
 
+        // Build task assignment options if this is a worker with a task
+        const taskAssignment = task && parentId && parentHex
+          ? { task, taskDetails, assignedBy: parentId, parentHex }
+          : undefined;
+
         // Generate context file
         if (allAgents) {
-          const context = generateContext(agentSnapshot, allAgents);
+          const context = generateContext(agentSnapshot, allAgents, 3, taskAssignment);
           const contextPath = writeContextFile(agentSnapshot.agentId, context);
 
           finalEnv = {
@@ -124,10 +131,34 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
 
       // Build CLI args for Claude agents (pre-approve MCP tools)
       // Pattern: mcp__<server>__<tool> - use * for all tools from server
-      // Prompt (if any) comes first, then flags
+      // For workers: use instructions as the prompt if provided, otherwise build default
+      let effectivePrompt = initialPrompt;
+
+      if (agentSnapshot?.cellType === 'worker') {
+        if (instructions) {
+          // Orchestrator provided explicit instructions - use as worker prompt
+          effectivePrompt = instructions;
+        } else if (task && parentId) {
+          // Smart fallback: actually attempt the task
+          effectivePrompt = `You are a worker agent. Execute this task:
+
+${task}${taskDetails ? `\n\nAdditional context:\n${taskDetails}` : ''}
+
+When complete:
+1. Call report_result with parentId="${parentId}" and your findings
+2. Call report_status with state="done"
+
+Work autonomously. Do not ask questions.`;
+        }
+      }
+
+      // Determine model based on cell type: orchestrators use sonnet, workers use haiku
+      const modelFlag = agentSnapshot?.cellType === "worker" ? "haiku" : "sonnet";
+
       const args: string[] | undefined = isClaudeAgent
         ? [
-            ...(initialPrompt ? [initialPrompt] : []),
+            ...(effectivePrompt ? [effectivePrompt] : []),
+            "--model", modelFlag,
             "--allowedTools", "mcp__hgnucomb__*",
           ]
         : undefined;
@@ -372,7 +403,9 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
     case "mcp.spawn":
     case "mcp.getGrid":
     case "mcp.broadcast":
-    case "mcp.reportStatus": {
+    case "mcp.reportStatus":
+    case "mcp.reportResult":
+    case "mcp.getMessages": {
       // MCP server requesting action from browser
       const agentId = msg.payload.callerId;
       pendingMcpRequests.set(msg.requestId, { mcpWs: ws, agentId });
@@ -384,7 +417,9 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
     case "mcp.spawn.result":
     case "mcp.getGrid.result":
     case "mcp.broadcast.result":
-    case "mcp.reportStatus.result": {
+    case "mcp.reportStatus.result":
+    case "mcp.reportResult.result":
+    case "mcp.getMessages.result": {
       // Browser responding to MCP request
       routeMcpResponse(msg);
       console.log(`[MCP] Routing ${msg.type} back to MCP server`);

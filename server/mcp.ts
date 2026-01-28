@@ -24,7 +24,10 @@ import type {
   McpGetGridResponse,
   McpBroadcastResponse,
   McpReportStatusResponse,
+  McpReportResultResponse,
+  McpGetMessagesResponse,
   DetailedStatus,
+  AgentMessage,
 } from "./protocol.js";
 
 const WS_URL = process.env.HGNUCOMB_WS_URL ?? "ws://localhost:3001";
@@ -161,7 +164,7 @@ const mcpServer = new McpServer({
 // Tool: spawn_agent
 mcpServer.tool(
   "spawn_agent",
-  "Spawn a new agent on the hex grid. If coordinates omitted, auto-places near caller. Only orchestrators can spawn agents.",
+  "Spawn a new worker agent on the hex grid. If coordinates omitted, auto-places near caller. Only orchestrators can spawn agents. Pass task (description) and instructions (prompt) for the worker.",
   {
     q: z.number().optional().describe("Hex column (optional - auto-positions if omitted)"),
     r: z.number().optional().describe("Hex row (optional - auto-positions if omitted)"),
@@ -169,8 +172,15 @@ mcpServer.tool(
       .enum(["terminal", "orchestrator", "worker"])
       .default("worker")
       .describe("Type of cell to spawn (default: worker). Workers are Claude agents with limited MCP tools."),
+    task: z.string().optional().describe("Short task name/description displayed in UI"),
+    instructions: z.string().optional().describe(
+      "Instructions for the worker to execute (the worker's prompt). " +
+      "If omitted, worker will acknowledge task and report done. " +
+      "Include 'report_result' and 'report_status done' in instructions for results."
+    ),
+    taskDetails: z.string().optional().describe("Additional context or details for the task"),
   },
-  async ({ q, r, cellType }) => {
+  async ({ q, r, cellType, task, instructions, taskDetails }) => {
     // Permission check: only orchestrators can spawn
     if (!canSpawn()) {
       return {
@@ -189,6 +199,9 @@ mcpServer.tool(
         q,
         r,
         cellType,
+        task,
+        instructions,
+        taskDetails,
       });
 
       if (!result.success) {
@@ -198,11 +211,12 @@ mcpServer.tool(
         };
       }
 
+      const taskInfo = task ? ` with task: "${task}"` : "";
       return {
         content: [
           {
             type: "text",
-            text: `Spawned ${cellType} agent ${result.agentId} at hex (${result.hex?.q}, ${result.hex?.r})`,
+            text: `Spawned ${cellType} agent ${result.agentId} at hex (${result.hex?.q}, ${result.hex?.r})${taskInfo}`,
           },
         ],
       };
@@ -376,6 +390,115 @@ mcpServer.tool(
           {
             type: "text",
             text: `Status updated to: ${state}${message ? ` (${message})` : ""}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Tool: report_result
+mcpServer.tool(
+  "report_result",
+  "Report task completion result to your parent orchestrator. Call this when you've finished your assigned task. Your status will automatically be set to 'done'.",
+  {
+    parentId: z.string().describe("Parent orchestrator agent ID (from context.parent.agentId)"),
+    result: z.unknown().describe("Result payload (any JSON-serializable data)"),
+    success: z.boolean().describe("Whether the task completed successfully"),
+    message: z.string().optional().describe("Optional message describing the result or any issues"),
+  },
+  async ({ parentId, result, success, message }) => {
+    try {
+      // First, report the result to parent
+      const resultResponse = await sendRequest<McpReportResultResponse["payload"]>("mcp.reportResult", {
+        parentId,
+        result,
+        success,
+        message,
+      });
+
+      if (!resultResponse.success) {
+        return {
+          content: [{ type: "text", text: `Failed to report result: ${resultResponse.error}` }],
+          isError: true,
+        };
+      }
+
+      // Also update own status to 'done'
+      await sendRequest<McpReportStatusResponse["payload"]>("mcp.reportStatus", {
+        state: "done" as DetailedStatus,
+        message: message ?? (success ? "Task completed" : "Task failed"),
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Result reported to parent ${parentId}. Success: ${success}${message ? ` - ${message}` : ""}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Tool: get_messages
+mcpServer.tool(
+  "get_messages",
+  "Get messages from your inbox. Use this to poll for results from spawned workers or broadcasts from nearby agents.",
+  {
+    since: z.string().optional().describe("ISO timestamp - only return messages after this time"),
+  },
+  async ({ since }) => {
+    try {
+      const result = await sendRequest<McpGetMessagesResponse["payload"]>("mcp.getMessages", {
+        since,
+      });
+
+      if (!result.success) {
+        return {
+          content: [{ type: "text", text: `Failed to get messages: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      const messages = result.messages ?? [];
+      if (messages.length === 0) {
+        return {
+          content: [{ type: "text", text: "No new messages in inbox" }],
+        };
+      }
+
+      const formatted = messages.map((m: AgentMessage) => {
+        const payload = JSON.stringify(m.payload, null, 2);
+        return `[${m.timestamp}] From: ${m.from} Type: ${m.type}\n${payload}`;
+      }).join("\n\n");
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${messages.length} message(s):\n\n${formatted}`,
           },
         ],
       };
