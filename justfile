@@ -71,5 +71,5 @@ build-prod:
 prod: build-prod
     @echo "Starting frozen prod on ports 3002 (server) / 5174 (UI)..."
     @echo "Code changes will NOT hot reload. Run 'just build-prod' to update."
-    cd server && PORT=3002 pnpm start &
+    (export PORT=3002; cd server && pnpm start) &
     pnpm preview --port 5174
