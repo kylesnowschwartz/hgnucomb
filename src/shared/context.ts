@@ -80,6 +80,24 @@ export interface ContextCapabilities {
 }
 
 /**
+ * Task assignment for worker agents.
+ */
+export interface ContextTask {
+  taskId: string;
+  description: string;
+  details?: string;
+  assignedBy: string;
+}
+
+/**
+ * Parent agent info for workers.
+ */
+export interface ContextParent {
+  agentId: string;
+  hex?: HexCoordinate;
+}
+
+/**
  * Full context JSON schema following JSON-RPC 2.0 style.
  */
 export interface HgnucombContext {
@@ -87,7 +105,8 @@ export interface HgnucombContext {
   context: {
     self: ContextSelf;
     grid: ContextGrid;
-    task: null; // Reserved for future task assignment
+    task: ContextTask | null;
+    parent: ContextParent | null;
     capabilities: ContextCapabilities;
   };
 }

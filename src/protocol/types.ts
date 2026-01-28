@@ -15,23 +15,19 @@ import type { HexCoordinate } from '@shared/types';
 
 /**
  * All valid message types in the protocol.
- * Uses dot notation for namespacing: agent.* for agent lifecycle, task.* for work.
+ * Uses dot notation for namespacing: agent.* for agent lifecycle.
  */
 export type MessageType =
   | 'agent.spawn'
   | 'agent.status'
-  | 'agent.despawn'
-  | 'task.assign'
-  | 'task.progress'
-  | 'task.complete'
-  | 'task.fail';
+  | 'agent.despawn';
 
 // ============================================================================
 // Agent Payloads
 // ============================================================================
 
 /** Role classification for agents */
-export type AgentRole = 'orchestrator' | 'worker' | 'specialist';
+export type AgentRole = 'orchestrator' | 'worker';
 
 /** Cell type determines behavior: terminal = shell, orchestrator = Claude agent (full tools), worker = Claude agent (limited tools) */
 export type CellType = 'terminal' | 'orchestrator' | 'worker';
@@ -81,60 +77,6 @@ export interface DespawnPayload {
 }
 
 // ============================================================================
-// Task Payloads
-// ============================================================================
-
-/**
- * Payload for task.assign events.
- * Sent when a task is assigned to an agent.
- */
-export interface TaskAssignPayload {
-  /** Unique identifier for the task */
-  taskId: string;
-  /** ID of the agent receiving the task */
-  agentId: string;
-  /** Human-readable task description */
-  description: string;
-  /** Optional structured task data */
-  data?: Record<string, unknown>;
-}
-
-/**
- * Payload for task.progress events.
- * Sent by agents to report incremental progress.
- */
-export interface TaskProgressPayload {
-  /** ID of the task being worked on */
-  taskId: string;
-  /** Progress from 0.0 (not started) to 1.0 (complete) */
-  progress: number;
-  /** Human-readable status message */
-  message: string;
-}
-
-/**
- * Payload for task.complete events.
- * Sent when an agent successfully finishes a task.
- */
-export interface TaskCompletePayload {
-  /** ID of the completed task */
-  taskId: string;
-  /** Optional result data */
-  result?: Record<string, unknown>;
-}
-
-/**
- * Payload for task.fail events.
- * Sent when an agent cannot complete a task.
- */
-export interface TaskFailPayload {
-  /** ID of the failed task */
-  taskId: string;
-  /** Error description */
-  error: string;
-}
-
-// ============================================================================
 // Message Envelope
 // ============================================================================
 
@@ -143,10 +85,6 @@ export interface PayloadMap {
   'agent.spawn': SpawnPayload;
   'agent.status': StatusPayload;
   'agent.despawn': DespawnPayload;
-  'task.assign': TaskAssignPayload;
-  'task.progress': TaskProgressPayload;
-  'task.complete': TaskCompletePayload;
-  'task.fail': TaskFailPayload;
 }
 
 /**

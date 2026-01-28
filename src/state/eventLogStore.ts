@@ -42,7 +42,7 @@ export interface KillEvent extends BaseEvent {
 }
 
 export interface StatusChangeEvent extends BaseEvent {
-  kind: 'status_change';
+  kind: 'statusChange';
   agentId: string;
   previousStatus?: DetailedStatus;
   newStatus: DetailedStatus;
@@ -50,7 +50,7 @@ export interface StatusChangeEvent extends BaseEvent {
 }
 
 export interface MessageReceivedEvent extends BaseEvent {
-  kind: 'message_received';
+  kind: 'messageReceived';
   recipientId: string;
   senderId: string;
   messageType: 'result' | 'broadcast';
@@ -190,7 +190,7 @@ export const useEventLogStore = create<EventLogStore>()((set) => ({
       const event: StatusChangeEvent = {
         id: nextEventId(),
         timestamp: new Date().toISOString(),
-        kind: 'status_change',
+        kind: 'statusChange',
         agentId,
         newStatus,
         message,
@@ -209,7 +209,7 @@ export const useEventLogStore = create<EventLogStore>()((set) => ({
       const event: MessageReceivedEvent = {
         id: nextEventId(),
         timestamp: new Date().toISOString(),
-        kind: 'message_received',
+        kind: 'messageReceived',
         recipientId,
         senderId,
         messageType,

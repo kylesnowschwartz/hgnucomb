@@ -8,8 +8,6 @@
  */
 
 import type { HexCoordinate } from '@shared/types';
-import type { CellType } from '@shared/context';
-import type { DetailedStatus } from '@terminal/types';
 
 // ============================================================================
 // Test Configuration
@@ -45,12 +43,6 @@ export interface WaitCondition {
 // ============================================================================
 // Test Steps
 // ============================================================================
-
-export type TestStepType =
-  | 'spawn_orchestrator'
-  | 'send_command'
-  | 'wait_condition'
-  | 'assert';
 
 export interface SpawnOrchestratorStep {
   type: 'spawn_orchestrator';
@@ -136,13 +128,3 @@ export interface TestLogEntry {
   message: string;
 }
 
-// ============================================================================
-// Agent State Query Helpers
-// ============================================================================
-
-export interface AgentQuery {
-  cellType?: CellType;
-  status?: DetailedStatus;
-  minCount?: number;
-  maxCount?: number;
-}

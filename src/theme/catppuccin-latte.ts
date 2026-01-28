@@ -130,7 +130,6 @@ export const ui = {
 export const agentColors = {
   orchestrator: palette.blue,
   worker: palette.green,
-  specialist: palette.mauve,
   // Connection lines between agents
   connection: palette.overlay0,
   connectionActive: palette.sapphire,

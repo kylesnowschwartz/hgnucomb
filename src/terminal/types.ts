@@ -353,16 +353,6 @@ export interface McpStatusUpdateNotification {
 // ============================================================================
 
 /**
- * Task assignment - included in context JSON when spawning workers.
- */
-export interface TaskAssignment {
-  taskId: string;
-  description: string;
-  details?: string;
-  assignedBy: string;
-}
-
-/**
  * Message stored in agent inbox - results from workers or broadcasts.
  */
 export interface AgentMessage {

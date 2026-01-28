@@ -59,7 +59,7 @@ interface ContextTask {
 
 interface ContextParent {
   agentId: string;
-  hex: HexCoordinate;
+  hex?: HexCoordinate;
 }
 
 interface HgnucombContext {
@@ -96,7 +96,7 @@ export interface TaskAssignmentOptions {
   task: string;
   taskDetails?: string;
   assignedBy: string;
-  parentHex: HexCoordinate;
+  parentHex?: HexCoordinate;
 }
 
 /**

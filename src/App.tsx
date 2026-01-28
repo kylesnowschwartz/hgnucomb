@@ -20,6 +20,7 @@ import type {
 } from '@terminal/types';
 import type { HexCoordinate } from '@shared/types';
 import { hexDistance, getHexRing } from '@shared/types';
+import { agentToSnapshot } from '@shared/snapshot';
 import { useEventLogStore } from '@state/eventLogStore';
 import { useShallow } from 'zustand/shallow';
 
@@ -153,8 +154,10 @@ function App() {
           }
 
           // Spawn the agent with task assignment and instructions
+          // Store parentHex at spawn time - don't rely on lookup later
           const newAgentId = spawnAgent(targetHex, cellType, {
             parentId: callerId,
+            parentHex: caller.hex,
             task,
             instructions,
             taskDetails,
@@ -366,23 +369,11 @@ function App() {
 
       // Build snapshots for context generation (Claude agents only)
       const agentSnapshot = isClaudeAgent
-        ? {
-            agentId: agent.id,
-            cellType: agent.cellType,
-            hex: agent.hex,
-            status: agent.status,
-            connections: agent.connections,
-          }
+        ? agentToSnapshot(agent)
         : undefined;
 
       const allAgentsSnapshot = isClaudeAgent
-        ? getAllAgents().map((a) => ({
-            agentId: a.id,
-            cellType: a.cellType,
-            hex: a.hex,
-            status: a.status,
-            connections: a.connections,
-          }))
+        ? getAllAgents().map(agentToSnapshot)
         : undefined;
 
       try {
@@ -398,7 +389,7 @@ function App() {
           instructions: agent.instructions,
           taskDetails: agent.taskDetails,
           parentId: agent.parentId,
-          parentHex: agent.parentId ? getAgent(agent.parentId)?.hex : undefined,
+          parentHex: agent.parentHex,
         });
 
         addSession(session, agent.id);
@@ -429,7 +420,7 @@ function App() {
         return null;
       }
     },
-    [bridge, getAllAgents, getAgent, addSession, appendData, markExited, setActiveSession]
+    [bridge, getAllAgents, addSession, appendData, markExited, setActiveSession]
   );
 
   // Auto-create terminal sessions for Claude agents when they appear

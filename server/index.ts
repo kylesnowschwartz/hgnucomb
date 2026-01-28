@@ -112,7 +112,8 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
         }
 
         // Build task assignment options if this is a worker with a task
-        const taskAssignment = task && parentId && parentHex
+        // parentHex is optional - identity (parentId) is what matters for communication
+        const taskAssignment = task && parentId
           ? { task, taskDetails, assignedBy: parentId, parentHex }
           : undefined;
 

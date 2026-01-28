@@ -48,7 +48,6 @@ const STYLE = {
 const ROLE_COLORS: Record<AgentRole, string> = {
   orchestrator: agentColors.orchestrator,
   worker: agentColors.worker,
-  specialist: agentColors.specialist,
 };
 
 const STATUS_OPACITY: Record<AgentStatus, number> = {

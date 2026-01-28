@@ -164,11 +164,11 @@ export function statusChangeLogged(
   timeout: number = TIMEOUTS.statusReports
 ): WaitCondition {
   return {
-    description: `status_change to '${newStatus}' for ${agentId} logged`,
+    description: `statusChange to '${newStatus}' for ${agentId} logged`,
     predicate: () =>
       stores.getEvents().some(
         (e) =>
-          e.kind === 'status_change' &&
+          e.kind === 'statusChange' &&
           e.agentId === agentId &&
           e.newStatus === newStatus
       ),

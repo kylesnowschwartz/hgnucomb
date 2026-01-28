@@ -1,12 +1,8 @@
 import { create } from 'zustand';
 import type {
-  Message,
   AgentStatus,
   AgentRole,
   CellType,
-  SpawnPayload,
-  StatusPayload,
-  DespawnPayload,
 } from '@protocol/types';
 import type { HexCoordinate } from '@shared/types';
 import type { DetailedStatus, AgentMessage } from '@terminal/types';
@@ -28,6 +24,8 @@ export interface AgentState {
   initialPrompt?: string;
   /** Parent agent ID (for workers spawned by orchestrators) */
   parentId?: string;
+  /** Parent agent hex position (stored at spawn time, not looked up) */
+  parentHex?: HexCoordinate;
   /** Task assigned to this worker (short description) */
   task?: string;
   /** Instructions for worker (prompt sent to Claude) */
@@ -40,6 +38,7 @@ export interface AgentState {
 export interface SpawnOptions {
   initialPrompt?: string;
   parentId?: string;
+  parentHex?: HexCoordinate;
   task?: string;
   instructions?: string;
   taskDetails?: string;
@@ -47,7 +46,6 @@ export interface SpawnOptions {
 
 interface AgentStore {
   agents: Map<string, AgentState>;
-  processEvent: (event: Message) => void;
   clear: () => void;
   getAgent: (id: string) => AgentState | undefined;
   getAllAgents: () => AgentState[];
@@ -65,54 +63,12 @@ interface AgentStore {
 export const useAgentStore = create<AgentStore>()((set, get) => ({
   agents: new Map(),
 
-  processEvent: (event) => {
-    switch (event.type) {
-      case 'agent.spawn': {
-        const p = event.payload as SpawnPayload;
-        set((s) => ({
-          agents: new Map(s.agents).set(p.agentId, {
-            id: p.agentId,
-            role: p.role,
-            cellType: p.role === 'orchestrator' ? 'orchestrator' : 'terminal',
-            status: 'idle',
-            detailedStatus: 'idle',
-            systemPrompt: p.systemPrompt,
-            hex: p.hex,
-            connections: p.connections,
-            inbox: [],
-          }),
-        }));
-        console.log('[AgentStore] Spawned:', p.agentId);
-        break;
-      }
-      case 'agent.status': {
-        const p = event.payload as StatusPayload;
-        const existing = get().agents.get(p.agentId);
-        if (existing) {
-          set((s) => ({
-            agents: new Map(s.agents).set(p.agentId, { ...existing, status: p.status }),
-          }));
-        }
-        break;
-      }
-      case 'agent.despawn': {
-        const p = event.payload as DespawnPayload;
-        set((s) => {
-          const next = new Map(s.agents);
-          next.delete(p.agentId);
-          return { agents: next };
-        });
-        break;
-      }
-    }
-  },
-
   clear: () => set({ agents: new Map() }),
   getAgent: (id) => get().agents.get(id),
   getAllAgents: () => Array.from(get().agents.values()),
 
   spawnAgent: (hex, cellType = 'terminal', options = {}) => {
-    const { initialPrompt, parentId, task, instructions, taskDetails } = options;
+    const { initialPrompt, parentId, parentHex, task, instructions, taskDetails } = options;
     const id = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     // Role maps from cellType: orchestrator cells are orchestrators, terminal cells are workers
     const role: AgentRole = cellType === 'orchestrator' ? 'orchestrator' : 'worker';
@@ -128,6 +84,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         connections: parentId ? [parentId] : [],
         initialPrompt,
         parentId,
+        parentHex,
         task,
         instructions,
         taskDetails,

@@ -25,40 +25,6 @@ export function hexToPixel(hex: HexCoordinate, size: number): { x: number; y: nu
 }
 
 /**
- * Convert pixel position to hex axial coordinates.
- * Uses pointy-top orientation. Returns rounded coordinates.
- *
- * @param x - Pixel x position
- * @param y - Pixel y position
- * @param size - The radius of the hexagon in pixels
- * @returns Rounded hex coordinate
- */
-export function pixelToHex(x: number, y: number, size: number): HexCoordinate {
-  const q = ((Math.sqrt(3) / 3) * x - (1 / 3) * y) / size;
-  const r = ((2 / 3) * y) / size;
-  return { q: Math.round(q), r: Math.round(r) };
-}
-
-/**
- * Generate hex coordinates within a given radius from origin.
- * Uses axial coordinate distance formula.
- *
- * @param radius - Maximum distance from origin (0,0)
- * @returns Array of hex coordinates within the radius
- */
-export function hexesInRange(radius: number): HexCoordinate[] {
-  const hexes: HexCoordinate[] = [];
-  for (let q = -radius; q <= radius; q++) {
-    const r1 = Math.max(-radius, -q - radius);
-    const r2 = Math.min(radius, -q + radius);
-    for (let r = r1; r <= r2; r++) {
-      hexes.push({ q, r });
-    }
-  }
-  return hexes;
-}
-
-/**
  * Generate hex coordinates within a rectangular pixel region.
  * Used for viewport culling - only render hexes visible on screen.
  *

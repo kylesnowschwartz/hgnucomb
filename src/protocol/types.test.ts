@@ -9,7 +9,6 @@ import {
   createMessage,
   resetMessageCounter,
   type Message,
-  type TaskProgressPayload,
 } from './types';
 
 describe('Event Protocol Types', () => {
@@ -38,34 +37,34 @@ describe('Event Protocol Types', () => {
     });
   });
 
-  describe('task.progress message', () => {
-    it('creates a valid progress message', () => {
-      const message = createMessage('task.progress', 'worker-1', 'hub', {
-        taskId: 'task-001',
-        progress: 0.5,
-        message: 'Halfway through implementation',
+  describe('agent.status message', () => {
+    it('creates a valid status message', () => {
+      const message = createMessage('agent.status', 'worker-1', 'hub', {
+        agentId: 'worker-1',
+        status: 'working',
+        message: 'Processing task',
       });
 
       expect(message.id).toBe('evt-001');
-      expect(message.type).toBe('task.progress');
+      expect(message.type).toBe('agent.status');
       expect(message.from).toBe('worker-1');
       expect(message.to).toBe('hub');
-      expect(message.payload.progress).toBe(0.5);
-      expect(message.payload.message).toBe('Halfway through implementation');
+      expect(message.payload.status).toBe('working');
+      expect(message.payload.message).toBe('Processing task');
     });
   });
 
-  describe('task.fail message', () => {
-    it('creates a valid fail message', () => {
-      const message = createMessage('task.fail', 'worker-2', 'hub', {
-        taskId: 'task-002',
-        error: 'Could not complete: missing dependencies',
+  describe('agent.despawn message', () => {
+    it('creates a valid despawn message', () => {
+      const message = createMessage('agent.despawn', 'hub', 'broadcast', {
+        agentId: 'worker-2',
+        reason: 'completed',
       });
 
       expect(message.id).toBe('evt-001');
-      expect(message.type).toBe('task.fail');
-      expect(message.payload.taskId).toBe('task-002');
-      expect(message.payload.error).toContain('missing dependencies');
+      expect(message.type).toBe('agent.despawn');
+      expect(message.payload.agentId).toBe('worker-2');
+      expect(message.payload.reason).toBe('completed');
     });
   });
 
@@ -91,18 +90,16 @@ describe('Event Protocol Types', () => {
     });
 
     it('preserves all payload fields through serialization', () => {
-      const payload: TaskProgressPayload = {
-        taskId: 'task-123',
-        progress: 0.75,
-        message: 'Almost done',
-      };
-
-      const message = createMessage('task.progress', 'agent-1', 'hub', payload);
+      const message = createMessage('agent.status', 'agent-1', 'hub', {
+        agentId: 'agent-1',
+        status: 'blocked',
+        message: 'Waiting for dependencies',
+      });
       const roundtripped = JSON.parse(JSON.stringify(message));
 
-      expect(roundtripped.payload.taskId).toBe('task-123');
-      expect(roundtripped.payload.progress).toBe(0.75);
-      expect(roundtripped.payload.message).toBe('Almost done');
+      expect(roundtripped.payload.agentId).toBe('agent-1');
+      expect(roundtripped.payload.status).toBe('blocked');
+      expect(roundtripped.payload.message).toBe('Waiting for dependencies');
     });
   });
 

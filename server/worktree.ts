@@ -31,13 +31,6 @@ function gitExec(args: string[], cwd: string): string | null {
 }
 
 /**
- * Check if a directory is inside a git repository.
- */
-export function isGitRepo(dir: string): boolean {
-  return gitExec(["rev-parse", "--git-dir"], dir) !== null;
-}
-
-/**
  * Get the root directory of the git repository.
  */
 export function getGitRoot(dir: string): string | null {
@@ -207,28 +200,3 @@ export function removeWorktree(targetDir: string, agentId: string): WorktreeResu
   return { success: true };
 }
 
-/**
- * List all hgnucomb worktrees in a git repository.
- */
-export function listWorktrees(targetDir: string): string[] {
-  const gitRoot = getGitRoot(targetDir);
-  if (!gitRoot) return [];
-
-  const worktreesDir = join(gitRoot, ".worktrees");
-  if (!existsSync(worktreesDir)) return [];
-
-  const result = gitExec(["worktree", "list", "--porcelain"], gitRoot);
-  if (!result) return [];
-
-  // Parse porcelain output - look for worktrees in our .worktrees dir
-  const worktrees: string[] = [];
-  const lines = result.split("\n");
-  for (const line of lines) {
-    if (line.startsWith("worktree ") && line.includes(".worktrees/")) {
-      const path = line.replace("worktree ", "");
-      worktrees.push(path);
-    }
-  }
-
-  return worktrees;
-}
