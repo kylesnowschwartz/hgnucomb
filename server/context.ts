@@ -50,12 +50,25 @@ interface ContextCapabilities {
   maxChildren: number;
 }
 
+interface ContextTask {
+  taskId: string;
+  description: string;
+  details?: string;
+  assignedBy: string;
+}
+
+interface ContextParent {
+  agentId: string;
+  hex: HexCoordinate;
+}
+
 interface HgnucombContext {
   jsonrpc: "2.0";
   context: {
     self: ContextSelf;
     grid: ContextGrid;
-    task: null;
+    task: ContextTask | null;
+    parent: ContextParent | null;
     capabilities: ContextCapabilities;
   };
 }
@@ -77,17 +90,29 @@ function hexDistance(a: HexCoordinate, b: HexCoordinate): number {
 const DEFAULT_MAX_DISTANCE = 3;
 
 /**
- * Generate context JSON for an orchestrator agent.
+ * Task assignment options for worker agents.
+ */
+export interface TaskAssignmentOptions {
+  task: string;
+  taskDetails?: string;
+  assignedBy: string;
+  parentHex: HexCoordinate;
+}
+
+/**
+ * Generate context JSON for an orchestrator or worker agent.
  *
  * @param self - The spawning agent's snapshot
  * @param allAgents - All agents on the grid
  * @param maxDistance - Maximum hex distance for nearby agents (default 3)
+ * @param taskAssignment - Optional task assignment for worker agents
  * @returns Context JSON object
  */
 export function generateContext(
   self: AgentSnapshot,
   allAgents: AgentSnapshot[],
-  maxDistance: number = DEFAULT_MAX_DISTANCE
+  maxDistance: number = DEFAULT_MAX_DISTANCE,
+  taskAssignment?: TaskAssignmentOptions
 ): HgnucombContext {
   // Filter and transform nearby agents (excluding self)
   const nearbyAgents: ContextAgent[] = allAgents
@@ -116,6 +141,24 @@ export function generateContext(
     }
   }
 
+  // Build task info if assigned
+  const task: ContextTask | null = taskAssignment
+    ? {
+        taskId: `task-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        description: taskAssignment.task,
+        details: taskAssignment.taskDetails,
+        assignedBy: taskAssignment.assignedBy,
+      }
+    : null;
+
+  // Build parent info if this is a worker with a task
+  const parent: ContextParent | null = taskAssignment
+    ? {
+        agentId: taskAssignment.assignedBy,
+        hex: taskAssignment.parentHex,
+      }
+    : null;
+
   return {
     jsonrpc: "2.0",
     context: {
@@ -129,10 +172,11 @@ export function generateContext(
         agents: nearbyAgents,
         connections,
       },
-      task: null,
+      task,
+      parent,
       capabilities: {
-        canSpawn: true,
-        canMessage: false, // Future: enable when MCP messaging is ready
+        canSpawn: self.cellType === "orchestrator",
+        canMessage: true,
         maxChildren: 5,
       },
     },
