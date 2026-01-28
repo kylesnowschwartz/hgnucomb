@@ -568,11 +568,9 @@ function App() {
         env.HGNUCOMB_PARENT_ID = agent.parentId;
       }
 
-      // Build snapshots for context generation (Claude agents only)
-      const agentSnapshot = isClaudeAgent
-        ? agentToSnapshot(agent)
-        : undefined;
-
+      // Always send agentSnapshot (needed for session persistence)
+      // Only send allAgents for Claude agents (triggers context file generation)
+      const agentSnapshot = agentToSnapshot(agent);
       const allAgentsSnapshot = isClaudeAgent
         ? getAllAgents().map(agentToSnapshot)
         : undefined;
