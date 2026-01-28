@@ -1,3 +1,7 @@
+# Track beads-lite task database (overrides global gitignore)
+# Worktrees inherit this, so orchestrator agents can see tasks
+!.beads-lite/
+
 # Logs
 logs
 *.log
