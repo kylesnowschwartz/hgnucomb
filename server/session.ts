@@ -16,6 +16,8 @@ export interface TerminalSessionOptions {
   cols?: number;
   rows?: number;
   shell?: string;
+  /** Arguments to pass to the shell */
+  args?: string[];
   cwd?: string;
   env?: Record<string, string>;
 }
@@ -45,7 +47,7 @@ export class TerminalSession {
       }
     }
 
-    this.ptyProcess = pty.spawn(shell, [], {
+    this.ptyProcess = pty.spawn(shell, options.args ?? [], {
       name: "xterm-256color",
       cols: this.cols,
       rows: this.rows,

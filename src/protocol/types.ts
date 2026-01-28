@@ -33,8 +33,8 @@ export type MessageType =
 /** Role classification for agents */
 export type AgentRole = 'orchestrator' | 'worker' | 'specialist';
 
-/** Cell type determines behavior: terminal = shell, orchestrator = Claude agent */
-export type CellType = 'terminal' | 'orchestrator';
+/** Cell type determines behavior: terminal = shell, orchestrator = Claude agent (full tools), worker = Claude agent (limited tools) */
+export type CellType = 'terminal' | 'orchestrator' | 'worker';
 
 /** Agent operational status */
 export type AgentStatus = 'idle' | 'working' | 'blocked' | 'offline';

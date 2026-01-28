@@ -14,8 +14,8 @@ export interface HexCoordinate {
   r: number;
 }
 
-export type CellType = "terminal" | "orchestrator";
-export type AgentStatus = "idle" | "active" | "paused" | "terminated";
+export type CellType = "terminal" | "orchestrator" | "worker";
+export type AgentStatus = "idle" | "working" | "blocked" | "offline";
 
 /**
  * Minimal agent info sent from client when creating a session.
@@ -45,6 +45,8 @@ export interface CreateRequest {
     agentSnapshot?: AgentSnapshot;
     /** All agents on grid for context generation */
     allAgents?: AgentSnapshot[];
+    /** Initial prompt passed as CLI arg to Claude */
+    initialPrompt?: string;
   };
 }
 

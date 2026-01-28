@@ -50,30 +50,6 @@
   font-style: italic;
 }
 
-.control-panel__event {
-  padding: 4px 0;
-  font-family: 'SF Mono', Consolas, monospace;
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.control-panel__event-seq {
-  color: var(--ctp-subtext0);
-  margin-right: 8px;
-}
-
-.control-panel__event-type {
-  color: var(--ctp-blue);
-  display: inline-block;
-  width: 100px;
-}
-
-.control-panel__event-summary {
-  color: var(--ctp-text);
-}
-
 .control-panel__controls {
   padding: 12px;
   display: flex;
@@ -121,4 +97,64 @@
 
 .control-panel__btn--stop:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ctp-red) 25%, var(--ctp-base));
+}
+
+/* Integration test log entries */
+.control-panel__log-entry {
+  padding: 4px 0;
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.control-panel__log-level {
+  color: var(--ctp-subtext0);
+  width: 60px;
+  flex-shrink: 0;
+}
+
+.control-panel__log-message {
+  color: var(--ctp-text);
+  word-break: break-word;
+}
+
+.control-panel__log-entry--success .control-panel__log-level,
+.control-panel__log-entry--success .control-panel__log-message {
+  color: var(--ctp-green);
+}
+
+.control-panel__log-entry--error .control-panel__log-level,
+.control-panel__log-entry--error .control-panel__log-message {
+  color: var(--ctp-red);
+}
+
+.control-panel__log-entry--warn .control-panel__log-level,
+.control-panel__log-entry--warn .control-panel__log-message {
+  color: var(--ctp-yellow);
+}
+
+/* Progress bar */
+.control-panel__progress {
+  position: relative;
+  height: 20px;
+  background: var(--ctp-surface0);
+  border-bottom: 1px solid var(--ctp-surface1);
+}
+
+.control-panel__progress-bar {
+  position: absolute;
+  height: 100%;
+  background: color-mix(in srgb, var(--ctp-blue) 30%, var(--ctp-surface0));
+  transition: width 0.3s ease;
+}
+
+.control-panel__progress-text {
+  position: absolute;
+  width: 100%;
+  text-align: center;
+  line-height: 20px;
+  font-size: 11px;
+  color: var(--ctp-text);
+  font-weight: 500;
 }

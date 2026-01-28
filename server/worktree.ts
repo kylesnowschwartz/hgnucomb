@@ -11,6 +11,7 @@ import { execSync } from "child_process";
 import { existsSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
 import { generateMcpConfig, writeMcpConfig } from "./mcp-config.js";
+import type { CellType } from "./protocol.js";
 
 /**
  * Execute git command and return stdout as string.
@@ -78,16 +79,17 @@ export interface WorktreeResult {
 }
 
 /**
- * Create a git worktree for an orchestrator agent.
+ * Create a git worktree for an orchestrator or worker agent.
  *
  * Location: {gitRoot}/.worktrees/{agentId}/
  * Branch: hgnucomb/{agentId}
  *
  * @param targetDir - Directory to create worktree for (usually project root)
  * @param agentId - Unique agent identifier
+ * @param cellType - Agent type (orchestrator has full tools, worker has limited)
  * @returns Result with worktree path or error
  */
-export function createWorktree(targetDir: string, agentId: string): WorktreeResult {
+export function createWorktree(targetDir: string, agentId: string, cellType: CellType = "orchestrator"): WorktreeResult {
   // Check if git repo
   const gitRoot = getGitRoot(targetDir);
   if (!gitRoot) {
@@ -144,9 +146,9 @@ export function createWorktree(targetDir: string, agentId: string): WorktreeResu
   // Generate .mcp.json with absolute paths for this worktree
   // Claude Code searches from CWD upward - worktree is its own git root,
   // so we must provide the config directly rather than relying on parent repo
-  const mcpConfig = generateMcpConfig(gitRoot, agentId);
+  const mcpConfig = generateMcpConfig(gitRoot, agentId, cellType);
   writeMcpConfig(worktreePath, mcpConfig);
-  console.log(`[Worktree] Generated .mcp.json with absolute paths`);
+  console.log(`[Worktree] Generated .mcp.json with absolute paths for ${cellType}`);
 
   console.log(`[Worktree] Created: ${worktreePath} on branch ${branchName}`);
   return { success: true, worktreePath, branchName };

@@ -286,17 +286,17 @@ function App() {
       return;
     }
 
-    // Orchestrators spawn Claude CLI, terminals spawn default shell
-    const shell = agent.cellType === 'orchestrator' ? 'claude' : undefined;
+    // Orchestrators and workers spawn Claude CLI, terminals spawn default shell
+    const isClaudeAgent = agent.cellType === 'orchestrator' || agent.cellType === 'worker';
+    const shell = isClaudeAgent ? 'claude' : undefined;
     const env = {
       HGNUCOMB_AGENT_ID: agent.id,
       HGNUCOMB_HEX: `${agent.hex.q},${agent.hex.r}`,
       HGNUCOMB_CELL_TYPE: agent.cellType,
     };
 
-    // Build snapshots for context generation (orchestrators only)
-    const isOrchestrator = agent.cellType === 'orchestrator';
-    const agentSnapshot: AgentSnapshot | undefined = isOrchestrator
+    // Build snapshots for context generation (Claude agents only)
+    const agentSnapshot: AgentSnapshot | undefined = isClaudeAgent
       ? {
           agentId: agent.id,
           cellType: agent.cellType,
@@ -306,7 +306,7 @@ function App() {
         }
       : undefined;
 
-    const allAgents: AgentSnapshot[] | undefined = isOrchestrator
+    const allAgents: AgentSnapshot[] | undefined = isClaudeAgent
       ? getAllAgents().map((a) => ({
           agentId: a.id,
           cellType: a.cellType,
@@ -317,7 +317,7 @@ function App() {
       : undefined;
 
     bridge
-      .createSession({ cols: 80, rows: 24, shell, env, agentSnapshot, allAgents })
+      .createSession({ cols: 80, rows: 24, shell, env, agentSnapshot, allAgents, initialPrompt: agent.initialPrompt })
       .then((session) => {
         addSession(session, selectedAgentId);
         setActiveSession(session.sessionId);

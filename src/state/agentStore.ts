@@ -23,6 +23,8 @@ export interface AgentState {
   systemPrompt: string;
   hex: HexCoordinate;
   connections: string[];
+  /** Optional initial prompt passed as CLI arg when spawning Claude */
+  initialPrompt?: string;
 }
 
 interface AgentStore {
@@ -32,7 +34,7 @@ interface AgentStore {
   getAgent: (id: string) => AgentState | undefined;
   getAllAgents: () => AgentState[];
   // Direct spawn (for user-initiated placement, not event-driven)
-  spawnAgent: (hex: HexCoordinate, cellType?: CellType) => string;
+  spawnAgent: (hex: HexCoordinate, cellType?: CellType, initialPrompt?: string) => string;
   // Remove agent (for user-initiated kill)
   removeAgent: (id: string) => void;
   // Update detailed status (from report_status MCP tool)
@@ -87,7 +89,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
   getAgent: (id) => get().agents.get(id),
   getAllAgents: () => Array.from(get().agents.values()),
 
-  spawnAgent: (hex, cellType = 'terminal') => {
+  spawnAgent: (hex, cellType = 'terminal', initialPrompt) => {
     const id = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     // Role maps from cellType: orchestrator cells are orchestrators, terminal cells are workers
     const role: AgentRole = cellType === 'orchestrator' ? 'orchestrator' : 'worker';
@@ -101,6 +103,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         systemPrompt: '',
         hex,
         connections: [],
+        initialPrompt,
       }),
     }));
     console.log('[AgentStore] User spawned agent:', id, 'type:', cellType, 'at', hex);

@@ -143,5 +143,7 @@ export const hexGrid = {
   hexStroke: palette.surface1,
   hexStrokeSelected: palette.pink,
   hexStrokeHover: palette.lavender,
+  hexStrokeOrchestrator: palette.blue, // Distinct border for orchestrator cells
+  hexStrokeWorker: palette.teal, // Distinct border for worker cells
   originMarker: palette.overlay0,
 } as const;

@@ -32,7 +32,7 @@ export interface BroadcastEvent extends BaseEvent {
 export interface SpawnEvent extends BaseEvent {
   kind: 'spawn';
   agentId: string;
-  cellType: 'terminal' | 'orchestrator';
+  cellType: 'terminal' | 'orchestrator' | 'worker';
   hex: HexCoordinate;
 }
 
@@ -69,7 +69,7 @@ interface EventLogStore {
     recipientCount: number,
     payload: unknown
   ) => void;
-  addSpawn: (agentId: string, cellType: 'terminal' | 'orchestrator', hex: HexCoordinate) => void;
+  addSpawn: (agentId: string, cellType: 'terminal' | 'orchestrator' | 'worker', hex: HexCoordinate) => void;
   addKill: (agentId: string) => void;
   addStatusChange: (
     agentId: string,

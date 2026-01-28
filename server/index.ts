@@ -93,19 +93,20 @@ function send(ws: WebSocket, msg: ServerMessage): void {
 function handleMessage(ws: WebSocket, msg: ClientMessage): void {
   switch (msg.type) {
     case "terminal.create": {
-      const { cols, rows, shell, cwd, env, agentSnapshot, allAgents } = msg.payload;
+      const { cols, rows, shell, cwd, env, agentSnapshot, allAgents, initialPrompt } = msg.payload;
 
       // Determine working directory
       let workingDir = cwd ?? process.cwd();
       let finalEnv = env;
 
-      // For orchestrators: create worktree and set up context
-      if (agentSnapshot && agentSnapshot.cellType === "orchestrator") {
-        // Try to create a worktree for this orchestrator
-        const worktreeResult = createWorktree(workingDir, agentSnapshot.agentId);
+      // For orchestrators and workers: create worktree and set up context
+      const isClaudeAgent = agentSnapshot && (agentSnapshot.cellType === "orchestrator" || agentSnapshot.cellType === "worker");
+      if (isClaudeAgent) {
+        // Try to create a worktree for this agent
+        const worktreeResult = createWorktree(workingDir, agentSnapshot.agentId, agentSnapshot.cellType);
         if (worktreeResult.success && worktreeResult.worktreePath) {
           workingDir = worktreeResult.worktreePath;
-          console.log(`[Worktree] Agent ${agentSnapshot.agentId} using: ${workingDir}`);
+          console.log(`[Worktree] Agent ${agentSnapshot.agentId} (${agentSnapshot.cellType}) using: ${workingDir}`);
         }
 
         // Generate context file
@@ -121,7 +122,17 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
         }
       }
 
-      const { session, sessionId } = manager.create({ cols, rows, shell, cwd: workingDir, env: finalEnv });
+      // Build CLI args for Claude agents (pre-approve MCP tools)
+      // Pattern: mcp__<server>__<tool> - use * for all tools from server
+      // Prompt (if any) comes first, then flags
+      const args: string[] | undefined = isClaudeAgent
+        ? [
+            ...(initialPrompt ? [initialPrompt] : []),
+            "--allowedTools", "mcp__hgnucomb__*",
+          ]
+        : undefined;
+
+      const { session, sessionId } = manager.create({ cols, rows, shell, args, cwd: workingDir, env: finalEnv });
 
       // Track session -> agent for context cleanup
       if (agentSnapshot) {

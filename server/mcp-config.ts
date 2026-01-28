@@ -24,6 +24,7 @@
 
 import { writeFileSync } from "fs";
 import { join } from "path";
+import type { CellType } from "./protocol.js";
 
 export interface GeneratedMcpConfig {
   mcpServers: {
@@ -40,12 +41,14 @@ export interface GeneratedMcpConfig {
  *
  * @param gitRoot - The main repository root (not the worktree)
  * @param agentId - Unique agent identifier
+ * @param cellType - Type of agent (orchestrator has full tools, worker has limited)
  * @param wsUrl - WebSocket URL for hgnucomb server
  * @returns MCP config object ready for serialization
  */
 export function generateMcpConfig(
   gitRoot: string,
   agentId: string,
+  cellType: CellType,
   wsUrl: string = "ws://localhost:3001"
 ): GeneratedMcpConfig {
   // Absolute path to the MCP server script
@@ -58,6 +61,7 @@ export function generateMcpConfig(
         args: [mcpServerPath],
         env: {
           HGNUCOMB_AGENT_ID: agentId,
+          HGNUCOMB_CELL_TYPE: cellType,
           HGNUCOMB_WS_URL: wsUrl,
         },
       },

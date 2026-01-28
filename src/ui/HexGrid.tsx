@@ -34,6 +34,7 @@ const STYLE = {
   hexStrokeSelected: hexGrid.hexStrokeSelected,
   hexStrokeHover: hexGrid.hexStrokeHover,
   hexStrokeOrchestrator: hexGrid.hexStrokeOrchestrator,
+  hexStrokeWorker: hexGrid.hexStrokeWorker,
   connectionStroke: agentColors.connection,
   originMarkerStroke: hexGrid.originMarker,
   gridStrokeWidth: 1,
@@ -206,6 +207,8 @@ export function HexGrid({
           const isHovered =
             hoveredHex && hoveredHex.q === hex.q && hoveredHex.r === hex.r;
           const isOrchestrator = agent?.cellType === 'orchestrator';
+          const isWorker = agent?.cellType === 'worker';
+          const isClaudeAgent = isOrchestrator || isWorker;
 
           // Fill: agent role color > hover highlight > default
           const fill = agent
@@ -214,17 +217,19 @@ export function HexGrid({
               ? STYLE.hexFillHover
               : STYLE.hexFill;
 
-          // Stroke: selected > orchestrator > hovered > default
+          // Stroke: selected > orchestrator > worker > hovered > default
           const stroke = isSelected
             ? STYLE.hexStrokeSelected
             : isOrchestrator
               ? STYLE.hexStrokeOrchestrator
-              : isHovered
-                ? STYLE.hexStrokeHover
-                : STYLE.hexStroke;
+              : isWorker
+                ? STYLE.hexStrokeWorker
+                : isHovered
+                  ? STYLE.hexStrokeHover
+                  : STYLE.hexStroke;
 
-          // Selected = thick, orchestrator = medium, default = thin
-          const strokeWidth = isSelected ? 3 : isOrchestrator ? 2 : STYLE.gridStrokeWidth;
+          // Selected = thick, Claude agents = medium, default = thin
+          const strokeWidth = isSelected ? 3 : isClaudeAgent ? 2 : STYLE.gridStrokeWidth;
           const opacity = agent ? STATUS_OPACITY[agent.status] : 1;
 
           /** Determine cell type from modifier keys */

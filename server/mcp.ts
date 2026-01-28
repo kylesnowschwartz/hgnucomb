@@ -6,8 +6,13 @@
  * Connects to the main WebSocket server as a client to route requests to the browser.
  *
  * Environment variables:
- * - HGNUCOMB_AGENT_ID: Required. The agent ID of the calling orchestrator.
+ * - HGNUCOMB_AGENT_ID: Required. The agent ID of the calling agent.
+ * - HGNUCOMB_CELL_TYPE: Required. The cell type (orchestrator, worker, terminal).
  * - HGNUCOMB_WS_URL: Optional. WebSocket server URL (default: ws://localhost:3001)
+ *
+ * Tool permissions by cell type:
+ * - orchestrator: spawn_agent, get_grid_state, broadcast, report_status
+ * - worker: get_grid_state, broadcast, report_status (NO spawn_agent)
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -24,11 +29,20 @@ import type {
 
 const WS_URL = process.env.HGNUCOMB_WS_URL ?? "ws://localhost:3001";
 const AGENT_ID = process.env.HGNUCOMB_AGENT_ID;
+const CELL_TYPE = process.env.HGNUCOMB_CELL_TYPE ?? "orchestrator"; // Default for backwards compat
 const REQUEST_TIMEOUT_MS = 30000;
 
 if (!AGENT_ID) {
   console.error("Error: HGNUCOMB_AGENT_ID environment variable is required");
   process.exit(1);
+}
+
+/**
+ * Check if the current agent can spawn new agents.
+ * Only orchestrators have spawn permissions.
+ */
+function canSpawn(): boolean {
+  return CELL_TYPE === "orchestrator";
 }
 
 // ============================================================================
@@ -147,16 +161,29 @@ const mcpServer = new McpServer({
 // Tool: spawn_agent
 mcpServer.tool(
   "spawn_agent",
-  "Spawn a new agent on the hex grid. If coordinates omitted, auto-places near caller.",
+  "Spawn a new agent on the hex grid. If coordinates omitted, auto-places near caller. Only orchestrators can spawn agents.",
   {
     q: z.number().optional().describe("Hex column (optional - auto-positions if omitted)"),
     r: z.number().optional().describe("Hex row (optional - auto-positions if omitted)"),
     cellType: z
-      .enum(["terminal", "orchestrator"])
-      .default("terminal")
-      .describe("Type of cell to spawn (default: terminal)"),
+      .enum(["terminal", "orchestrator", "worker"])
+      .default("worker")
+      .describe("Type of cell to spawn (default: worker). Workers are Claude agents with limited MCP tools."),
   },
   async ({ q, r, cellType }) => {
+    // Permission check: only orchestrators can spawn
+    if (!canSpawn()) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Permission denied: Only orchestrators can spawn agents. You are a ${CELL_TYPE}.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
     try {
       const result = await sendRequest<McpSpawnResponse["payload"]>("mcp.spawn", {
         q,

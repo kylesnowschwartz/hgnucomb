@@ -1,68 +1,54 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
-import {
-  ScriptPlayer,
-  buildDemoScript,
-  type ScriptEvent,
-} from '@protocol/script';
-import type {
-  Message,
-  SpawnPayload,
-  TaskAssignPayload,
-  TaskProgressPayload,
-  TaskCompletePayload,
-  TaskFailPayload,
-} from '@protocol/types';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useAgentStore } from '@state/agentStore';
-import { useTaskStore } from '@state/taskStore';
+import { useTerminalStore } from '@state/terminalStore';
+import { useEventLogStore } from '@state/eventLogStore';
+import { useUIStore } from '@state/uiStore';
 import { useDraggable } from '@hooks/useDraggable';
+import {
+  IntegrationTestRunner,
+  type StoreAccess,
+} from '@integration/IntegrationTestRunner';
+import type { TestLogEntry, RunnerState } from '@integration/types';
+import { createThreeWorkerTest } from '@integration/scripts/threeWorkerTask';
 import './ControlPanel.css';
 
-/**
- * Format an event into a human-readable summary.
- */
-function formatEventSummary(event: Message): string {
-  switch (event.type) {
-    case 'agent.spawn': {
-      const p = event.payload as SpawnPayload;
-      return p.agentId;
-    }
-    case 'agent.status': {
-      const p = event.payload as { agentId: string; status: string };
-      return `${p.agentId} ${p.status}`;
-    }
-    case 'agent.despawn': {
-      const p = event.payload as { agentId: string };
-      return p.agentId;
-    }
-    case 'task.assign': {
-      const p = event.payload as TaskAssignPayload;
-      return `${p.taskId} \u2192 ${p.agentId}`;
-    }
-    case 'task.progress': {
-      const p = event.payload as TaskProgressPayload;
-      return `${p.taskId} ${Math.round(p.progress * 100)}%`;
-    }
-    case 'task.complete': {
-      const p = event.payload as TaskCompletePayload;
-      return p.taskId;
-    }
-    case 'task.fail': {
-      const p = event.payload as TaskFailPayload;
-      return `${p.taskId} (error)`;
-    }
+// ============================================================================
+// Log Entry Styling
+// ============================================================================
+
+function getLogClass(level: TestLogEntry['level']): string {
+  switch (level) {
+    case 'success':
+      return 'control-panel__log-entry--success';
+    case 'error':
+      return 'control-panel__log-entry--error';
+    case 'warn':
+      return 'control-panel__log-entry--warn';
     default:
       return '';
   }
 }
 
+// ============================================================================
+// Control Panel Component
+// ============================================================================
+
 /**
- * Floating control panel with event log and playback controls.
- * Manages its own ScriptPlayer instance.
+ * Floating control panel for running integration tests.
+ * Spawns real Claude agents and verifies multi-agent coordination.
  */
 export function ControlPanel() {
-  const [events, setEvents] = useState<Message[]>([]);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const playerRef = useRef<ScriptPlayer | null>(null);
+  // Integration test state
+  const [runnerState, setRunnerState] = useState<RunnerState>({
+    isRunning: false,
+    currentStep: 0,
+    totalSteps: 0,
+    currentDescription: '',
+    log: [],
+  });
+  const runnerRef = useRef<IntegrationTestRunner | null>(null);
+
+  // Log container ref for auto-scroll
   const logRef = useRef<HTMLDivElement>(null);
 
   // Draggable panel - starts bottom-right
@@ -71,86 +57,131 @@ export function ControlPanel() {
     initialY: window.innerHeight - 320,
   });
 
-  // Auto-scroll to bottom when new events arrive
+  // Store access for integration runner
+  const bridge = useTerminalStore((s) => s.bridge);
+  const storeAccess: StoreAccess = useMemo(
+    () => ({
+      getAgent: useAgentStore.getState().getAgent,
+      getAllAgents: useAgentStore.getState().getAllAgents,
+      spawnAgent: useAgentStore.getState().spawnAgent,
+      getEvents: () => useEventLogStore.getState().events,
+      getSessionForAgent: useTerminalStore.getState().getSessionForAgent,
+      selectAgent: useUIStore.getState().selectAgent,
+    }),
+    []
+  );
+
+  // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
-  }, [events]);
+  }, [runnerState.log]);
 
-  const handlePlay = useCallback(() => {
-    if (isPlaying) return;
+  // --------------------------------------------------------------------------
+  // Handlers
+  // --------------------------------------------------------------------------
 
-    // Build fresh script each time (resets message IDs)
-    const freshScript: ScriptEvent[] = buildDemoScript(2000);
-    const player = new ScriptPlayer(freshScript);
-    playerRef.current = player;
+  const handleRun = useCallback(async () => {
+    if (!bridge) {
+      console.error('[ControlPanel] No bridge available for integration test');
+      return;
+    }
 
-    // Clear UI and stores
-    setEvents([]);
+    if (runnerState.isRunning) return;
+
+    // Clear existing agents
     useAgentStore.getState().clear();
-    useTaskStore.getState().clear();
-    setIsPlaying(true);
+    useEventLogStore.getState().clear();
 
-    player.subscribe((event) => {
-      setEvents((prev) => [...prev, event]);
-      useAgentStore.getState().processEvent(event);
-      useTaskStore.getState().processEvent(event);
+    // Create runner if needed
+    if (!runnerRef.current) {
+      runnerRef.current = new IntegrationTestRunner(bridge, storeAccess);
+    }
+
+    const runner = runnerRef.current;
+
+    // Subscribe to state changes
+    const unsub = runner.onStateChange((state) => {
+      setRunnerState(state);
     });
 
-    player.play().then(() => {
-      setIsPlaying(false);
-    });
-  }, [isPlaying]);
+    // Run the full three-worker test
+    const test = createThreeWorkerTest(storeAccess);
+    try {
+      const result = await runner.run(test);
+      console.log('[ControlPanel] Test result:', result);
+    } catch (err) {
+      console.error('[ControlPanel] Test error:', err);
+    } finally {
+      unsub();
+    }
+  }, [bridge, storeAccess, runnerState.isRunning]);
 
   const handleStop = useCallback(() => {
-    if (playerRef.current) {
-      playerRef.current.stop();
+    if (runnerRef.current) {
+      runnerRef.current.stop();
     }
-    setEvents([]);
-    useAgentStore.getState().clear();
-    useTaskStore.getState().clear();
-    setIsPlaying(false);
   }, []);
+
+  // --------------------------------------------------------------------------
+  // Render
+  // --------------------------------------------------------------------------
 
   return (
     <div className="control-panel" style={dragStyle}>
+      {/* Header */}
       <div className="control-panel__header" onMouseDown={handleMouseDown}>
-        <span className="control-panel__title">Demo Player</span>
+        <span className="control-panel__title">Integration Test</span>
       </div>
+
+      {/* Log display */}
       <div className="control-panel__log" ref={logRef}>
-        {events.length === 0 ? (
+        {runnerState.log.length === 0 ? (
           <div className="control-panel__log--empty">
-            No events yet. Click Play to start.
+            Click Run to start the three-worker test.
           </div>
         ) : (
-          events.map((event, index) => (
-            <div key={event.id} className="control-panel__event">
-              <span className="control-panel__event-seq">
-                #{index + 1}
-              </span>
-              <span className="control-panel__event-type">
-                {event.type}
-              </span>
-              <span className="control-panel__event-summary">
-                {formatEventSummary(event)}
-              </span>
+          runnerState.log.map((entry, index) => (
+            <div
+              key={index}
+              className={`control-panel__log-entry ${getLogClass(entry.level)}`}
+            >
+              <span className="control-panel__log-level">[{entry.level}]</span>
+              <span className="control-panel__log-message">{entry.message}</span>
             </div>
           ))
         )}
       </div>
+
+      {/* Progress bar */}
+      {runnerState.isRunning && (
+        <div className="control-panel__progress">
+          <div
+            className="control-panel__progress-bar"
+            style={{
+              width: `${(runnerState.currentStep / runnerState.totalSteps) * 100}%`,
+            }}
+          />
+          <span className="control-panel__progress-text">
+            Step {runnerState.currentStep}/{runnerState.totalSteps}
+          </span>
+        </div>
+      )}
+
+      {/* Control buttons */}
       <div className="control-panel__controls">
         <button
           className="control-panel__btn control-panel__btn--play"
-          onClick={handlePlay}
-          disabled={isPlaying}
+          onClick={handleRun}
+          disabled={runnerState.isRunning || !bridge}
         >
-          {'\u25B6'} Play
+          {'\u25B6'} Run
         </button>
         <button
           className="control-panel__btn control-panel__btn--stop"
           onClick={handleStop}
-          disabled={!isPlaying}
+          disabled={!runnerState.isRunning}
         >
           {'\u25A0'} Stop
         </button>

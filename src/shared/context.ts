@@ -11,8 +11,9 @@ import type { HexCoordinate } from './types.ts';
 // Agent Snapshot (sent from client to server)
 // ============================================================================
 
-export type CellType = 'terminal' | 'orchestrator';
-export type AgentStatus = 'idle' | 'active' | 'paused' | 'terminated';
+export type CellType = 'terminal' | 'orchestrator' | 'worker';
+/** Agent operational status - must match protocol/types.ts */
+export type AgentStatus = 'idle' | 'working' | 'blocked' | 'offline';
 
 /**
  * Minimal agent info sent from client when creating a session.

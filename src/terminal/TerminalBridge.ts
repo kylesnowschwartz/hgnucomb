@@ -13,6 +13,8 @@ import type {
   DataHandler,
   ExitHandler,
   ConnectionHandler,
+  McpRequest,
+  McpResponse,
 } from './types.ts';
 
 export interface TerminalBridge {
@@ -82,4 +84,15 @@ export interface TerminalBridge {
    * @returns Unsubscribe function
    */
   onExit(sessionId: string, handler: ExitHandler): () => void;
+
+  /**
+   * Subscribe to incoming MCP requests from orchestrator agents.
+   * @returns Unsubscribe function
+   */
+  onMcpRequest(handler: (request: McpRequest) => void): () => void;
+
+  /**
+   * Send an MCP response back to the requesting agent.
+   */
+  sendMcpResponse(response: McpResponse): void;
 }

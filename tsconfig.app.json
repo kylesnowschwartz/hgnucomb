@@ -33,7 +33,8 @@
       "@state/*": ["src/state/*"],
       "@hooks/*": ["src/hooks/*"],
       "@terminal/*": ["src/terminal/*"],
-      "@theme/*": ["src/theme/*"]
+      "@theme/*": ["src/theme/*"],
+      "@integration/*": ["src/integration/*"]
     }
   },
   "include": ["src"]

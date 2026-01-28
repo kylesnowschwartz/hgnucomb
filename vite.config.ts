@@ -14,6 +14,7 @@ export default defineConfig({
       '@hooks': resolve(__dirname, 'src/hooks'),
       '@terminal': resolve(__dirname, 'src/terminal'),
       '@theme': resolve(__dirname, 'src/theme'),
+      '@integration': resolve(__dirname, 'src/integration'),
     },
   },
   server: {

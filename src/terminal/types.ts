@@ -37,6 +37,8 @@ export interface TerminalSessionConfig {
   agentSnapshot?: AgentSnapshot;
   /** All agents on grid for context generation */
   allAgents?: AgentSnapshot[];
+  /** Initial prompt passed as CLI arg to Claude */
+  initialPrompt?: string;
 }
 
 // ============================================================================
@@ -64,6 +66,8 @@ export interface CreateRequest {
     agentSnapshot?: AgentSnapshot;
     /** All agents on grid for context generation */
     allAgents?: AgentSnapshot[];
+    /** Initial prompt passed as CLI arg to Claude */
+    initialPrompt?: string;
   };
 }
 

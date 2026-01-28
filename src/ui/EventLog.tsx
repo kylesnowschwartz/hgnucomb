@@ -68,10 +68,10 @@ export function EventLog({ maxHeight = 200 }: EventLogProps) {
   const [showLifecycle, setShowLifecycle] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
 
-  // Draggable panel - starts bottom-left (maxHeight ~280px total including header)
+  // Draggable panel - starts upper-right
   const { handleMouseDown, style: dragStyle } = useDraggable({
-    initialX: 16,
-    initialY: window.innerHeight - 280,
+    initialX: window.innerWidth - 420,
+    initialY: 16,
   });
 
   // Auto-scroll to bottom on new events
