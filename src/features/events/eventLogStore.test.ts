@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useEventLogStore } from './eventLogStore';
-import type { LogEvent } from './eventLogStore';
+import type { BroadcastEvent, KillEvent } from './eventLogStore';
 
 describe('eventLogStore', () => {
   beforeEach(() => {
@@ -58,7 +58,7 @@ describe('eventLogStore', () => {
       );
 
       const events = useEventLogStore.getState().events;
-      const broadcast = events[0] as any;
+      const broadcast = events[0] as BroadcastEvent;
       // If <= 80, no ellipsis
       if (JSON.stringify(payload).length <= 80) {
         expect(broadcast.payloadPreview).not.toContain('...');
@@ -78,14 +78,14 @@ describe('eventLogStore', () => {
       );
 
       const events = useEventLogStore.getState().events;
-      const broadcast = events[0] as any;
+      const broadcast = events[0] as BroadcastEvent;
       expect(broadcast.payloadPreview).toContain('...');
       expect(broadcast.payloadPreview.length).toBeLessThanOrEqual(83); // 80 + "..."
     });
 
     it('handles non-JSON-serializable objects', () => {
-      // Circular reference
-      const payload: any = {};
+      // Circular reference - intentionally using Record to create unserializable object
+      const payload: Record<string, unknown> = {};
       payload.self = payload;
 
       useEventLogStore.getState().addBroadcast(
@@ -98,7 +98,7 @@ describe('eventLogStore', () => {
       );
 
       const events = useEventLogStore.getState().events;
-      const broadcast = events[0] as any;
+      const broadcast = events[0] as BroadcastEvent;
       expect(broadcast.payloadPreview).toBe('[unserializable]');
     });
   });
@@ -118,9 +118,9 @@ describe('eventLogStore', () => {
       expect(events.length).toBe(500);
 
       // First event should be agent-10 (0-9 were evicted)
-      expect((events[0] as any).agentId).toBe('agent-10');
+      expect((events[0] as KillEvent).agentId).toBe('agent-10');
       // Last event should be agent-509
-      expect((events[499] as any).agentId).toBe('agent-509');
+      expect((events[499] as KillEvent).agentId).toBe('agent-509');
     });
   });
 

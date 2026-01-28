@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useTerminalStore, type TerminalSession } from './terminalStore';
+import { useTerminalStore } from './terminalStore';
+import type { TerminalBridge } from './index';
 
 // Suppress console logs during tests
 vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -203,8 +204,8 @@ describe('terminalStore', () => {
       // Set up mock bridge to avoid actual WebSocket call
       const mockBridge = {
         disposeSession: vi.fn().mockResolvedValue(undefined),
-      };
-      useTerminalStore.getState().setBridge(mockBridge as any);
+      } as unknown as TerminalBridge;
+      useTerminalStore.getState().setBridge(mockBridge);
 
       useTerminalStore.getState().removeSessionForAgent('agent-123');
 
