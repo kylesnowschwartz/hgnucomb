@@ -123,7 +123,9 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
       const isClaudeAgent = agentSnapshot && (agentSnapshot.cellType === "orchestrator" || agentSnapshot.cellType === "worker");
       if (isClaudeAgent) {
         // Try to create a worktree for this agent
-        const worktreeResult = createWorktree(workingDir, agentSnapshot.agentId, agentSnapshot.cellType);
+        // Pass wsUrl so MCP server connects back to THIS server instance
+        const wsUrl = `ws://localhost:${PORT}`;
+        const worktreeResult = createWorktree(workingDir, agentSnapshot.agentId, agentSnapshot.cellType, wsUrl);
         if (worktreeResult.success && worktreeResult.worktreePath) {
           workingDir = worktreeResult.worktreePath;
           console.log(`[Worktree] Agent ${agentSnapshot.agentId} (${agentSnapshot.cellType}) using: ${workingDir}`);

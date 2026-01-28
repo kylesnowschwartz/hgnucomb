@@ -20,21 +20,23 @@ just tasks      # Check beads-lite task queue
 
 Run two instances simultaneously for dogfooding (using hgnucomb to develop hgnucomb):
 
-| Instance | UI Port | Server Port | Command |
-|----------|---------|-------------|---------|
-| Dev | 5173 | 3001 | `just dev-all` |
-| Prod | 5174 | 3002 | `just prod` |
+| Instance | UI Port | Server Port | Command | Hot Reload |
+|----------|---------|-------------|---------|------------|
+| Dev | 5173 | 3001 | `just dev-all` | Yes |
+| Prod | 5174 | 3002 | `just prod` | No (frozen) |
 
 ```bash
-just prod       # Start prod instance (3002/5174)
+just prod       # Build and start frozen prod instance (3002/5174)
+just build-prod # Rebuild prod without restarting
 just kill-prod  # Clean up prod processes
 ```
 
-**Configuration:**
-- Server: `PORT` env var (default 3001)
-- Client: `VITE_WS_URL` env var (default ws://localhost:3001)
+**How it works:**
+- Dev runs Vite dev server with HMR - code changes reload instantly
+- Prod runs built/compiled bundles - frozen until you rebuild
+- Agents work in isolated worktrees (`.hgnucomb/agents/<id>/`)
 
-**Workflow:** Run agents in prod instance while making changes in dev. Hot reload won't disrupt running agents.
+**Workflow:** Spawn agents in prod, they make changes, dev hot-reloads to show progress. Prod stays stable.
 
 ## Architecture
 

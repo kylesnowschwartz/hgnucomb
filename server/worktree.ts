@@ -80,9 +80,10 @@ export interface WorktreeResult {
  * @param targetDir - Directory to create worktree for (usually project root)
  * @param agentId - Unique agent identifier
  * @param cellType - Agent type (orchestrator has full tools, worker has limited)
+ * @param wsUrl - WebSocket URL for MCP server to connect back to
  * @returns Result with worktree path or error
  */
-export function createWorktree(targetDir: string, agentId: string, cellType: CellType = "orchestrator"): WorktreeResult {
+export function createWorktree(targetDir: string, agentId: string, cellType: CellType = "orchestrator", wsUrl: string = "ws://localhost:3001"): WorktreeResult {
   // Check if git repo
   const gitRoot = getGitRoot(targetDir);
   if (!gitRoot) {
@@ -139,7 +140,7 @@ export function createWorktree(targetDir: string, agentId: string, cellType: Cel
   // Generate .mcp.json with absolute paths for this worktree
   // Claude Code searches from CWD upward - worktree is its own git root,
   // so we must provide the config directly rather than relying on parent repo
-  const mcpConfig = generateMcpConfig(gitRoot, agentId, cellType);
+  const mcpConfig = generateMcpConfig(gitRoot, agentId, cellType, wsUrl);
   writeMcpConfig(worktreePath, mcpConfig);
   console.log(`[Worktree] Generated .mcp.json with absolute paths for ${cellType}`);
 

@@ -59,8 +59,15 @@ kill-prod:
     -lsof -ti:5174 | xargs kill 2>/dev/null
     @echo "Cleaned up prod processes"
 
-# Run prod instance on alternate ports (3002/5174)
-prod:
-    @echo "Starting prod on ports 3002 (server) / 5174 (UI)..."
-    cd server && PORT=3002 pnpm dev &
-    VITE_WS_URL=ws://localhost:3002 pnpm dev --port 5174
+# Build prod bundle (with prod server URL baked in)
+build-prod:
+    VITE_WS_URL=ws://localhost:3002 pnpm build
+    cd server && pnpm build
+
+# Run frozen prod instance on alternate ports (3002/5174)
+# Code changes won't affect this instance - must rebuild to update
+prod: build-prod
+    @echo "Starting frozen prod on ports 3002 (server) / 5174 (UI)..."
+    @echo "Code changes will NOT hot reload. Run 'just build-prod' to update."
+    cd server && PORT=3002 pnpm start &
+    pnpm preview --port 5174
