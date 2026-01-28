@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { HexGrid } from '@ui/HexGrid';
 import { ControlPanel } from '@ui/ControlPanel';
 import { TerminalPanel } from '@ui/TerminalPanel';
@@ -7,7 +7,6 @@ import { WebSocketBridge } from '@terminal/index';
 import { useTerminalStore } from '@state/terminalStore';
 import { useUIStore } from '@state/uiStore';
 import { useAgentStore, type AgentState } from '@state/agentStore';
-import type { AgentSnapshot } from '@shared/context';
 import type {
   McpRequest,
   McpSpawnResponse,
@@ -15,10 +14,14 @@ import type {
   McpGridAgent,
   McpBroadcastResponse,
   McpReportStatusResponse,
+  McpReportResultResponse,
+  McpGetMessagesResponse,
+  AgentMessage,
 } from '@terminal/types';
 import type { HexCoordinate } from '@shared/types';
 import { hexDistance, getHexRing } from '@shared/types';
 import { useEventLogStore } from '@state/eventLogStore';
+import { useShallow } from 'zustand/shallow';
 
 /**
  * Find nearest empty hex to a given position using ring expansion.
@@ -61,8 +64,14 @@ function App() {
   } = useTerminalStore();
 
   const { selectedAgentId, selectAgent } = useUIStore();
-  const { getAgent, getAllAgents, spawnAgent, updateDetailedStatus } = useAgentStore();
+  const { getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addMessageToInbox, getMessages } = useAgentStore();
   const { addBroadcast, addStatusChange, addSpawn } = useEventLogStore();
+
+  // Track which agents we've already initiated session creation for
+  const sessionCreationInitiated = useRef<Set<string>>(new Set());
+
+  // Subscribe to agents for auto-session creation
+  const agents = useAgentStore(useShallow((s) => Array.from(s.agents.values())));
 
   // Initialize bridge on mount
   useEffect(() => {
@@ -94,7 +103,7 @@ function App() {
 
       switch (request.type) {
         case 'mcp.spawn': {
-          const { callerId, q, r, cellType } = request.payload;
+          const { callerId, q, r, cellType, task, instructions, taskDetails } = request.payload;
 
           // Validate caller exists and is orchestrator
           const caller = getAgent(callerId);
@@ -143,8 +152,13 @@ function App() {
             return;
           }
 
-          // Spawn the agent
-          const newAgentId = spawnAgent(targetHex, cellType);
+          // Spawn the agent with task assignment and instructions
+          const newAgentId = spawnAgent(targetHex, cellType, {
+            parentId: callerId,
+            task,
+            instructions,
+            taskDetails,
+          });
           addSpawn(newAgentId, cellType, targetHex);
           const response: McpSpawnResponse = {
             type: 'mcp.spawn.result',
@@ -152,7 +166,7 @@ function App() {
             payload: { success: true, agentId: newAgentId, hex: targetHex },
           };
           bridge.sendMcpResponse(response);
-          console.log('[App] MCP spawned agent:', newAgentId, 'at', targetHex);
+          console.log('[App] MCP spawned agent:', newAgentId, 'at', targetHex, task ? `task: ${task}` : '', instructions ? 'with instructions' : '');
           break;
         }
 
@@ -218,6 +232,18 @@ function App() {
           // Log the broadcast event
           addBroadcast(callerId, caller.hex, broadcastType, radius, recipients.length, broadcastPayload);
 
+          // Deliver to recipient inboxes
+          for (const recipientId of recipients) {
+            const broadcastMessage: AgentMessage = {
+              id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              from: callerId,
+              type: 'broadcast',
+              payload: { broadcastType, broadcastPayload },
+              timestamp: new Date().toISOString(),
+            };
+            addMessageToInbox(recipientId, broadcastMessage);
+          }
+
           const response: McpBroadcastResponse = {
             type: 'mcp.broadcast.result',
             requestId: request.requestId,
@@ -256,14 +282,178 @@ function App() {
           console.log('[App] Status update:', callerId, previousStatus, '->', state);
           break;
         }
+
+        case 'mcp.reportResult': {
+          const { callerId, parentId, result, success, message } = request.payload;
+
+          // Validate parent exists
+          const parent = getAgent(parentId);
+          if (!parent) {
+            const response: McpReportResultResponse = {
+              type: 'mcp.reportResult.result',
+              requestId: request.requestId,
+              payload: { success: false, error: `Parent agent not found: ${parentId}` },
+            };
+            bridge.sendMcpResponse(response);
+            return;
+          }
+
+          // Create message for parent's inbox
+          const agentMessage: AgentMessage = {
+            id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            from: callerId,
+            type: 'result',
+            payload: { result, success, message },
+            timestamp: new Date().toISOString(),
+          };
+
+          // Add to parent's inbox
+          const added = addMessageToInbox(parentId, agentMessage);
+          if (!added) {
+            const response: McpReportResultResponse = {
+              type: 'mcp.reportResult.result',
+              requestId: request.requestId,
+              payload: { success: false, error: `Failed to add message to parent inbox` },
+            };
+            bridge.sendMcpResponse(response);
+            return;
+          }
+
+          const response: McpReportResultResponse = {
+            type: 'mcp.reportResult.result',
+            requestId: request.requestId,
+            payload: { success: true },
+          };
+          bridge.sendMcpResponse(response);
+          console.log('[App] Result reported from', callerId, 'to parent', parentId, 'success:', success);
+          break;
+        }
+
+        case 'mcp.getMessages': {
+          const { callerId, since } = request.payload;
+
+          // Get messages from caller's inbox
+          const messages = getMessages(callerId, since);
+
+          const response: McpGetMessagesResponse = {
+            type: 'mcp.getMessages.result',
+            requestId: request.requestId,
+            payload: { success: true, messages },
+          };
+          bridge.sendMcpResponse(response);
+          console.log('[App] Get messages for', callerId, 'count:', messages.length);
+          break;
+        }
       }
     };
 
     const unsub = bridge.onMcpRequest(handleMcpRequest);
     return unsub;
-  }, [bridge, getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addBroadcast, addStatusChange, addSpawn]);
+  }, [bridge, getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addBroadcast, addStatusChange, addSpawn, addMessageToInbox, getMessages]);
 
-  // When agent selected, ensure terminal session exists
+  // Create terminal session for an agent (without activating it)
+  const createSessionForAgent = useCallback(
+    async (agent: AgentState) => {
+      if (!bridge) return;
+
+      const isClaudeAgent = agent.cellType === 'orchestrator' || agent.cellType === 'worker';
+      const shell = isClaudeAgent ? 'claude' : undefined;
+      const env = {
+        HGNUCOMB_AGENT_ID: agent.id,
+        HGNUCOMB_HEX: `${agent.hex.q},${agent.hex.r}`,
+        HGNUCOMB_CELL_TYPE: agent.cellType,
+      };
+
+      // Build snapshots for context generation (Claude agents only)
+      const agentSnapshot = isClaudeAgent
+        ? {
+            agentId: agent.id,
+            cellType: agent.cellType,
+            hex: agent.hex,
+            status: agent.status,
+            connections: agent.connections,
+          }
+        : undefined;
+
+      const allAgentsSnapshot = isClaudeAgent
+        ? getAllAgents().map((a) => ({
+            agentId: a.id,
+            cellType: a.cellType,
+            hex: a.hex,
+            status: a.status,
+            connections: a.connections,
+          }))
+        : undefined;
+
+      try {
+        const session = await bridge.createSession({
+          cols: 80,
+          rows: 24,
+          shell,
+          env,
+          agentSnapshot,
+          allAgents: allAgentsSnapshot,
+          initialPrompt: agent.initialPrompt,
+          task: agent.task,
+          instructions: agent.instructions,
+          taskDetails: agent.taskDetails,
+          parentId: agent.parentId,
+          parentHex: agent.parentId ? getAgent(agent.parentId)?.hex : undefined,
+        });
+
+        addSession(session, agent.id);
+
+        // Always store data in buffer
+        bridge.onData(session.sessionId, (data) => {
+          appendData(session.sessionId, data);
+        });
+
+        // Listen for exit
+        bridge.onExit(session.sessionId, (exitCode) => {
+          markExited(session.sessionId, exitCode);
+        });
+
+        // If this agent is currently selected, activate the session
+        // Use getState() to get current value, avoiding stale closure
+        const currentSelectedId = useUIStore.getState().selectedAgentId;
+        if (currentSelectedId === agent.id) {
+          setActiveSession(session.sessionId);
+        }
+
+        console.log('[App] Auto-created session for agent:', agent.id, 'type:', agent.cellType);
+        return session;
+      } catch (err) {
+        console.error('[App] Failed to create session for agent:', agent.id, err);
+        // Remove from initiated set so we can retry
+        sessionCreationInitiated.current.delete(agent.id);
+        return null;
+      }
+    },
+    [bridge, getAllAgents, getAgent, addSession, appendData, markExited, setActiveSession]
+  );
+
+  // Auto-create terminal sessions for Claude agents when they appear
+  useEffect(() => {
+    if (!bridge || connectionState !== 'connected') return;
+
+    for (const agent of agents) {
+      // Only auto-create for Claude agents (orchestrator/worker)
+      const isClaudeAgent = agent.cellType === 'orchestrator' || agent.cellType === 'worker';
+      if (!isClaudeAgent) continue;
+
+      // Skip if already initiated or session exists
+      if (sessionCreationInitiated.current.has(agent.id)) continue;
+      if (getSessionForAgent(agent.id)) continue;
+
+      // Mark as initiated BEFORE async call to prevent duplicates
+      sessionCreationInitiated.current.add(agent.id);
+
+      // Create session in background (don't await, don't activate)
+      createSessionForAgent(agent);
+    }
+  }, [agents, bridge, connectionState, getSessionForAgent, createSessionForAgent]);
+
+  // When agent selected, activate its session (create if needed for terminal cells)
   useEffect(() => {
     if (!selectedAgentId || !bridge || connectionState !== 'connected') {
       if (!selectedAgentId) {
@@ -279,73 +469,39 @@ function App() {
       return;
     }
 
-    // Create new session for agent
+    // Get agent to determine type
     const agent = getAgent(selectedAgentId);
     if (!agent) {
       console.error('[App] Agent not found:', selectedAgentId);
       return;
     }
 
-    // Orchestrators and workers spawn Claude CLI, terminals spawn default shell
+    // Claude agents (orchestrator/worker) should already have auto-created sessions
+    // createSessionForAgent will activate when complete if this agent is still selected
     const isClaudeAgent = agent.cellType === 'orchestrator' || agent.cellType === 'worker';
-    const shell = isClaudeAgent ? 'claude' : undefined;
-    const env = {
-      HGNUCOMB_AGENT_ID: agent.id,
-      HGNUCOMB_HEX: `${agent.hex.q},${agent.hex.r}`,
-      HGNUCOMB_CELL_TYPE: agent.cellType,
-    };
+    if (isClaudeAgent) {
+      // Session creating in background - createSessionForAgent activates when done
+      return;
+    }
 
-    // Build snapshots for context generation (Claude agents only)
-    const agentSnapshot: AgentSnapshot | undefined = isClaudeAgent
-      ? {
-          agentId: agent.id,
-          cellType: agent.cellType,
-          hex: agent.hex,
-          status: agent.status,
-          connections: agent.connections,
+    // Create session for non-Claude agents (plain terminals) on demand
+    // Mark as initiated to prevent duplicates
+    if (!sessionCreationInitiated.current.has(agent.id)) {
+      sessionCreationInitiated.current.add(agent.id);
+      createSessionForAgent(agent).then((session) => {
+        if (session) {
+          setActiveSession(session.sessionId);
         }
-      : undefined;
-
-    const allAgents: AgentSnapshot[] | undefined = isClaudeAgent
-      ? getAllAgents().map((a) => ({
-          agentId: a.id,
-          cellType: a.cellType,
-          hex: a.hex,
-          status: a.status,
-          connections: a.connections,
-        }))
-      : undefined;
-
-    bridge
-      .createSession({ cols: 80, rows: 24, shell, env, agentSnapshot, allAgents, initialPrompt: agent.initialPrompt })
-      .then((session) => {
-        addSession(session, selectedAgentId);
-        setActiveSession(session.sessionId);
-
-        // Always store data in buffer (even when panel is closed)
-        bridge.onData(session.sessionId, (data) => {
-          appendData(session.sessionId, data);
-        });
-
-        // Listen for exit
-        bridge.onExit(session.sessionId, (exitCode) => {
-          markExited(session.sessionId, exitCode);
-        });
-      })
-      .catch((err) => {
-        console.error('[App] Failed to create session:', err);
       });
+    }
   }, [
     selectedAgentId,
     bridge,
     connectionState,
     getSessionForAgent,
     getAgent,
-    getAllAgents,
-    addSession,
-    appendData,
     setActiveSession,
-    markExited,
+    createSessionForAgent,
   ]);
 
   // Window resize handler
