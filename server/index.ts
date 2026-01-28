@@ -1,8 +1,8 @@
 /**
  * WebSocket server for terminal sessions.
  *
- * Listens on port 3001, manages PTY sessions, and routes messages
- * between browser clients and terminal processes.
+ * Listens on PORT env var (default 3001), manages PTY sessions, and routes
+ * messages between browser clients and terminal processes.
  */
 
 import { WebSocketServer, WebSocket } from "ws";
@@ -34,7 +34,7 @@ import {
   removeWorktree,
 } from "./worktree.js";
 
-const PORT = 3001;
+const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const manager = new TerminalSessionManager();
 
 // Track which sessions belong to which client for cleanup

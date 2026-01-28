@@ -52,3 +52,15 @@ kill:
     -lsof -ti:5173 | xargs kill 2>/dev/null
     -pkill -f "tsx --watch" 2>/dev/null
     @echo "Cleaned up dev processes"
+
+# Kill prod processes
+kill-prod:
+    -lsof -ti:3002 | xargs kill 2>/dev/null
+    -lsof -ti:5174 | xargs kill 2>/dev/null
+    @echo "Cleaned up prod processes"
+
+# Run prod instance on alternate ports (3002/5174)
+prod:
+    @echo "Starting prod on ports 3002 (server) / 5174 (UI)..."
+    cd server && PORT=3002 pnpm dev &
+    VITE_WS_URL=ws://localhost:3002 pnpm dev --port 5174

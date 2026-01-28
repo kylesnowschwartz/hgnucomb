@@ -24,7 +24,7 @@ import type {
   SessionInfo,
 } from '@shared/protocol';
 
-const DEFAULT_URL = 'ws://localhost:3001';
+const DEFAULT_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:3001';
 const REQUEST_TIMEOUT_MS = 10000;
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30000;

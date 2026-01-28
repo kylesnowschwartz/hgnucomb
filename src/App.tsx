@@ -367,7 +367,7 @@ function App() {
         return;
       }
 
-      // Enter: open panel for agent at selected hex
+      // Enter: open panel for agent at selected hex (no-op if empty)
       if (e.key === 'Enter' && selectedHex) {
         const agents = getAllAgents();
         const agentAtHex = agents.find(
@@ -376,6 +376,7 @@ function App() {
         if (agentAtHex) {
           selectAgent(agentAtHex.id);
         }
+        // Silent no-op if cell is empty - user must double-click to spawn first
       }
     };
 

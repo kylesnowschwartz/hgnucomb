@@ -16,6 +16,26 @@ just kill       # Clean up orphaned processes
 just tasks      # Check beads-lite task queue
 ```
 
+## Dev vs Prod Instances
+
+Run two instances simultaneously for dogfooding (using hgnucomb to develop hgnucomb):
+
+| Instance | UI Port | Server Port | Command |
+|----------|---------|-------------|---------|
+| Dev | 5173 | 3001 | `just dev-all` |
+| Prod | 5174 | 3002 | `just prod` |
+
+```bash
+just prod       # Start prod instance (3002/5174)
+just kill-prod  # Clean up prod processes
+```
+
+**Configuration:**
+- Server: `PORT` env var (default 3001)
+- Client: `VITE_WS_URL` env var (default ws://localhost:3001)
+
+**Workflow:** Run agents in prod instance while making changes in dev. Hot reload won't disrupt running agents.
+
 ## Architecture
 
 ```
