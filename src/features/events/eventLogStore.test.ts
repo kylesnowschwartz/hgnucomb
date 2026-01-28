@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useEventLogStore } from './eventLogStore';
-import type { BroadcastEvent, KillEvent } from './eventLogStore';
+import type { BroadcastEvent, KillEvent, SpawnEvent } from './eventLogStore';
 
 describe('eventLogStore', () => {
   beforeEach(() => {
@@ -309,7 +309,7 @@ describe('eventLogStore', () => {
         agentId: 'agent-test',
         cellType: 'worker',
         hex: { q: 5, r: -3 },
-      });
+      } as Omit<SpawnEvent, 'id' | 'timestamp'>);
 
       const events = useEventLogStore.getState().events;
       expect(events.length).toBe(1);
