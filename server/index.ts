@@ -126,6 +126,8 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
             ...env,
             HGNUCOMB_CONTEXT: contextPath,
             HGNUCOMB_WORKTREE: workingDir,
+            // Pass parent ID directly so workers know where to report results
+            ...(parentId ? { HGNUCOMB_PARENT_ID: parentId } : {}),
           };
         }
       }

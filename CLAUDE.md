@@ -70,16 +70,26 @@ Orchestrators receive:
 - Isolated git worktree in `.hgnucomb/agents/<id>/`
 - MCP config with access to `spawn_agent`, `get_grid_state`, `broadcast`, `report_status`
 
+Workers receive (when spawned by an orchestrator):
+- `HGNUCOMB_AGENT_ID` - unique identifier
+- `HGNUCOMB_PARENT_ID` - parent orchestrator's agent ID (use this with `report_result`)
+- `HGNUCOMB_CONTEXT` - path to context JSON (includes task and parent info)
+- Isolated git worktree in `.hgnucomb/agents/<id>/`
+- MCP config with access to `report_status`, `report_result`
+
 ## MCP Tools (server/mcp.ts)
 
 Agents interact with the grid via MCP:
 
 | Tool | Purpose |
 |------|---------|
+| `get_identity` | Get your own agent ID, cell type, parent ID, hex coordinates |
 | `spawn_agent` | Create child agent at hex coordinates |
 | `get_grid_state` | Query grid: all agents, or filtered by distance |
 | `broadcast` | Send message to agents within radius |
 | `report_status` | Update agent's displayed status badge |
+| `report_result` | Send task result to parent orchestrator (workers) |
+| `get_messages` | Check inbox for messages from children/peers |
 
 ## Key Patterns
 

@@ -361,11 +361,15 @@ function App() {
 
       const isClaudeAgent = agent.cellType === 'orchestrator' || agent.cellType === 'worker';
       const shell = isClaudeAgent ? 'claude' : undefined;
-      const env = {
+      const env: Record<string, string> = {
         HGNUCOMB_AGENT_ID: agent.id,
         HGNUCOMB_HEX: `${agent.hex.q},${agent.hex.r}`,
         HGNUCOMB_CELL_TYPE: agent.cellType,
       };
+      // Workers need parent ID to report results
+      if (agent.parentId) {
+        env.HGNUCOMB_PARENT_ID = agent.parentId;
+      }
 
       // Build snapshots for context generation (Claude agents only)
       const agentSnapshot = isClaudeAgent

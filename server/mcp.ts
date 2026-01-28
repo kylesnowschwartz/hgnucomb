@@ -33,6 +33,8 @@ import type {
 const WS_URL = process.env.HGNUCOMB_WS_URL ?? "ws://localhost:3001";
 const AGENT_ID = process.env.HGNUCOMB_AGENT_ID;
 const CELL_TYPE = process.env.HGNUCOMB_CELL_TYPE ?? "orchestrator"; // Default for backwards compat
+const PARENT_ID = process.env.HGNUCOMB_PARENT_ID; // Set for workers spawned by orchestrators
+const HEX_COORD = process.env.HGNUCOMB_HEX; // Format: "q,r"
 const REQUEST_TIMEOUT_MS = 30000;
 
 if (!AGENT_ID) {
@@ -412,7 +414,7 @@ mcpServer.tool(
   "report_result",
   "Report task completion result to your parent orchestrator. Call this when you've finished your assigned task. Your status will automatically be set to 'done'.",
   {
-    parentId: z.string().describe("Parent orchestrator agent ID (from context.parent.agentId)"),
+    parentId: z.string().describe("Parent orchestrator agent ID (from HGNUCOMB_PARENT_ID environment variable)"),
     result: z.unknown().describe("Result payload (any JSON-serializable data)"),
     success: z.boolean().describe("Whether the task completed successfully"),
     message: z.string().optional().describe("Optional message describing the result or any issues"),
@@ -516,11 +518,38 @@ mcpServer.tool(
   }
 );
 
+// Tool: get_identity
+mcpServer.tool(
+  "get_identity",
+  "Get your own agent identity. Use this to find your agent ID, cell type, parent ID (for workers), and hex coordinates. Call this first if you need to know who you are or who your parent is.",
+  {},
+  async () => {
+    const identity = {
+      agentId: AGENT_ID,
+      cellType: CELL_TYPE,
+      parentId: PARENT_ID ?? null,
+      hex: HEX_COORD ?? null,
+    };
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(identity, null, 2),
+        },
+      ],
+    };
+  }
+);
+
 // ============================================================================
 // Main
 // ============================================================================
 
 async function main(): Promise<void> {
+  // Log identity on startup so it's visible in Claude's context
+  console.error(`[MCP] Agent identity: ${AGENT_ID} (${CELL_TYPE})${PARENT_ID ? ` parent=${PARENT_ID}` : ""}`);
+
   // Connect to WebSocket server first
   await connectWebSocket();
 
