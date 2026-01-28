@@ -269,12 +269,20 @@ export function HexGrid({
               onClick={(e) => {
                 // Only respond to left-click (button 0)
                 if (e.evt.button !== 0) return;
-                // Single click = select cell only (no spawn, no panel open)
-                selectHex(hex);
+                if (agent) {
+                  // Occupied cell: open terminal panel directly
+                  selectAgent(agent.id);
+                } else {
+                  // Empty cell: select to show spawn menu
+                  selectHex(hex);
+                }
               }}
               onTap={() => {
-                // Touch: select cell only
-                selectHex(hex);
+                if (agent) {
+                  selectAgent(agent.id);
+                } else {
+                  selectHex(hex);
+                }
               }}
               onDblClick={(e) => {
                 // Only respond to left-click (button 0)
