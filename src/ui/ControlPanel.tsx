@@ -140,7 +140,15 @@ export function ControlPanel() {
   }, []);
 
   const handleClearSession = useCallback(async () => {
-    if (!bridge || runnerState.isRunning) return;
+    console.log('[ControlPanel] Clear clicked, bridge:', !!bridge, 'running:', runnerState.isRunning);
+    if (!bridge) {
+      console.warn('[ControlPanel] No bridge - cannot clear');
+      return;
+    }
+    if (runnerState.isRunning) {
+      console.warn('[ControlPanel] Test running - cannot clear');
+      return;
+    }
 
     try {
       // Clear server state (kills all PTYs)
@@ -150,8 +158,7 @@ export function ControlPanel() {
       // Clear client state
       useAgentStore.getState().clear();
       useEventLogStore.getState().clear();
-      useTerminalStore.getState().sessions.clear();
-      useTerminalStore.getState().agentToSession.clear();
+      useTerminalStore.getState().clear();
       useUIStore.getState().selectAgent(null);
 
       // Clear localStorage

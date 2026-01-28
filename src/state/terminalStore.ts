@@ -39,6 +39,7 @@ interface TerminalStore {
   agentToSession: Map<string, string>; // agentId -> sessionId
 
   // Actions
+  clear: () => void;
   addSession: (info: TerminalSessionInfo, agentId?: string | null) => void;
   removeSession: (sessionId: string) => void;
   removeSessionForAgent: (agentId: string) => void;
@@ -62,6 +63,15 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
   sessions: new Map(),
   activeSessionId: null,
   agentToSession: new Map(),
+
+  clear: () => {
+    set({
+      sessions: new Map(),
+      activeSessionId: null,
+      agentToSession: new Map(),
+    });
+    console.log('[TerminalStore] Cleared all sessions');
+  },
 
   addSession: (info, agentId = null) => {
     set((s) => {
