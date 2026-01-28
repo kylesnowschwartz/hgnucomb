@@ -178,11 +178,16 @@ Work autonomously. Do not ask questions.`;
       // Determine model based on cell type: orchestrators use sonnet, workers use haiku
       const modelFlag = agentSnapshot?.cellType === "worker" ? "haiku" : "sonnet";
 
+      // Build Claude CLI args for spawned agents
+      // Permission strategy: full bypass since agents run in isolated worktrees.
+      // For finer control later, consider: per-agent --allowedTools/--disallowedTools,
+      // or --settings with a generated settings.json for granular tool permissions.
       const args: string[] | undefined = isClaudeAgent
         ? [
             ...(effectivePrompt ? [effectivePrompt] : []),
             "--model", modelFlag,
             "--allowedTools", "mcp__hgnucomb__*",
+            "--dangerously-skip-permissions",
           ]
         : undefined;
 
