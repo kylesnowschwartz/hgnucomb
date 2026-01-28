@@ -39,6 +39,15 @@ export interface TerminalSessionConfig {
   allAgents?: AgentSnapshot[];
   /** Initial prompt passed as CLI arg to Claude */
   initialPrompt?: string;
+  /** Task assignment for worker agents */
+  task?: string;
+  /** Instructions (prompt) for worker agents - sent as initial prompt */
+  instructions?: string;
+  taskDetails?: string;
+  /** Parent agent ID for workers spawned by orchestrators */
+  parentId?: string;
+  /** Parent hex for context generation */
+  parentHex?: HexCoordinate;
 }
 
 // ============================================================================
@@ -68,6 +77,15 @@ export interface CreateRequest {
     allAgents?: AgentSnapshot[];
     /** Initial prompt passed as CLI arg to Claude */
     initialPrompt?: string;
+    /** Task assignment for worker agents */
+    task?: string;
+    /** Instructions (prompt) for worker agents - sent as initial prompt */
+    instructions?: string;
+    taskDetails?: string;
+    /** Parent agent ID for workers spawned by orchestrators */
+    parentId?: string;
+    /** Parent hex for context generation */
+    parentHex?: HexCoordinate;
   };
 }
 
@@ -176,6 +194,9 @@ export interface McpSpawnRequest {
     q?: number;
     r?: number;
     cellType: CellType;
+    task?: string;
+    instructions?: string;
+    taskDetails?: string;
   };
 }
 
@@ -327,6 +348,83 @@ export interface McpStatusUpdateNotification {
   };
 }
 
-export type McpRequest = McpSpawnRequest | McpGetGridRequest | McpBroadcastRequest | McpReportStatusRequest;
-export type McpResponse = McpSpawnResponse | McpGetGridResponse | McpBroadcastResponse | McpReportStatusResponse;
+// ============================================================================
+// Bilateral Communication Types (Task Assignment & Results)
+// ============================================================================
+
+/**
+ * Task assignment - included in context JSON when spawning workers.
+ */
+export interface TaskAssignment {
+  taskId: string;
+  description: string;
+  details?: string;
+  assignedBy: string;
+}
+
+/**
+ * Message stored in agent inbox - results from workers or broadcasts.
+ */
+export interface AgentMessage {
+  id: string;
+  from: string;
+  type: 'result' | 'broadcast';
+  payload: unknown;
+  timestamp: string;
+}
+
+/**
+ * MCP report_result request - worker reports task completion to parent.
+ */
+export interface McpReportResultRequest {
+  type: 'mcp.reportResult';
+  requestId: string;
+  payload: {
+    callerId: string;
+    parentId: string;
+    result: unknown;
+    success: boolean;
+    message?: string;
+  };
+}
+
+/**
+ * MCP report_result response - sent back to worker.
+ */
+export interface McpReportResultResponse {
+  type: 'mcp.reportResult.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    error?: string;
+  };
+}
+
+/**
+ * MCP get_messages request - agent polls its inbox.
+ */
+export interface McpGetMessagesRequest {
+  type: 'mcp.getMessages';
+  requestId: string;
+  payload: {
+    callerId: string;
+    since?: string;
+  };
+}
+
+/**
+ * MCP get_messages response - messages from inbox.
+ */
+export interface McpGetMessagesResponse {
+  type: 'mcp.getMessages.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    messages?: AgentMessage[];
+    error?: string;
+  };
+}
+
+export type McpRequest = McpSpawnRequest | McpGetGridRequest | McpBroadcastRequest | McpReportStatusRequest | McpReportResultRequest | McpGetMessagesRequest;
+export type McpResponse = McpSpawnResponse | McpGetGridResponse | McpBroadcastResponse | McpReportStatusResponse | McpReportResultResponse | McpGetMessagesResponse;
 export type McpNotification = McpBroadcastDelivery | McpStatusUpdateNotification;
