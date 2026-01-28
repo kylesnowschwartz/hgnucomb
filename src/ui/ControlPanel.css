@@ -129,13 +129,13 @@
   background: color-mix(in srgb, var(--ctp-red) 25%, var(--ctp-base));
 }
 
-.control-panel__btn--clear {
+.control-panel__btn--reset {
   background: color-mix(in srgb, var(--ctp-peach) 15%, var(--ctp-base));
   border-color: var(--ctp-peach);
   color: var(--ctp-peach);
 }
 
-.control-panel__btn--clear:hover:not(:disabled) {
+.control-panel__btn--reset:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ctp-peach) 25%, var(--ctp-base));
 }
 

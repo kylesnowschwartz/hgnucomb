@@ -64,14 +64,11 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
   activeSessionId: null,
   agentToSession: new Map(),
 
-  clear: () => {
-    set({
-      sessions: new Map(),
-      activeSessionId: null,
-      agentToSession: new Map(),
-    });
-    console.log('[TerminalStore] Cleared all sessions');
-  },
+  clear: () => set({
+    sessions: new Map(),
+    activeSessionId: null,
+    agentToSession: new Map(),
+  }),
 
   addSession: (info, agentId = null) => {
     set((s) => {

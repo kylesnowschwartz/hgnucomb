@@ -139,34 +139,19 @@ export function ControlPanel() {
     }
   }, []);
 
-  const handleClearSession = useCallback(async () => {
-    console.log('[ControlPanel] Clear clicked, bridge:', !!bridge, 'running:', runnerState.isRunning);
-    if (!bridge) {
-      console.warn('[ControlPanel] No bridge - cannot clear');
-      return;
-    }
-    if (runnerState.isRunning) {
-      console.warn('[ControlPanel] Test running - cannot clear');
-      return;
-    }
+  const handleReset = useCallback(async () => {
+    if (!bridge || runnerState.isRunning) return;
 
     try {
-      // Clear server state (kills all PTYs)
       const cleared = await bridge.clearSessions();
-      console.log('[ControlPanel] Cleared', cleared, 'sessions on server');
-
-      // Clear client state
       useAgentStore.getState().clear();
       useEventLogStore.getState().clear();
       useTerminalStore.getState().clear();
       useUIStore.getState().selectAgent(null);
-
-      // Clear localStorage
       clearAgentsFromLocalStorage();
-
-      console.log('[ControlPanel] Session cleared - fresh slate');
+      console.log('[ControlPanel] Reset complete, cleared', cleared, 'session(s)');
     } catch (err) {
-      console.error('[ControlPanel] Failed to clear session:', err);
+      console.error('[ControlPanel] Reset failed:', err);
     }
   }, [bridge, runnerState.isRunning]);
 
@@ -248,12 +233,12 @@ export function ControlPanel() {
           {'\u25A0'} Stop
         </button>
         <button
-          className="control-panel__btn control-panel__btn--clear"
-          onClick={handleClearSession}
+          className="control-panel__btn control-panel__btn--reset"
+          onClick={handleReset}
           disabled={runnerState.isRunning || !bridge}
-          title="Clear all sessions and start fresh (tmux kill-server)"
+          title="Kill all sessions and reset to fresh slate"
         >
-          {'\u2715'} Clear
+          {'\u21BA'} Reset
         </button>
       </div>
     </div>
