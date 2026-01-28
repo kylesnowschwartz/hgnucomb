@@ -5,7 +5,7 @@
  * Close via header X button or grid click-away.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -32,9 +32,56 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
   const fitAddonRef = useRef<FitAddon | null>(null);
   const bridge = useTerminalStore((s) => s.bridge);
   const getSession = useTerminalStore((s) => s.getSession);
+  const [isFocused, setIsFocused] = useState(false);
 
   // Draggable panel - starts top-left
   const { handleMouseDown, style: dragStyle } = useDraggable({ initialX: 20, initialY: 20 });
+
+  // Re-focus terminal to ensure keyboard input reaches xterm.js
+  const focusTerminal = useCallback(() => {
+    terminalRef.current?.focus();
+  }, []);
+
+  // Track focus state for visual feedback
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleFocusIn = () => setIsFocused(true);
+    const handleFocusOut = (e: FocusEvent) => {
+      // Only unfocus if focus moved outside the panel entirely
+      if (!container.contains(e.relatedTarget as Node)) {
+        setIsFocused(false);
+      }
+    };
+
+    container.addEventListener('focusin', handleFocusIn);
+    container.addEventListener('focusout', handleFocusOut);
+
+    return () => {
+      container.removeEventListener('focusin', handleFocusIn);
+      container.removeEventListener('focusout', handleFocusOut);
+    };
+  }, []);
+
+  // Re-focus terminal on any keydown when panel is open but unfocused
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If terminal exists and focus is outside the panel, refocus
+      if (terminalRef.current && !containerRef.current?.contains(document.activeElement)) {
+        terminalRef.current.focus();
+        // For Escape specifically, we need to send it manually since the focus
+        // happens after the keydown event
+        if (e.key === 'Escape') {
+          // Send escape character to terminal
+          bridge?.write(sessionId, '\x1b');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [sessionId, bridge]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -68,23 +115,12 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
     });
     terminal.loadAddon(webglAddon);
 
-    // Replay existing buffer (for reopened sessions)
+    // Snapshot the buffer BEFORE setting up data handlers to avoid duplicates
+    // Any data that arrives after this will be handled by the live data handler
     const session = getSession(sessionId);
-    if (session?.buffer.length) {
-      for (const chunk of session.buffer) {
-        terminal.write(chunk);
-      }
-    }
+    const bufferSnapshot = session?.buffer ? [...session.buffer] : [];
 
-    // Layout must settle before fitting
-    setTimeout(() => {
-      fitAddon.fit();
-      terminal.focus();
-      // Sync PTY size after fit
-      bridge.resize(sessionId, terminal.cols, terminal.rows);
-    }, 0);
-
-    // Wire data: bridge -> terminal (buffer storage handled by App.tsx)
+    // Wire data handlers to catch any incoming data
     const unsubData = bridge.onData(sessionId, (data) => {
       terminal.write(data);
     });
@@ -92,6 +128,25 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
     // Wire data: terminal -> bridge
     const disposeOnData = terminal.onData((data) => {
       bridge.write(sessionId, data);
+    });
+
+    // Wait for layout to settle, then fit and replay buffer at correct size
+    // Using requestAnimationFrame ensures the DOM is painted before we measure
+    requestAnimationFrame(() => {
+      if (!terminalRef.current) return; // Component unmounted
+
+      fitAddon.fit();
+      bridge.resize(sessionId, terminal.cols, terminal.rows);
+
+      // Replay the buffer snapshot AFTER fitting so content renders at correct size
+      // New data arriving after the snapshot is handled by the live data handler
+      if (bufferSnapshot.length) {
+        for (const chunk of bufferSnapshot) {
+          terminal.write(chunk);
+        }
+      }
+
+      terminal.focus();
     });
 
     // Handle resize
@@ -114,15 +169,25 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
     };
   }, [sessionId, bridge, onClose, getSession]);
 
+  const panelClasses = `terminal-panel ${isFocused ? 'terminal-panel--focused' : ''}`;
+
   return (
-    <div className="terminal-panel" style={dragStyle}>
-      <div className="terminal-panel__header" onMouseDown={handleMouseDown}>
+    <div className={panelClasses} style={dragStyle}>
+      <div
+        className="terminal-panel__header"
+        onMouseDown={handleMouseDown}
+        onMouseUp={focusTerminal} // Re-focus after drag
+      >
         <span className="terminal-panel__title">Terminal - {sessionId}</span>
         <button className="terminal-panel__close" onClick={onClose}>
           &times;
         </button>
       </div>
-      <div className="terminal-panel__body" ref={containerRef} />
+      <div
+        className="terminal-panel__body"
+        ref={containerRef}
+        onClick={focusTerminal} // Re-focus on click
+      />
     </div>
   );
 }

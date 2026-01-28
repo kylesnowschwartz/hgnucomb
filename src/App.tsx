@@ -407,8 +407,8 @@ function App() {
     return !allAgents.some(a => a.hex.q === selectedHex.q && a.hex.r === selectedHex.r);
   }, [selectedHex, getAllAgents]);
 
-  // Show spawn menu when empty hex is selected and no terminal panel open
-  const showSpawnMenu = selectedHex && selectedHexIsEmpty && !activeSessionId;
+  // Show spawn menu when empty hex is selected (visible even with terminal panel open)
+  const showSpawnMenu = selectedHex && selectedHexIsEmpty;
 
   return (
     <>
