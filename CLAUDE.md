@@ -22,41 +22,65 @@ just tasks      # Check beads-lite task queue
 Browser (localhost:5173)              Server (localhost:3001)
 ┌───────────────────────────┐         ┌─────────────────────────────┐
 │ App.tsx                   │         │ index.ts (WebSocket)        │
-│   ├── HexGrid.tsx         │   WS    │   └── TerminalManager       │
-│   ├── TerminalPanel.tsx ◄─┼─────────┼───────► node-pty sessions   │
-│   ├── EventLog.tsx        │         │                             │
-│   └── ControlPanel.tsx    │         │ mcp.ts (MCP Server)         │
-│                           │         │   ├── spawn_agent           │
-│ Stores (src/state/):      │         │   ├── get_grid_state        │
-│   agentStore    (agents)  │         │   ├── broadcast             │
-│   terminalStore (PTY)     │         │   └── report_status         │
-│   eventLogStore (events)  │         │                             │
-│   uiStore       (UI)      │         │ worktree.ts (git isolation) │
+│   └── mcpHandler.ts       │   WS    │   └── TerminalManager       │
+│                           │◄────────┼───────► node-pty sessions   │
+│ Features (src/features/): │         │                             │
+│   grid/       HexGrid     │         │ mcp.ts (MCP Server)         │
+│   terminal/   Panel+Store │         │   ├── spawn_agent           │
+│   events/     EventLog    │         │   ├── get_grid_state        │
+│   controls/   ControlPanel│         │   ├── broadcast             │
+│   agents/     agentStore  │         │   └── report_status         │
+│                           │         │                             │
+│ Shared (shared/):         │         │ worktree.ts (git isolation) │
+│   protocol.ts (WS+MCP)    │◄────────┼─► shared/ (same types)      │
+│   types.ts (hex, agents)  │         │                             │
 └───────────────────────────┘         └─────────────────────────────┘
 ```
 
 ## Directory Structure
 
 ```
+shared/               # Single source of truth for types (client + server)
+  protocol.ts         # WebSocket messages, MCP request/response types
+  types.ts            # HexCoordinate, CellType, AgentStatus, hex utilities
+  context.ts          # Orchestrator context JSON schema
+
 src/
-  state/          # Zustand stores (agentStore, terminalStore, eventLogStore, uiStore)
-  ui/             # React components (HexGrid, TerminalPanel, EventLog, ControlPanel)
-  terminal/       # Terminal bridge abstraction (WebSocket now, Tauri later)
-  protocol/       # Event types and script playback
-  shared/         # Shared types between client/server (hex utils, context schema)
-  theme/          # Catppuccin theme definitions (mocha/latte)
+  features/           # Feature-colocated modules (store + UI together)
+    agents/           # agentStore.ts
+    terminal/         # terminalStore, TerminalPanel, WebSocketBridge
+    events/           # eventLogStore, EventLog
+    controls/         # uiStore, ControlPanel
+    grid/             # HexGrid, useDraggable
+  handlers/           # Request handlers extracted from App.tsx
+    mcpHandler.ts     # MCP request handling (spawn, broadcast, status)
+  protocol/           # Event types and script playback
+  theme/              # Catppuccin theme definitions (mocha/latte)
+  integration/        # Integration test framework
 
 server/
-  index.ts        # WebSocket server entry point
-  manager.ts      # TerminalManager - session lifecycle
-  session.ts      # Individual PTY session wrapper
-  mcp.ts          # MCP server (spawn_agent, get_grid_state, broadcast, report_status)
-  worktree.ts     # Git worktree creation/cleanup for agent isolation
-  context.ts      # Context JSON generation for spawned agents
-  mcp-config.ts   # Dynamic .mcp.json generation for worktrees
+  index.ts            # WebSocket server entry point
+  manager.ts          # TerminalManager - session lifecycle
+  session.ts          # Individual PTY session wrapper
+  mcp.ts              # MCP server (spawn_agent, get_grid_state, broadcast, report_status)
+  worktree.ts         # Git worktree creation/cleanup for agent isolation
+  context.ts          # Context JSON generation for spawned agents
+  mcp-config.ts       # Dynamic .mcp.json generation for worktrees
 
-.agent-history/   # AI-generated docs (plans, research, context packets)
-.cloned-sources/  # Upstream repos for reference (gitignored)
+.agent-history/       # AI-generated docs (plans, research, context packets)
+.cloned-sources/      # Upstream repos for reference (gitignored)
+```
+
+## Path Aliases
+
+```typescript
+// Client (tsconfig.app.json + vite.config.ts)
+import { ... } from '@shared/protocol';    // shared/protocol.ts
+import { ... } from '@features/agents/agentStore';
+import { ... } from '@theme/catppuccin-mocha';
+
+// Server (server/tsconfig.json)
+import { ... } from '@shared/protocol.ts';  // Note: .ts extension required
 ```
 
 ## Cell Types
