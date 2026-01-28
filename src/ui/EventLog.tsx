@@ -31,6 +31,8 @@ function formatEventSummary(event: LogEvent): string {
       return `${event.agentId} killed`;
     case 'status_change':
       return `${event.agentId}: ${event.previousStatus ?? '?'} -> ${event.newStatus}${event.message ? ` "${event.message}"` : ''}`;
+    case 'message_received':
+      return `${event.recipientId} <- ${event.senderId} [${event.messageType}]`;
   }
 }
 
@@ -44,6 +46,8 @@ function getEventColor(kind: LogEvent['kind']): string {
       return palette.red;
     case 'status_change':
       return palette.yellow;
+    case 'message_received':
+      return palette.mauve;
   }
 }
 
@@ -57,6 +61,8 @@ function getEventIcon(kind: LogEvent['kind']): string {
       return '\u2715'; // x mark
     case 'status_change':
       return '\u25CF'; // filled circle
+    case 'message_received':
+      return '\u2709'; // envelope
   }
 }
 
@@ -66,6 +72,7 @@ export function EventLog({ maxHeight = 200 }: EventLogProps) {
 
   const [showBroadcasts, setShowBroadcasts] = useState(true);
   const [showLifecycle, setShowLifecycle] = useState(true);
+  const [showMessages, setShowMessages] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
 
   // Draggable panel - starts upper-right
@@ -84,6 +91,7 @@ export function EventLog({ maxHeight = 200 }: EventLogProps) {
   // Filter events
   const filteredEvents = events.filter((e) => {
     if (e.kind === 'broadcast') return showBroadcasts;
+    if (e.kind === 'message_received') return showMessages;
     return showLifecycle; // spawn, kill, status_change
   });
 
@@ -107,6 +115,14 @@ export function EventLog({ maxHeight = 200 }: EventLogProps) {
               onChange={(e) => setShowLifecycle(e.target.checked)}
             />
             <span style={{ color: palette.green }}>Lifecycle</span>
+          </label>
+          <label className="event-log__filter">
+            <input
+              type="checkbox"
+              checked={showMessages}
+              onChange={(e) => setShowMessages(e.target.checked)}
+            />
+            <span style={{ color: palette.mauve }}>Messages</span>
           </label>
           <button className="event-log__clear" onClick={clear}>
             Clear

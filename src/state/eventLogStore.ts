@@ -49,7 +49,15 @@ export interface StatusChangeEvent extends BaseEvent {
   message?: string;
 }
 
-export type LogEvent = BroadcastEvent | SpawnEvent | KillEvent | StatusChangeEvent;
+export interface MessageReceivedEvent extends BaseEvent {
+  kind: 'message_received';
+  recipientId: string;
+  senderId: string;
+  messageType: 'result' | 'broadcast';
+  payloadPreview: string;
+}
+
+export type LogEvent = BroadcastEvent | SpawnEvent | KillEvent | StatusChangeEvent | MessageReceivedEvent;
 
 // ============================================================================
 // Store
@@ -76,6 +84,12 @@ interface EventLogStore {
     newStatus: DetailedStatus,
     message?: string,
     previousStatus?: DetailedStatus
+  ) => void;
+  addMessageReceived: (
+    recipientId: string,
+    senderId: string,
+    messageType: 'result' | 'broadcast',
+    payload: unknown
   ) => void;
   clear: () => void;
 }
@@ -181,6 +195,25 @@ export const useEventLogStore = create<EventLogStore>()((set) => ({
         newStatus,
         message,
         previousStatus,
+      };
+      const events = [...state.events, event];
+      if (events.length > state.maxEvents) {
+        return { events: events.slice(-state.maxEvents) };
+      }
+      return { events };
+    });
+  },
+
+  addMessageReceived: (recipientId, senderId, messageType, payload) => {
+    set((state) => {
+      const event: MessageReceivedEvent = {
+        id: nextEventId(),
+        timestamp: new Date().toISOString(),
+        kind: 'message_received',
+        recipientId,
+        senderId,
+        messageType,
+        payloadPreview: truncatePayload(payload),
       };
       const events = [...state.events, event];
       if (events.length > state.maxEvents) {
