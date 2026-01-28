@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { useAgentStore } from '@state/agentStore';
+import { useAgentStore, clearAgentsFromLocalStorage } from '@state/agentStore';
 import { useTerminalStore } from '@state/terminalStore';
 import { useEventLogStore } from '@state/eventLogStore';
 import { useUIStore } from '@state/uiStore';
@@ -133,6 +133,30 @@ export function ControlPanel() {
     }
   }, []);
 
+  const handleClearSession = useCallback(async () => {
+    if (!bridge || runnerState.isRunning) return;
+
+    try {
+      // Clear server state (kills all PTYs)
+      const cleared = await bridge.clearSessions();
+      console.log('[ControlPanel] Cleared', cleared, 'sessions on server');
+
+      // Clear client state
+      useAgentStore.getState().clear();
+      useEventLogStore.getState().clear();
+      useTerminalStore.getState().sessions.clear();
+      useTerminalStore.getState().agentToSession.clear();
+      useUIStore.getState().selectAgent(null);
+
+      // Clear localStorage
+      clearAgentsFromLocalStorage();
+
+      console.log('[ControlPanel] Session cleared - fresh slate');
+    } catch (err) {
+      console.error('[ControlPanel] Failed to clear session:', err);
+    }
+  }, [bridge, runnerState.isRunning]);
+
   // --------------------------------------------------------------------------
   // Render
   // --------------------------------------------------------------------------
@@ -209,6 +233,14 @@ export function ControlPanel() {
           disabled={!runnerState.isRunning}
         >
           {'\u25A0'} Stop
+        </button>
+        <button
+          className="control-panel__btn control-panel__btn--clear"
+          onClick={handleClearSession}
+          disabled={runnerState.isRunning || !bridge}
+          title="Clear all sessions and start fresh (tmux kill-server)"
+        >
+          {'\u2715'} Clear
         </button>
       </div>
     </div>

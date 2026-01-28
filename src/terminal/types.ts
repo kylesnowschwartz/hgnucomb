@@ -116,11 +116,60 @@ export interface DisposeRequest {
   };
 }
 
+// ============================================================================
+// Session Persistence Types
+// ============================================================================
+
+export interface SessionsListRequest {
+  type: 'sessions.list';
+  requestId: string;
+  payload: Record<string, never>;
+}
+
+export interface SessionsClearRequest {
+  type: 'sessions.clear';
+  requestId: string;
+  payload: Record<string, never>;
+}
+
+/**
+ * Stored agent metadata - everything needed to restore grid state.
+ */
+export interface StoredAgentMetadata {
+  agentId: string;
+  cellType: CellType;
+  hex: HexCoordinate;
+  status: AgentStatus;
+  connections: string[];
+  parentId?: string;
+  parentHex?: HexCoordinate;
+  task?: string;
+  taskDetails?: string;
+  initialPrompt?: string;
+  instructions?: string;
+  detailedStatus?: DetailedStatus;
+  statusMessage?: string;
+}
+
+/**
+ * Session info returned from sessions.list - everything needed to restore state.
+ */
+export interface SessionInfo {
+  sessionId: string;
+  agent: StoredAgentMetadata | null;
+  buffer: string[];
+  cols: number;
+  rows: number;
+  exited: boolean;
+}
+
 export type ClientMessage =
   | CreateRequest
   | WriteRequest
   | ResizeRequest
-  | DisposeRequest;
+  | DisposeRequest
+  | SessionsListRequest
+  | SessionsClearRequest;
 
 // ============================================================================
 // Response Types (Server -> Client)
@@ -169,12 +218,36 @@ export interface ErrorMessage {
   };
 }
 
+/**
+ * Response to sessions.list - all active sessions with their state.
+ */
+export interface SessionsListResponse {
+  type: 'sessions.list.result';
+  requestId: string;
+  payload: {
+    sessions: SessionInfo[];
+  };
+}
+
+/**
+ * Response to sessions.clear.
+ */
+export interface SessionsClearResponse {
+  type: 'sessions.clear.result';
+  requestId: string;
+  payload: {
+    cleared: number;
+  };
+}
+
 export type ServerMessage =
   | CreatedMessage
   | DataMessage
   | ExitMessage
   | DisposedMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | SessionsListResponse
+  | SessionsClearResponse;
 
 // ============================================================================
 // MCP Message Types (browser <-> server routing)

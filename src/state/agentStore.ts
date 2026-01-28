@@ -8,6 +8,9 @@ import type { HexCoordinate } from '@shared/types';
 import type { DetailedStatus, AgentMessage } from '@terminal/types';
 import { useEventLogStore } from './eventLogStore';
 
+// localStorage key for persisting agent state
+const STORAGE_KEY = 'hgnucomb:agents';
+
 export interface AgentState {
   id: string;
   role: AgentRole;
@@ -180,3 +183,54 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
     return messagesToReturn;
   },
 }));
+
+// ============================================================================
+// localStorage Persistence
+// ============================================================================
+
+/**
+ * Serialize agent state to localStorage.
+ * Called automatically on state changes via subscription.
+ */
+function persistToLocalStorage(agents: Map<string, AgentState>): void {
+  try {
+    // Map -> Array for JSON serialization
+    const data = Array.from(agents.values());
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (err) {
+    console.warn('[AgentStore] Failed to persist to localStorage:', err);
+  }
+}
+
+/**
+ * Load agent state from localStorage.
+ * Called by reconnect flow to get cached state (server is still source of truth).
+ */
+export function loadAgentsFromLocalStorage(): AgentState[] {
+  try {
+    const json = localStorage.getItem(STORAGE_KEY);
+    if (!json) return [];
+    return JSON.parse(json) as AgentState[];
+  } catch (err) {
+    console.warn('[AgentStore] Failed to load from localStorage:', err);
+    return [];
+  }
+}
+
+/**
+ * Clear persisted agent state from localStorage.
+ * Called on session clear.
+ */
+export function clearAgentsFromLocalStorage(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    console.log('[AgentStore] Cleared localStorage');
+  } catch (err) {
+    console.warn('[AgentStore] Failed to clear localStorage:', err);
+  }
+}
+
+// Subscribe to state changes and persist
+useAgentStore.subscribe((state) => {
+  persistToLocalStorage(state.agents);
+});

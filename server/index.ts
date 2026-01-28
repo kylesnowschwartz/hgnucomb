@@ -23,6 +23,7 @@ import {
   McpGetMessagesRequest,
   McpGetWorkerStatusRequest,
   InboxUpdatedMessage,
+  StoredAgentMetadata,
 } from "./protocol.js";
 import {
   generateContext,
@@ -40,8 +41,8 @@ const manager = new TerminalSessionManager();
 // Track which sessions belong to which client for cleanup
 const clientSessions = new Map<WebSocket, Set<string>>();
 
-// Track sessionId -> agentId for context cleanup
-const sessionToAgent = new Map<string, string>();
+// Track sessionId -> agent metadata for persistence and cleanup
+const sessionMetadata = new Map<string, StoredAgentMetadata>();
 
 // ============================================================================
 // MCP Routing
@@ -186,9 +187,18 @@ Work autonomously. Do not ask questions.`;
 
       const { session, sessionId } = manager.create({ cols, rows, shell, args, cwd: workingDir, env: finalEnv });
 
-      // Track session -> agent for context cleanup
+      // Track session -> full agent metadata for persistence and cleanup
       if (agentSnapshot) {
-        sessionToAgent.set(sessionId, agentSnapshot.agentId);
+        sessionMetadata.set(sessionId, {
+          ...agentSnapshot,
+          parentId,
+          parentHex,
+          task,
+          taskDetails,
+          initialPrompt,
+          instructions,
+          detailedStatus: 'idle',
+        });
       }
 
       // Track session for this client
@@ -214,12 +224,12 @@ Work autonomously. Do not ask questions.`;
         });
         // Clean up tracking
         sessions?.delete(sessionId);
-        // Clean up context file and worktree if this was an orchestrator
-        const agentId = sessionToAgent.get(sessionId);
-        if (agentId) {
-          cleanupContextFile(agentId);
-          removeWorktree(process.cwd(), agentId);
-          sessionToAgent.delete(sessionId);
+        // Clean up context file and worktree if this was an agent
+        const metadata = sessionMetadata.get(sessionId);
+        if (metadata) {
+          cleanupContextFile(metadata.agentId);
+          removeWorktree(process.cwd(), metadata.agentId);
+          sessionMetadata.delete(sessionId);
         }
       });
 
@@ -290,12 +300,12 @@ Work autonomously. Do not ask questions.`;
       const disposed = manager.dispose(sessionId);
       if (disposed) {
         clientSessions.get(ws)?.delete(sessionId);
-        // Clean up context file and worktree if this was an orchestrator
-        const agentId = sessionToAgent.get(sessionId);
-        if (agentId) {
-          cleanupContextFile(agentId);
-          removeWorktree(process.cwd(), agentId);
-          sessionToAgent.delete(sessionId);
+        // Clean up context file and worktree if this was an agent
+        const metadata = sessionMetadata.get(sessionId);
+        if (metadata) {
+          cleanupContextFile(metadata.agentId);
+          removeWorktree(process.cwd(), metadata.agentId);
+          sessionMetadata.delete(sessionId);
         }
         send(ws, {
           type: "terminal.disposed",
@@ -310,6 +320,63 @@ Work autonomously. Do not ask questions.`;
           payload: { message: `Session not found: ${sessionId}`, sessionId },
         });
       }
+      break;
+    }
+
+    case "sessions.list": {
+      // Return all active sessions with metadata and buffers
+      const sessions: Array<{
+        sessionId: string;
+        agent: StoredAgentMetadata | null;
+        buffer: string[];
+        cols: number;
+        rows: number;
+        exited: boolean;
+      }> = [];
+
+      for (const sessionId of manager.getSessionIds()) {
+        const session = manager.get(sessionId);
+        if (!session) continue;
+
+        sessions.push({
+          sessionId,
+          agent: sessionMetadata.get(sessionId) ?? null,
+          buffer: session.getBuffer(),
+          cols: session.cols,
+          rows: session.rows,
+          exited: !session.isActive(),
+        });
+      }
+
+      send(ws, {
+        type: "sessions.list.result",
+        requestId: msg.requestId,
+        payload: { sessions },
+      });
+      console.log(`[Sessions] Listed ${sessions.length} active session(s)`);
+      break;
+    }
+
+    case "sessions.clear": {
+      // Kill all sessions and clear metadata (user-initiated reset)
+      const count = manager.size();
+
+      // Clean up context files and worktrees for all agents
+      for (const [, metadata] of sessionMetadata.entries()) {
+        cleanupContextFile(metadata.agentId);
+        removeWorktree(process.cwd(), metadata.agentId);
+      }
+      sessionMetadata.clear();
+
+      // Dispose all PTY sessions
+      manager.disposeAll();
+
+      send(ws, {
+        type: "sessions.clear.result",
+        requestId: msg.requestId,
+        payload: { cleared: count },
+      });
+      console.log(`[Sessions] Cleared ${count} session(s)`);
       break;
     }
 
@@ -391,15 +458,13 @@ wss.on("connection", (ws) => {
       }
     }
 
-    // Clean up all sessions owned by this client
+    // Detach client from sessions (tmux-like: sessions survive disconnect)
+    // PTYs keep running; client can reconnect and re-attach
     const sessions = clientSessions.get(ws);
-    if (sessions) {
-      for (const sessionId of sessions) {
-        manager.dispose(sessionId);
-        console.log(`[${sessionId}] disposed (client disconnected)`);
-      }
-      clientSessions.delete(ws);
+    if (sessions && sessions.size > 0) {
+      console.log(`[Session] Detached ${sessions.size} session(s) - PTYs survive disconnect`);
     }
+    clientSessions.delete(ws);
     console.log("Client disconnected");
   });
 

@@ -75,6 +75,117 @@ function App() {
   // Subscribe to agents for auto-session creation
   const agents = useAgentStore(useShallow((s) => Array.from(s.agents.values())));
 
+  // Rehydrate state from server on connect (tmux-like attach)
+  const rehydrateFromServer = useCallback(async (ws: WebSocketBridge) => {
+    try {
+      console.log('[App] Rehydrating state from server...');
+      const sessions = await ws.listSessions();
+
+      if (sessions.length === 0) {
+        console.log('[App] No existing sessions to restore');
+        return;
+      }
+
+      console.log('[App] Found', sessions.length, 'session(s) to restore');
+
+      // Clear current state and reinitialize from server (server is truth)
+      useAgentStore.getState().clear();
+      sessionCreationInitiated.current.clear();
+
+      for (const session of sessions) {
+        if (!session.agent) {
+          console.log('[App] Session', session.sessionId, 'has no agent metadata, skipping');
+          continue;
+        }
+
+        const meta = session.agent;
+
+        // Restore agent to agentStore
+        const agentId = useAgentStore.getState().spawnAgent(
+          meta.hex,
+          meta.cellType,
+          {
+            initialPrompt: meta.initialPrompt,
+            parentId: meta.parentId,
+            parentHex: meta.parentHex,
+            task: meta.task,
+            instructions: meta.instructions,
+            taskDetails: meta.taskDetails,
+          }
+        );
+
+        // The spawnAgent generates a new ID, but we need to use the original
+        // Actually, we need to restore with the original agentId
+        // Let me refactor: directly set in the store instead
+        useAgentStore.setState((s) => {
+          const agents = new Map(s.agents);
+          // Remove the auto-generated agent
+          agents.delete(agentId);
+          // Add with original ID
+          agents.set(meta.agentId, {
+            id: meta.agentId,
+            role: meta.cellType === 'orchestrator' ? 'orchestrator' : 'worker',
+            cellType: meta.cellType,
+            status: meta.status,
+            detailedStatus: meta.detailedStatus ?? 'idle',
+            statusMessage: meta.statusMessage,
+            systemPrompt: '',
+            hex: meta.hex,
+            connections: meta.connections,
+            initialPrompt: meta.initialPrompt,
+            parentId: meta.parentId,
+            parentHex: meta.parentHex,
+            task: meta.task,
+            instructions: meta.instructions,
+            taskDetails: meta.taskDetails,
+            inbox: [],
+          });
+          return { agents };
+        });
+
+        // Mark as initiated so we don't create a new session
+        sessionCreationInitiated.current.add(meta.agentId);
+
+        // Attach to existing session (don't create new one)
+        ws.attachSession(session.sessionId);
+
+        // Add to terminalStore
+        addSession(
+          { sessionId: session.sessionId, cols: session.cols, rows: session.rows },
+          meta.agentId
+        );
+
+        // Replay buffered output
+        if (session.buffer.length > 0) {
+          const fullOutput = session.buffer.join('');
+          appendData(session.sessionId, fullOutput);
+          console.log('[App] Replayed', session.buffer.length, 'chunks for', meta.agentId);
+        }
+
+        // Set up data listener for new output
+        ws.onData(session.sessionId, (data) => {
+          appendData(session.sessionId, data);
+        });
+
+        // Set up exit listener
+        ws.onExit(session.sessionId, (exitCode) => {
+          markExited(session.sessionId, exitCode);
+        });
+
+        // Mark as exited if already exited
+        if (session.exited) {
+          markExited(session.sessionId, 0);
+        }
+
+        console.log('[App] Restored agent', meta.agentId, 'at', meta.hex);
+      }
+
+      console.log('[App] Rehydration complete');
+    } catch (err) {
+      console.error('[App] Failed to rehydrate from server:', err);
+    }
+  }, [addSession, appendData, markExited]);
+
   // Initialize bridge on mount
   useEffect(() => {
     const ws = new WebSocketBridge();
@@ -83,6 +194,11 @@ function App() {
     const unsubConnection = ws.onConnectionChange((state) => {
       setConnectionState(state);
       console.log('[App] Connection state:', state);
+
+      // Rehydrate when connected (handles both initial connect and reconnect)
+      if (state === 'connected') {
+        rehydrateFromServer(ws);
+      }
     });
 
     ws.connect().catch((err) => {
@@ -94,7 +210,7 @@ function App() {
       ws.disconnect();
       setBridge(null);
     };
-  }, [setBridge, setConnectionState]);
+  }, [setBridge, setConnectionState, rehydrateFromServer]);
 
   // Handle MCP requests from orchestrator agents
   useEffect(() => {

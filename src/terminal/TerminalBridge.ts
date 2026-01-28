@@ -15,6 +15,7 @@ import type {
   ConnectionHandler,
   McpRequest,
   McpResponse,
+  SessionInfo,
 } from './types.ts';
 
 export interface TerminalBridge {
@@ -104,4 +105,28 @@ export interface TerminalBridge {
     messageCount: number;
     latestTimestamp: string;
   }): void;
+
+  // ============================================================================
+  // Session Persistence (tmux-like attach/detach)
+  // ============================================================================
+
+  /**
+   * List all active sessions on the server.
+   * Returns session info including agent metadata and output buffers.
+   * Used on reconnect to rehydrate client state.
+   */
+  listSessions(): Promise<SessionInfo[]>;
+
+  /**
+   * Clear all sessions on the server (user-initiated reset).
+   * Kills all PTY processes and clears server state.
+   * @returns Number of sessions cleared
+   */
+  clearSessions(): Promise<number>;
+
+  /**
+   * Attach to an existing session (for reconnect).
+   * Sets up local listeners without creating a new session.
+   */
+  attachSession(sessionId: string): void;
 }

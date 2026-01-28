@@ -28,6 +28,29 @@ export interface AgentSnapshot {
   connections: string[];
 }
 
+/**
+ * Extended agent metadata stored server-side for session persistence.
+ * Includes everything needed to restore the grid after browser refresh.
+ */
+export interface StoredAgentMetadata extends AgentSnapshot {
+  /** Parent agent ID (for workers spawned by orchestrators) */
+  parentId?: string;
+  /** Parent hex position (for edge visualization) */
+  parentHex?: HexCoordinate;
+  /** Task assigned to this worker */
+  task?: string;
+  /** Task details */
+  taskDetails?: string;
+  /** Initial prompt sent to Claude */
+  initialPrompt?: string;
+  /** Instructions for worker (prompt sent to Claude) */
+  instructions?: string;
+  /** Detailed status (7-state model) */
+  detailedStatus?: DetailedStatus;
+  /** Status message from report_status */
+  statusMessage?: string;
+}
+
 // ============================================================================
 // Request types (Client -> Server)
 // ============================================================================
@@ -86,11 +109,70 @@ export interface DisposeRequest {
   };
 }
 
+// ============================================================================
+// Session Persistence Types
+// ============================================================================
+
+/**
+ * Request to list all active sessions (for reconnect/rehydration).
+ * Browser sends this on connect to discover what's still running.
+ */
+export interface SessionsListRequest {
+  type: "sessions.list";
+  requestId: string;
+  payload: Record<string, never>; // Empty payload
+}
+
+/**
+ * Session info returned from sessions.list - everything needed to restore state.
+ */
+export interface SessionInfo {
+  sessionId: string;
+  agent: StoredAgentMetadata | null;
+  buffer: string[];
+  cols: number;
+  rows: number;
+  exited: boolean;
+}
+
+/**
+ * Response to sessions.list - all active sessions with their state.
+ */
+export interface SessionsListResponse {
+  type: "sessions.list.result";
+  requestId: string;
+  payload: {
+    sessions: SessionInfo[];
+  };
+}
+
+/**
+ * Request to clear all sessions (user-initiated reset).
+ */
+export interface SessionsClearRequest {
+  type: "sessions.clear";
+  requestId: string;
+  payload: Record<string, never>; // Empty payload
+}
+
+/**
+ * Response to sessions.clear.
+ */
+export interface SessionsClearResponse {
+  type: "sessions.clear.result";
+  requestId: string;
+  payload: {
+    cleared: number;
+  };
+}
+
 export type ClientMessage =
   | CreateRequest
   | WriteRequest
   | ResizeRequest
-  | DisposeRequest;
+  | DisposeRequest
+  | SessionsListRequest
+  | SessionsClearRequest;
 
 // ============================================================================
 // Response types (Server -> Client)
@@ -144,7 +226,9 @@ export type ServerMessage =
   | DataMessage
   | ExitMessage
   | DisposedMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | SessionsListResponse
+  | SessionsClearResponse;
 
 // ============================================================================
 // Type guards
@@ -155,7 +239,7 @@ export function isClientMessage(msg: unknown): msg is ClientMessage {
   const m = msg as Record<string, unknown>;
   return (
     typeof m.type === "string" &&
-    m.type.startsWith("terminal.") &&
+    (m.type.startsWith("terminal.") || m.type.startsWith("sessions.")) &&
     typeof m.payload === "object"
   );
 }

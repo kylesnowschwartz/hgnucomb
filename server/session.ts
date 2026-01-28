@@ -22,11 +22,17 @@ export interface TerminalSessionOptions {
   env?: Record<string, string>;
 }
 
+// Ring buffer size for output replay on reconnect
+const MAX_BUFFER_CHUNKS = 1000;
+
 export class TerminalSession {
   private ptyProcess: pty.IPty;
   private disposed = false;
   private dataListeners: Array<(data: string) => void> = [];
   private exitListeners: Array<(code: number) => void> = [];
+
+  /** Ring buffer of terminal output for replay on reconnect */
+  private outputBuffer: string[] = [];
 
   readonly cols: number;
   readonly rows: number;
@@ -57,6 +63,12 @@ export class TerminalSession {
 
     this.ptyProcess.onData((data) => {
       if (!this.disposed) {
+        // Buffer output for replay on reconnect
+        this.outputBuffer.push(data);
+        if (this.outputBuffer.length > MAX_BUFFER_CHUNKS) {
+          this.outputBuffer.shift();
+        }
+
         for (const listener of this.dataListeners) {
           listener(data);
         }
@@ -95,6 +107,21 @@ export class TerminalSession {
 
   isActive(): boolean {
     return !this.disposed;
+  }
+
+  /**
+   * Get buffered output for replay on reconnect.
+   * Returns copy of buffer (caller can join with '' to get full output).
+   */
+  getBuffer(): string[] {
+    return [...this.outputBuffer];
+  }
+
+  /**
+   * Clear output buffer (e.g., after successful replay).
+   */
+  clearBuffer(): void {
+    this.outputBuffer = [];
   }
 
   dispose(): void {

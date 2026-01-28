@@ -21,6 +21,7 @@ import type {
   McpRequest,
   McpResponse,
   InboxUpdatedMessage,
+  SessionInfo,
 } from './types.ts';
 
 const DEFAULT_URL = 'ws://localhost:3001';
@@ -263,6 +264,58 @@ export class WebSocketBridge implements TerminalBridge {
     return Array.from(this.activeSessions);
   }
 
+  /**
+   * List all active sessions on the server (for reconnect/rehydration).
+   * Returns session info including agent metadata and output buffers.
+   */
+  async listSessions(): Promise<SessionInfo[]> {
+    const requestId = this.nextRequestId();
+    const message: ClientMessage = {
+      type: 'sessions.list',
+      requestId,
+      payload: {},
+    };
+
+    const result = await this.sendRequest<{ sessions: SessionInfo[] }>(requestId, message);
+    return result.sessions;
+  }
+
+  /**
+   * Clear all sessions on the server (user-initiated reset).
+   * Kills all PTY processes and clears server state.
+   */
+  async clearSessions(): Promise<number> {
+    const requestId = this.nextRequestId();
+    const message: ClientMessage = {
+      type: 'sessions.clear',
+      requestId,
+      payload: {},
+    };
+
+    const result = await this.sendRequest<{ cleared: number }>(requestId, message);
+
+    // Clear local tracking
+    this.activeSessions.clear();
+    this.sessionListeners.clear();
+
+    return result.cleared;
+  }
+
+  /**
+   * Attach to an existing session (for reconnect).
+   * Sets up local listeners without creating a new session.
+   */
+  attachSession(sessionId: string): void {
+    this.activeSessions.add(sessionId);
+    if (!this.sessionListeners.has(sessionId)) {
+      this.sessionListeners.set(sessionId, {
+        data: new Set(),
+        exit: new Set(),
+      });
+    }
+    console.log('[WebSocketBridge] Attached to existing session:', sessionId);
+  }
+
   write(sessionId: string, data: string): void {
     const message: ClientMessage = {
       type: 'terminal.write',
@@ -457,6 +510,17 @@ export class WebSocketBridge implements TerminalBridge {
           }
         } else {
           console.error('[WebSocketBridge] Server error:', msg.payload.message);
+        }
+        break;
+      }
+
+      case 'sessions.list.result':
+      case 'sessions.clear.result': {
+        const pending = this.pendingRequests.get(msg.requestId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          this.pendingRequests.delete(msg.requestId);
+          pending.resolve(msg.payload);
         }
         break;
       }
