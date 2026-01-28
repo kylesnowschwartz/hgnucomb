@@ -2,7 +2,7 @@
  * Floating terminal panel with xterm.js.
  *
  * Renders left half of screen, wired to WebSocketBridge for real PTY sessions.
- * Press Escape to close.
+ * Close via header X button or grid click-away.
  */
 
 import { useEffect, useRef } from 'react';
@@ -103,17 +103,8 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
     });
     resizeObserver.observe(container);
 
-    // Escape key to close
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-
     // Cleanup
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
       resizeObserver.disconnect();
       disposeOnData.dispose();
       unsubData();
