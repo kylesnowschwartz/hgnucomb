@@ -9,8 +9,10 @@ import { useUIStore } from '@features/controls/uiStore';
 import { useAgentStore, type AgentState } from '@features/agents/agentStore';
 import { agentToSnapshot } from '@features/agents/snapshot';
 import { useEventLogStore } from '@features/events/eventLogStore';
+import { SpawnMenu } from '@features/grid/SpawnMenu';
 import { useShallow } from 'zustand/shallow';
 import { createMcpHandler, type McpHandlerDeps } from './handlers/mcpHandler';
+import type { CellType } from '@shared/types';
 
 function App() {
   const [dimensions, setDimensions] = useState({
@@ -390,11 +392,36 @@ function App() {
     setActiveSession(null);
   }, [selectAgent, setActiveSession]);
 
+  // Spawn agent from menu at selected hex
+  const handleSpawnFromMenu = useCallback((cellType: CellType) => {
+    if (!selectedHex) return;
+    const newAgentId = spawnAgent(selectedHex, cellType);
+    addSpawn(newAgentId, cellType, selectedHex);
+    // Keep hex selected so user can open the panel
+  }, [selectedHex, spawnAgent, addSpawn]);
+
+  // Check if selected hex is empty (no agent there)
+  const selectedHexIsEmpty = useMemo(() => {
+    if (!selectedHex) return false;
+    const allAgents = getAllAgents();
+    return !allAgents.some(a => a.hex.q === selectedHex.q && a.hex.r === selectedHex.r);
+  }, [selectedHex, getAllAgents]);
+
+  // Show spawn menu when empty hex is selected and no terminal panel open
+  const showSpawnMenu = selectedHex && selectedHexIsEmpty && !activeSessionId;
+
   return (
     <>
       <HexGrid width={dimensions.width} height={dimensions.height} />
       <ControlPanel />
       <EventLog />
+      {showSpawnMenu && (
+        <SpawnMenu
+          selectedHex={selectedHex}
+          onSpawn={handleSpawnFromMenu}
+          onCancel={clearSelection}
+        />
+      )}
       {activeSessionId && selectedAgentId && (
         <TerminalPanel sessionId={activeSessionId} onClose={handleCloseTerminal} />
       )}
