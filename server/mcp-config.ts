@@ -51,13 +51,15 @@ export function generateMcpConfig(
   cellType: CellType,
   wsUrl: string = "ws://localhost:3001"
 ): GeneratedMcpConfig {
-  // Absolute path to the MCP server script
-  const mcpServerPath = join(gitRoot, "server", "dist", "mcp.js");
+  // Use tsx to run TypeScript directly (no dist/ build)
+  const serverDir = join(gitRoot, "server");
+  const tsxBin = join(serverDir, "node_modules", ".bin", "tsx");
+  const mcpServerPath = join(serverDir, "mcp.ts");
 
   return {
     mcpServers: {
       hgnucomb: {
-        command: "node",
+        command: tsxBin,
         args: [mcpServerPath],
         env: {
           HGNUCOMB_AGENT_ID: agentId,

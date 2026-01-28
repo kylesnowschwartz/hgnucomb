@@ -3,9 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "bin": {
-    "hgnucomb-mcp": "dist/mcp.js"
-  },
   "scripts": {
     "dev": "tsx --watch index.ts",
     "build": "tsc --noEmit",
