@@ -26,16 +26,24 @@ export type CellType = 'terminal' | 'orchestrator' | 'worker';
 export type AgentStatus = 'idle' | 'working' | 'blocked' | 'offline';
 
 /**
- * Detailed agent status - 7-state model for fine-grained observability.
+ * Detailed agent status - 9-state model for fine-grained observability.
+ *
+ * Lifecycle: pending -> (idle|working) -> ... -> (done|error|cancelled)
+ * Terminal states: done, error, cancelled (no further transitions)
  */
 export type DetailedStatus =
+  | 'pending'        // Spawned, waiting for Claude CLI to boot (~10-30s)
   | 'idle'           // At prompt, waiting for command
   | 'working'        // Actively executing
   | 'waiting_input'  // Needs user to type something
   | 'waiting_permission' // Needs Y/N approval
   | 'done'           // Finished assigned task
   | 'stuck'          // Explicitly requested help
-  | 'error';         // Critical failure
+  | 'error'          // Critical failure
+  | 'cancelled';     // Aborted by user or timeout
+
+/** Terminal states - agent is finished and won't transition further */
+export const TERMINAL_STATUSES: ReadonlySet<DetailedStatus> = new Set(['done', 'error', 'cancelled']);
 
 /**
  * Minimal agent info sent from client when creating a session.

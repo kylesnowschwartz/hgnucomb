@@ -58,15 +58,17 @@ const STATUS_OPACITY: Record<AgentStatus, number> = {
   offline: 0.3,
 };
 
-// Status badge colors - 7-state model
+// Status badge colors - 9-state model
 const DETAILED_STATUS_COLORS: Record<DetailedStatus, string> = {
-  idle: palette.overlay0,           // Gray
-  working: palette.blue,            // Blue
-  waiting_input: palette.yellow,    // Yellow
-  waiting_permission: palette.peach,// Peach (distinct from yellow)
-  done: palette.green,              // Green
-  stuck: palette.maroon,            // Maroon
-  error: palette.red,               // Red
+  pending: palette.surface1,        // Dim gray - spawned, booting
+  idle: palette.overlay0,           // Gray - at prompt
+  working: palette.blue,            // Blue - actively executing
+  waiting_input: palette.yellow,    // Yellow - needs text input
+  waiting_permission: palette.peach,// Peach - needs Y/N approval
+  done: palette.green,              // Green - completed
+  stuck: palette.maroon,            // Maroon - needs help
+  error: palette.red,               // Red - failed
+  cancelled: palette.flamingo,      // Flamingo - aborted/timeout
 };
 
 // ============================================================================

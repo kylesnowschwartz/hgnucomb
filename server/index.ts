@@ -28,6 +28,8 @@ import {
   generateContext,
   writeContextFile,
   cleanupContextFile,
+  ORCHESTRATOR_SYSTEM_PROMPT,
+  WORKER_SYSTEM_PROMPT,
 } from "./context.js";
 import {
   createWorktree,
@@ -182,12 +184,23 @@ Work autonomously. Do not ask questions.`;
       // Permission strategy: full bypass since agents run in isolated worktrees.
       // For finer control later, consider: per-agent --allowedTools/--disallowedTools,
       // or --settings with a generated settings.json for granular tool permissions.
+      const isOrchestrator = agentSnapshot?.cellType === "orchestrator";
+      const isWorker = agentSnapshot?.cellType === "worker";
+
+      // Each agent type gets a role-specific system prompt
+      const systemPrompt = isOrchestrator
+        ? ORCHESTRATOR_SYSTEM_PROMPT
+        : isWorker
+          ? WORKER_SYSTEM_PROMPT
+          : undefined;
+
       const args: string[] | undefined = isClaudeAgent
         ? [
             ...(effectivePrompt ? [effectivePrompt] : []),
             "--model", modelFlag,
             "--allowedTools", "mcp__hgnucomb__*",
             "--dangerously-skip-permissions",
+            ...(systemPrompt ? ["--append-system-prompt", systemPrompt] : []),
           ]
         : undefined;
 
@@ -203,7 +216,7 @@ Work autonomously. Do not ask questions.`;
           taskDetails,
           initialPrompt,
           instructions,
-          detailedStatus: 'idle',
+          detailedStatus: 'pending',
         });
       }
 

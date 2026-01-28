@@ -680,7 +680,7 @@ mcpServer.tool(
   "Wait for a worker to complete. Polls status every 2s until done/error or timeout. Returns final status and any messages. Use this instead of get_messages to wait for worker results.",
   {
     workerId: z.string().describe("Worker agent ID to wait for"),
-    timeout: z.number().optional().default(120000).describe("Timeout in ms (default: 120000, max: 300000)"),
+    timeout: z.number().optional().default(300000).describe("Timeout in ms (default: 300000/5min, max: 600000/10min)"),
     pollInterval: z.number().optional().default(2000).describe("Poll interval in ms (default: 2000, min: 500)"),
   },
   async ({ workerId, timeout, pollInterval }) => {
@@ -697,7 +697,7 @@ mcpServer.tool(
       };
     }
 
-    const effectiveTimeout = Math.min(timeout ?? 120000, 300000);
+    const effectiveTimeout = Math.min(timeout ?? 300000, 600000);
     const interval = Math.max(pollInterval ?? 2000, 500);
     const deadline = Date.now() + effectiveTimeout;
 
@@ -718,8 +718,11 @@ mcpServer.tool(
 
         console.error(`[MCP] await_worker: worker ${workerId} status=${statusResult.status}`);
 
-        // Worker finished - get any messages
-        if (statusResult.status === 'done' || statusResult.status === 'error') {
+        // Worker finished - done, error, or cancelled are terminal states
+        const isTerminal = statusResult.status === 'done' ||
+                          statusResult.status === 'error' ||
+                          statusResult.status === 'cancelled';
+        if (isTerminal) {
           console.error(`[MCP] await_worker: worker ${workerId} completed with status=${statusResult.status}`);
 
           // Fetch messages from inbox

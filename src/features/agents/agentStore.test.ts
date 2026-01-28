@@ -95,11 +95,11 @@ describe('agentStore', () => {
       expect(agent?.taskDetails).toBe('Check auth module');
     });
 
-    it('initializes with idle status', () => {
+    it('initializes with pending status', () => {
       const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 });
       const agent = useAgentStore.getState().getAgent(id);
       expect(agent?.status).toBe('idle');
-      expect(agent?.detailedStatus).toBe('idle');
+      expect(agent?.detailedStatus).toBe('pending');
     });
   });
 
@@ -141,7 +141,7 @@ describe('agentStore', () => {
     it('returns previous status', () => {
       const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 });
       const previous = useAgentStore.getState().updateDetailedStatus(id, 'working');
-      expect(previous).toBe('idle');
+      expect(previous).toBe('pending');
     });
 
     it('updates status correctly', () => {
@@ -161,7 +161,8 @@ describe('agentStore', () => {
     it('tracks status transitions correctly', () => {
       const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 });
 
-      expect(useAgentStore.getState().updateDetailedStatus(id, 'working')).toBe('idle');
+      // pending -> working -> waiting_input -> done
+      expect(useAgentStore.getState().updateDetailedStatus(id, 'working')).toBe('pending');
       expect(useAgentStore.getState().updateDetailedStatus(id, 'waiting_input')).toBe('working');
       expect(useAgentStore.getState().updateDetailedStatus(id, 'done')).toBe('waiting_input');
     });
