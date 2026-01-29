@@ -160,7 +160,7 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
 
       // Build CLI args for Claude agents (pre-approve MCP tools)
       // Pattern: mcp__<server>__<tool> - use * for all tools from server
-      // For workers: use instructions as the prompt if provided, otherwise build default
+      // For workers and orchestrators: use instructions as the prompt if provided
       let effectivePrompt = initialPrompt;
 
       if (agentSnapshot?.cellType === 'worker') {
@@ -178,6 +178,11 @@ When complete:
 2. Call report_status with state="done"
 
 Work autonomously. Do not ask questions.`;
+        }
+      } else if (agentSnapshot?.cellType === 'orchestrator') {
+        if (instructions) {
+          // Parent orchestrator provided explicit instructions - use as orchestrator prompt
+          effectivePrompt = instructions;
         }
       }
 
