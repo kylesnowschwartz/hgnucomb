@@ -8,7 +8,7 @@
  */
 
 import { execSync } from "child_process";
-import { existsSync, mkdirSync, rmSync } from "fs";
+import { existsSync, mkdirSync, rmSync, symlinkSync } from "fs";
 import { join } from "path";
 import { generateMcpConfig, writeMcpConfig } from "./mcp-config.js";
 import type { CellType } from "@shared/types.ts";
@@ -143,6 +143,21 @@ export function createWorktree(targetDir: string, agentId: string, cellType: Cel
   const mcpConfig = generateMcpConfig(gitRoot, agentId, cellType, wsUrl);
   writeMcpConfig(worktreePath, mcpConfig);
   console.log(`[Worktree] Generated .mcp.json with absolute paths for ${cellType}`);
+
+  // Symlink shared directories so worktree inherits local config, research, reference repos, and task db
+  const sharedDirs = [".claude", ".agent-history", ".cloned-sources", ".beads-lite"];
+  for (const dir of sharedDirs) {
+    const sourceDir = join(gitRoot, dir);
+    if (existsSync(sourceDir)) {
+      const targetDir = join(worktreePath, dir);
+      try {
+        symlinkSync(sourceDir, targetDir);
+        console.log(`[Worktree] Symlinked ${dir}/`);
+      } catch (err) {
+        console.warn(`[Worktree] Failed to symlink ${dir}/: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
 
   console.log(`[Worktree] Created: ${worktreePath} on branch ${branchName}`);
   return { success: true, worktreePath, branchName };

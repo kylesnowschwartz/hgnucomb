@@ -45,6 +45,10 @@ const clientSessions = new Map<WebSocket, Set<string>>();
 // Track sessionId -> agent metadata for persistence and cleanup
 const sessionMetadata = new Map<string, StoredAgentMetadata>();
 
+// Track sessionId -> currently attached browser client
+// Updated on session create and on reconnect (sessions.list)
+const sessionClient = new Map<string, WebSocket>();
+
 // ============================================================================
 // MCP Routing
 // ============================================================================
@@ -228,21 +232,33 @@ Work autonomously. Do not ask questions.`;
       }
       sessions.add(sessionId);
 
+      // Track which client owns this session (for reconnect support)
+      sessionClient.set(sessionId, ws);
+
       // Wire up data and exit listeners
+      // IMPORTANT: Don't capture `ws` directly - look up current client dynamically
+      // This allows reconnected clients to receive output from existing sessions
       session.onData((data) => {
-        send(ws, {
-          type: "terminal.data",
-          payload: { sessionId, data },
-        });
+        const client = sessionClient.get(sessionId);
+        if (client && client.readyState === WebSocket.OPEN) {
+          send(client, {
+            type: "terminal.data",
+            payload: { sessionId, data },
+          });
+        }
       });
 
       session.onExit((exitCode) => {
-        send(ws, {
-          type: "terminal.exit",
-          payload: { sessionId, exitCode },
-        });
+        const client = sessionClient.get(sessionId);
+        if (client && client.readyState === WebSocket.OPEN) {
+          send(client, {
+            type: "terminal.exit",
+            payload: { sessionId, exitCode },
+          });
+        }
         // Clean up tracking
         sessions?.delete(sessionId);
+        sessionClient.delete(sessionId);
         // Clean up context file and worktree if this was an agent
         const metadata = sessionMetadata.get(sessionId);
         if (metadata) {
@@ -319,6 +335,7 @@ Work autonomously. Do not ask questions.`;
       const disposed = manager.dispose(sessionId);
       if (disposed) {
         clientSessions.get(ws)?.delete(sessionId);
+        sessionClient.delete(sessionId);
         // Clean up context file and worktree if this was an agent
         const metadata = sessionMetadata.get(sessionId);
         if (metadata) {
@@ -357,6 +374,10 @@ Work autonomously. Do not ask questions.`;
         const session = manager.get(sessionId);
         if (!session) continue;
 
+        // Re-attach this client to the session (critical for reconnect)
+        // This allows the session's onData callback to send to the new client
+        sessionClient.set(sessionId, ws);
+
         sessions.push({
           sessionId,
           agent: sessionMetadata.get(sessionId) ?? null,
@@ -367,12 +388,13 @@ Work autonomously. Do not ask questions.`;
         });
       }
 
+      console.log(`[Sessions] Listed ${sessions.length} active session(s), re-attached to client`);
+
       send(ws, {
         type: "sessions.list.result",
         requestId: msg.requestId,
         payload: { sessions },
       });
-      console.log(`[Sessions] Listed ${sessions.length} active session(s)`);
       break;
     }
 
@@ -386,6 +408,7 @@ Work autonomously. Do not ask questions.`;
         removeWorktree(process.cwd(), metadata.agentId);
       }
       sessionMetadata.clear();
+      sessionClient.clear();
 
       // Dispose all PTY sessions
       manager.disposeAll();
