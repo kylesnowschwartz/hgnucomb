@@ -498,6 +498,72 @@ export interface McpKillWorkerResponse {
 }
 
 // ============================================================================
+// MCP List Worker Files Types
+// ============================================================================
+
+export interface WorkerFileChange {
+  path: string;
+  status: 'A' | 'M' | 'D' | 'R' | 'C' | 'U';  // Added, Modified, Deleted, Renamed, Copied, Unmerged
+  additions: number;
+  deletions: number;
+}
+
+export interface McpListWorkerFilesRequest {
+  type: 'mcp.listWorkerFiles';
+  requestId: string;
+  payload: {
+    callerId: string;
+    workerId: string;
+  };
+}
+
+export interface McpListWorkerFilesResponse {
+  type: 'mcp.listWorkerFiles.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    files?: WorkerFileChange[];
+    summary?: {
+      filesChanged: number;
+      totalAdditions: number;
+      totalDeletions: number;
+    };
+    error?: string;
+  };
+}
+
+// ============================================================================
+// MCP List Worker Commits Types
+// ============================================================================
+
+export interface WorkerCommit {
+  hash: string;
+  message: string;
+  author: string;
+  date: string;
+  filesChanged: number;
+}
+
+export interface McpListWorkerCommitsRequest {
+  type: 'mcp.listWorkerCommits';
+  requestId: string;
+  payload: {
+    callerId: string;
+    workerId: string;
+  };
+}
+
+export interface McpListWorkerCommitsResponse {
+  type: 'mcp.listWorkerCommits.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    commits?: WorkerCommit[];
+    error?: string;
+  };
+}
+
+// ============================================================================
 // MCP Result Types (Worker -> Orchestrator)
 // ============================================================================
 
@@ -592,6 +658,8 @@ export type McpRequest =
   | McpGetMessagesRequest
   | McpGetWorkerStatusRequest
   | McpGetWorkerDiffRequest
+  | McpListWorkerFilesRequest
+  | McpListWorkerCommitsRequest
   | McpMergeWorkerChangesRequest
   | McpCleanupWorkerWorktreeRequest
   | McpKillWorkerRequest;
@@ -605,6 +673,8 @@ export type McpResponse =
   | McpGetMessagesResponse
   | McpGetWorkerStatusResponse
   | McpGetWorkerDiffResponse
+  | McpListWorkerFilesResponse
+  | McpListWorkerCommitsResponse
   | McpMergeWorkerChangesResponse
   | McpCleanupWorkerWorktreeResponse
   | McpKillWorkerResponse;

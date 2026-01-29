@@ -142,6 +142,8 @@ Agents interact with the grid via MCP:
 | `report_result` | Send task result to parent orchestrator (workers only) |
 | `get_messages` | Get inbox messages (use for broadcasts, not worker results) |
 | `get_worker_diff` | Get diff of worker's changes vs main (orchestrators only) |
+| `list_worker_files` | List files changed by worker with per-file stats (orchestrators only) |
+| `list_worker_commits` | List commits made by worker since branching (orchestrators only) |
 | `merge_worker_changes` | Squash-merge worker branch into main (orchestrators only) |
 | `cleanup_worker_worktree` | Remove worker's git worktree and branch (orchestrators only) |
 | `kill_worker` | Forcibly terminate a worker's PTY session (orchestrators only) |

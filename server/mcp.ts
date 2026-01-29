@@ -28,6 +28,8 @@ import type {
   McpGetMessagesResponse,
   McpGetWorkerStatusResponse,
   McpGetWorkerDiffResponse,
+  McpListWorkerFilesResponse,
+  McpListWorkerCommitsResponse,
   McpMergeWorkerChangesResponse,
   McpCleanupWorkerWorktreeResponse,
   McpKillWorkerResponse,
@@ -824,6 +826,136 @@ mcpServer.tool(
             text: `${header}${diff}`,
           },
         ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Tool: list_worker_files
+mcpServer.tool(
+  "list_worker_files",
+  "List files changed by a worker since branching from main, with per-file additions/deletions. Orchestrators only.",
+  {
+    workerId: z.string().describe("The agent ID of the worker to list files for"),
+  },
+  async ({ workerId }) => {
+    // Permission check: only orchestrators can view worker files
+    if (!canSpawn()) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Permission denied: Only orchestrators can list worker files. You are a ${CELL_TYPE}.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    try {
+      const result = await sendRequest<McpListWorkerFilesResponse["payload"]>("mcp.listWorkerFiles", {
+        workerId,
+      });
+
+      if (!result.success) {
+        return {
+          content: [{ type: "text", text: `Failed to list worker files: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      const files = result.files ?? [];
+      const summary = result.summary;
+
+      if (files.length === 0) {
+        return {
+          content: [{ type: "text", text: "No files changed (worker branch is identical to main)" }],
+        };
+      }
+
+      // Format output as a table
+      const header = summary
+        ? `[${summary.filesChanged} files: +${summary.totalAdditions} -${summary.totalDeletions}]\n\n`
+        : "";
+      const fileList = files
+        .map((f) => `${f.status}\t+${f.additions}\t-${f.deletions}\t${f.path}`)
+        .join("\n");
+
+      return {
+        content: [{ type: "text", text: `${header}${fileList}` }],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Tool: list_worker_commits
+mcpServer.tool(
+  "list_worker_commits",
+  "List commits made by a worker since branching from main. Orchestrators only.",
+  {
+    workerId: z.string().describe("The agent ID of the worker to list commits for"),
+  },
+  async ({ workerId }) => {
+    // Permission check: only orchestrators can view worker commits
+    if (!canSpawn()) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Permission denied: Only orchestrators can list worker commits. You are a ${CELL_TYPE}.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    try {
+      const result = await sendRequest<McpListWorkerCommitsResponse["payload"]>("mcp.listWorkerCommits", {
+        workerId,
+      });
+
+      if (!result.success) {
+        return {
+          content: [{ type: "text", text: `Failed to list worker commits: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      const commits = result.commits ?? [];
+
+      if (commits.length === 0) {
+        return {
+          content: [{ type: "text", text: "No commits (worker has not committed any changes)" }],
+        };
+      }
+
+      // Format output as a commit log
+      const commitList = commits
+        .map((c) => `${c.hash} ${c.message} (${c.filesChanged} files, ${c.date})`)
+        .join("\n");
+
+      return {
+        content: [{ type: "text", text: `[${commits.length} commits]\n\n${commitList}` }],
       };
     } catch (err) {
       return {

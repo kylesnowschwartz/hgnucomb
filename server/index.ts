@@ -21,6 +21,8 @@ import type {
   McpGetMessagesRequest,
   McpGetWorkerStatusRequest,
   McpGetWorkerDiffRequest,
+  McpListWorkerFilesRequest,
+  McpListWorkerCommitsRequest,
   McpMergeWorkerChangesRequest,
   McpCleanupWorkerWorktreeRequest,
   McpCleanupWorkerWorktreeResponse,
@@ -105,6 +107,113 @@ function getWorkerDiff(gitRoot: string, workerId: string): { diff: string; stats
     diff,
     stats: { files, insertions, deletions },
   };
+}
+
+/**
+ * Get list of files changed by a worker since branching from main.
+ * Uses git diff --numstat for per-file additions/deletions.
+ */
+function listWorkerFiles(gitRoot: string, workerId: string): {
+  files: { path: string; status: string; additions: number; deletions: number }[];
+  summary: { filesChanged: number; totalAdditions: number; totalDeletions: number };
+} | null {
+  // Get numstat for additions/deletions per file
+  const numstat = gitExec(["diff", "main...HEAD", "--numstat"], gitRoot);
+  if (numstat === null) {
+    console.warn(`[Git] Failed to get numstat for worker ${workerId}`);
+    return null;
+  }
+
+  // Get name-status for A/M/D classification
+  const nameStatus = gitExec(["diff", "main...HEAD", "--name-status"], gitRoot);
+  if (nameStatus === null) {
+    console.warn(`[Git] Failed to get name-status for worker ${workerId}`);
+    return null;
+  }
+
+  // Parse name-status into a map: path -> status
+  const statusMap = new Map<string, string>();
+  for (const line of nameStatus.split("\n").filter((l) => l.trim())) {
+    const parts = line.split("\t");
+    if (parts.length >= 2) {
+      const status = parts[0].charAt(0); // First char: A, M, D, R, C, U
+      const path = parts[parts.length - 1]; // Last part is always the (new) path
+      statusMap.set(path, status);
+    }
+  }
+
+  // Parse numstat: additions, deletions, path (tab-separated)
+  const files: { path: string; status: string; additions: number; deletions: number }[] = [];
+  let totalAdditions = 0;
+  let totalDeletions = 0;
+
+  for (const line of numstat.split("\n").filter((l) => l.trim())) {
+    const parts = line.split("\t");
+    if (parts.length >= 3) {
+      // Binary files show "-" for additions/deletions
+      const additions = parts[0] === "-" ? 0 : parseInt(parts[0]) || 0;
+      const deletions = parts[1] === "-" ? 0 : parseInt(parts[1]) || 0;
+      const path = parts[2];
+      const status = statusMap.get(path) || "M";
+
+      files.push({ path, status, additions, deletions });
+      totalAdditions += additions;
+      totalDeletions += deletions;
+    }
+  }
+
+  return {
+    files,
+    summary: {
+      filesChanged: files.length,
+      totalAdditions,
+      totalDeletions,
+    },
+  };
+}
+
+/**
+ * Get list of commits made by a worker since branching from main.
+ */
+function listWorkerCommits(gitRoot: string, workerId: string): {
+  commits: { hash: string; message: string; author: string; date: string; filesChanged: number }[];
+} | null {
+  // Format: hash|subject|author|ISO date
+  // Using %x00 as delimiter to handle messages with special chars
+  const logOutput = gitExec(
+    ["log", "main..HEAD", "--format=%h%x00%s%x00%an%x00%aI", "--"],
+    gitRoot
+  );
+  if (logOutput === null) {
+    console.warn(`[Git] Failed to get log for worker ${workerId}`);
+    return null;
+  }
+
+  if (!logOutput.trim()) {
+    return { commits: [] };
+  }
+
+  const commits: { hash: string; message: string; author: string; date: string; filesChanged: number }[] = [];
+
+  for (const line of logOutput.split("\n").filter((l) => l.trim())) {
+    const parts = line.split("\x00");
+    if (parts.length >= 4) {
+      const hash = parts[0];
+      const message = parts[1];
+      const author = parts[2];
+      const date = parts[3];
+
+      // Get file count for this commit
+      const filesOutput = gitExec(["show", hash, "--name-only", "--format="], gitRoot);
+      const filesChanged = filesOutput
+        ? filesOutput.split("\n").filter((f) => f.trim()).length
+        : 0;
+
+      commits.push({ hash, message, author, date, filesChanged });
+    }
+  }
+
+  return { commits };
 }
 
 /**
@@ -722,6 +831,93 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
         },
       }));
       console.log(`[MCP] Diff retrieved for worker ${workerId}: ${diffResult.stats.files} files`);
+      break;
+    }
+
+    case "mcp.listWorkerFiles": {
+      // Server-side handling: list files changed by worker
+      const req = msg as McpListWorkerFilesRequest;
+      const workerId = req.payload.workerId;
+      const gitRoot = getGitRoot(process.cwd());
+
+      if (!gitRoot) {
+        ws.send(JSON.stringify({
+          type: "mcp.listWorkerFiles.result",
+          requestId: req.requestId,
+          payload: {
+            success: false,
+            error: "Not in a git repository",
+          },
+        }));
+        break;
+      }
+
+      const filesResult = listWorkerFiles(gitRoot, workerId);
+      if (!filesResult) {
+        ws.send(JSON.stringify({
+          type: "mcp.listWorkerFiles.result",
+          requestId: req.requestId,
+          payload: {
+            success: false,
+            error: `Failed to list files for worker ${workerId}`,
+          },
+        }));
+        break;
+      }
+
+      ws.send(JSON.stringify({
+        type: "mcp.listWorkerFiles.result",
+        requestId: req.requestId,
+        payload: {
+          success: true,
+          files: filesResult.files,
+          summary: filesResult.summary,
+        },
+      }));
+      console.log(`[MCP] Files listed for worker ${workerId}: ${filesResult.summary.filesChanged} files`);
+      break;
+    }
+
+    case "mcp.listWorkerCommits": {
+      // Server-side handling: list commits made by worker
+      const req = msg as McpListWorkerCommitsRequest;
+      const workerId = req.payload.workerId;
+      const gitRoot = getGitRoot(process.cwd());
+
+      if (!gitRoot) {
+        ws.send(JSON.stringify({
+          type: "mcp.listWorkerCommits.result",
+          requestId: req.requestId,
+          payload: {
+            success: false,
+            error: "Not in a git repository",
+          },
+        }));
+        break;
+      }
+
+      const commitsResult = listWorkerCommits(gitRoot, workerId);
+      if (!commitsResult) {
+        ws.send(JSON.stringify({
+          type: "mcp.listWorkerCommits.result",
+          requestId: req.requestId,
+          payload: {
+            success: false,
+            error: `Failed to list commits for worker ${workerId}`,
+          },
+        }));
+        break;
+      }
+
+      ws.send(JSON.stringify({
+        type: "mcp.listWorkerCommits.result",
+        requestId: req.requestId,
+        payload: {
+          success: true,
+          commits: commitsResult.commits,
+        },
+      }));
+      console.log(`[MCP] Commits listed for worker ${workerId}: ${commitsResult.commits.length} commits`);
       break;
     }
 
