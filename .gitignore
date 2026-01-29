@@ -33,3 +33,4 @@ dist-ssr
 *.sln
 *.sw?
 src/generated/
+.beads-lite/
