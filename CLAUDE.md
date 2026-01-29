@@ -88,6 +88,9 @@ server/
   worktree.ts         # Git worktree creation/cleanup for agent isolation
   context.ts          # Context JSON generation for spawned agents
   mcp-config.ts       # Dynamic .mcp.json generation for worktrees
+  plugins/            # Claude Code plugins for spawned agents
+    worker/           # Worker-specific hooks (e.g., ensure report_result before exit)
+    orchestrator/     # Orchestrator-specific hooks (reserved for future)
 
 .agent-history/       # AI-generated docs (plans, research, context packets)
 .cloned-sources/      # Upstream repos for reference (gitignored)
@@ -176,6 +179,51 @@ Reporting `done` prematurely (e.g., right after spawning workers) is semanticall
 - `get_grid_state` supports `maxDistance` filter for nearby agents
 - `broadcast` sends to agents within specified radius
 - Parent-child relationships tracked and visualized as edges
+
+## Claude Code Plugins (server/plugins/)
+
+Spawned agents receive custom Claude Code plugins via `--plugin-dir` flag. This enables system-level enforcement of agent behavior.
+
+**Plugin structure:**
+```
+server/plugins/worker/
+  .claude-plugin/
+    plugin.json           # name, version, description, author
+  hooks/
+    hooks.json            # Hook configuration
+    scripts/
+      ensure-report-result.sh
+```
+
+**Worker Stop hook** (`server/plugins/worker/hooks/scripts/ensure-report-result.sh`):
+- Blocks workers from exiting until they call `report_result`
+- Checks transcript for actual `"name":"mcp__hgnucomb__report_result"` tool_use
+- Enforces result delivery at system level (not just instructions)
+
+**JSON API Contract (critical):**
+```bash
+# CORRECT: exit 0 + stdout for decisions
+cat <<EOF
+{"decision": "block", "reason": "Must call report_result first"}
+EOF
+exit 0
+
+# WRONG: exit 2 + stderr causes JSON to be ignored
+cat >&2 <<EOF
+{"decision": "block", "reason": "..."}
+EOF
+exit 2  # Claude ignores JSON, falls back to text
+```
+
+Per Claude Code docs: "JSON output is only processed when the hook exits with code 0"
+
+**Hook types available:** SessionStart, Stop, PreToolUse, PostToolUse, UserPromptSubmit, Notification, PermissionRequest, PreCompact, SubagentStop, SessionEnd
+
+**Adding new hooks:**
+1. Create plugin structure in `server/plugins/<agent-type>/`
+2. Validate with `claude plugin validate <path>`
+3. Hook scripts receive JSON on stdin with `transcript_path`, `session_id`, etc.
+4. Output JSON to stdout with `exit 0` for decisions
 
 ## Theme System
 
