@@ -1,0 +1,8 @@
+{
+  "name": "hgnucomb-worker",
+  "version": "1.0.0",
+  "description": "hgnucomb worker agent enforcement hooks - ensures workers report results before exiting",
+  "author": {
+    "name": "hgnucomb"
+  }
+}

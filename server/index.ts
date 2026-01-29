@@ -43,6 +43,7 @@ import {
   getGitRoot,
 } from "./worktree.js";
 import { execSync } from "child_process";
+import { join } from "path";
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const manager = new TerminalSessionManager();
@@ -334,6 +335,13 @@ Work autonomously. Do not ask questions.`;
           ? WORKER_SYSTEM_PROMPT
           : undefined;
 
+      // Compute plugin path for agent hooks (e.g., worker Stop hook enforcement)
+      // Plugins are at server/plugins/<cellType>/ in the main repo (not worktree)
+      const mainRepoRoot = getGitRoot(cwd ?? process.cwd());
+      const pluginDir = isClaudeAgent && mainRepoRoot
+        ? join(mainRepoRoot, "server", "plugins", agentSnapshot.cellType)
+        : undefined;
+
       const args: string[] | undefined = isClaudeAgent
         ? [
             ...(effectivePrompt ? [effectivePrompt] : []),
@@ -341,6 +349,7 @@ Work autonomously. Do not ask questions.`;
             "--allowedTools", "mcp__hgnucomb__*",
             "--dangerously-skip-permissions",
             ...(systemPrompt ? ["--append-system-prompt", systemPrompt] : []),
+            ...(pluginDir ? ["--plugin-dir", pluginDir] : []),
           ]
         : undefined;
 

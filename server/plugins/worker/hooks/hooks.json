@@ -1,0 +1,16 @@
+{
+  "description": "Worker Stop hook - blocks exit until report_result is called",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/ensure-report-result.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

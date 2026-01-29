@@ -1,0 +1,8 @@
+{
+  "name": "hgnucomb-orchestrator",
+  "version": "1.0.0",
+  "description": "hgnucomb orchestrator agent hooks (reserved for future use)",
+  "author": {
+    "name": "hgnucomb"
+  }
+}
