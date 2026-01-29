@@ -198,7 +198,7 @@ export function HexGrid({
       setScale(newScale);
       setPosition(newPos);
     },
-    [scale, position]
+    [scale, position, setScale, setPosition]
   );
 
   /**
@@ -208,7 +208,7 @@ export function HexGrid({
     const stage = e.target.getStage();
     if (!stage) return;
     setPosition({ x: stage.x(), y: stage.y() });
-  }, []);
+  }, [setPosition]);
 
   return (
     <Stage

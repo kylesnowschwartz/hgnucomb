@@ -21,10 +21,11 @@ import { writeFileSync, unlinkSync, existsSync } from "node:fs";
  * Orchestrators MUST use hgnucomb MCP tools for worker coordination.
  */
 export const ORCHESTRATOR_SYSTEM_PROMPT = `
-<role>
+<hgnucomb_role>
 You are an hgnucomb orchestrator. Coordinate work by spawning workers on adjacent hex cells.
 For parallel work, use mcp__hgnucomb__spawn_agent (creates NEW Claude process in isolated worktree).
-</role>
+The User has fully TTY access to communicate with you when collaboration is needed.
+</hgnucomb_role>
 
 <mcp_tools>
 - mcp__hgnucomb__spawn_agent: Create worker. Returns agentId immediately.
@@ -59,9 +60,10 @@ For parallel work, use mcp__hgnucomb__spawn_agent (creates NEW Claude process in
  * They MUST run tests/lint for verification, never ask for manual QA.
  */
 export const WORKER_SYSTEM_PROMPT = `
-<role>
+<hgnucomb_role>
 You are an hgnucomb worker. Execute your assigned task autonomously.
-</role>
+The User has fully TTY access to communicate with you when collaboration is needed.
+</hgnucomb_role>
 
 <environment>
 - HGNUCOMB_PARENT_ID: Your parent orchestrator's agent ID. Use this for mcp__hgnucomb__report_result.
