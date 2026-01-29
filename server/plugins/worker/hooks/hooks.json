@@ -1,12 +1,12 @@
 {
-  "description": "Worker Stop hook - blocks exit until report_result is called",
+  "description": "Worker Stop hook - blocks exit if uncommitted changes or report_result not called",
   "hooks": {
     "Stop": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/ensure-report-result.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/ensure-clean-exit.sh",
             "timeout": 5
           }
         ]

@@ -1,8 +1,10 @@
 #!/bin/bash
-# ensure-report-result.sh
+# ensure-clean-exit.sh
 #
 # Stop hook for hgnucomb workers.
-# Blocks exit until worker calls report_result to notify parent orchestrator.
+# Blocks exit if:
+#   1. Uncommitted changes exist in worktree
+#   2. Worker hasn't called report_result to notify parent orchestrator
 #
 # Exit codes:
 #   0 - All responses use exit 0 with JSON to stdout (per Claude Code JSON API contract)
@@ -21,7 +23,22 @@ if [ -z "${HGNUCOMB_PARENT_ID:-}" ]; then
   exit 0
 fi
 
-# Check if report_result was called in the transcript
+# Check 1: Uncommitted changes in worktree
+# Workers have HGNUCOMB_WORKTREE set to their isolated git worktree
+if [ -n "${HGNUCOMB_WORKTREE:-}" ]; then
+  # Fail-open: if git fails, allow exit (|| true + check output)
+  uncommitted=$(git -C "$HGNUCOMB_WORKTREE" status --porcelain 2>/dev/null || true)
+  if [ -n "$uncommitted" ]; then
+    # Escape newlines for JSON
+    escaped_uncommitted=$(echo "$uncommitted" | sed ':a;N;$!ba;s/\n/\\n/g')
+    cat <<EOF
+{"decision": "block", "reason": "Uncommitted changes in worktree:\\n${escaped_uncommitted}\\n\\nCommit your work before exiting."}
+EOF
+    exit 0
+  fi
+fi
+
+# Check 2: report_result must be called
 # The transcript is JSONL; MCP tool calls appear as {"type":"tool_use","name":"mcp__hgnucomb__report_result",...}
 if grep -q '"name":"mcp__hgnucomb__report_result"' "$transcript_path" 2>/dev/null; then
   exit 0
