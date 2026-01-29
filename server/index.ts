@@ -20,6 +20,8 @@ import type {
   McpReportResultRequest,
   McpGetMessagesRequest,
   McpGetWorkerStatusRequest,
+  McpGetWorkerDiffRequest,
+  McpMergeWorkerChangesRequest,
   InboxUpdatedMessage,
   StoredAgentMetadata,
 } from "@shared/protocol.ts";
@@ -34,10 +36,122 @@ import {
 import {
   createWorktree,
   removeWorktree,
+  getGitRoot,
 } from "./worktree.js";
+import { execSync } from "child_process";
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const manager = new TerminalSessionManager();
+
+// ============================================================================
+// Git Helper Functions
+// ============================================================================
+
+/**
+ * Execute git command safely, returning null on error.
+ */
+function gitExec(args: string[], cwd: string): string | null {
+  try {
+    const result = execSync(`git ${args.join(" ")}`, {
+      cwd,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    return result.trim();
+  } catch (err) {
+    console.warn(`[Git] Command failed: git ${args.join(" ")} - ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+/**
+ * Get diff between main and a worker branch.
+ * Returns { diff, stats } or null on error.
+ */
+function getWorkerDiff(gitRoot: string, workerId: string): { diff: string; stats: { files: number; insertions: number; deletions: number } } | null {
+  const branchName = `hgnucomb/${workerId}`;
+
+  // Get the diff
+  const diff = gitExec(["diff", "main...HEAD", "--"], gitRoot);
+  if (diff === null) {
+    console.warn(`[Git] Failed to get diff for ${branchName}`);
+    return null;
+  }
+
+  // Get stats: number of files changed, insertions, deletions
+  const statsOutput = gitExec(["diff", "main...HEAD", "--stat"], gitRoot);
+  if (statsOutput === null) {
+    console.warn(`[Git] Failed to get diff stats for ${branchName}`);
+    return { diff, stats: { files: 0, insertions: 0, deletions: 0 } };
+  }
+
+  // Parse stats from output like: "file1.ts | 5 ++", "file2.ts | 3 --"
+  // Last line is usually a summary like: "2 files changed, 8 insertions(+), 0 deletions(-)"
+  const lines = statsOutput.split("\n");
+  const summary = lines[lines.length - 2] || "";
+  const statsRegex = /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/;
+  const match = summary.match(statsRegex);
+
+  const files = match ? parseInt(match[1]) || 0 : 0;
+  const insertions = match ? parseInt(match[2]) || 0 : 0;
+  const deletions = match ? parseInt(match[3]) || 0 : 0;
+
+  return {
+    diff,
+    stats: { files, insertions, deletions },
+  };
+}
+
+/**
+ * Merge worker branch into main using squash merge.
+ * Returns commit hash or null on error.
+ */
+function mergeWorkerChanges(gitRoot: string, workerId: string): { commitHash: string; filesChanged: number } | null {
+  const branchName = `hgnucomb/${workerId}`;
+
+  // Ensure we're on main branch
+  const currentBranch = gitExec(["rev-parse", "--abbrev-ref", "HEAD"], gitRoot);
+  if (currentBranch !== "main") {
+    console.warn(`[Git] Not on main branch, switching...`);
+    const switchResult = gitExec(["checkout", "main"], gitRoot);
+    if (switchResult === null) {
+      console.warn(`[Git] Failed to switch to main branch`);
+      return null;
+    }
+  }
+
+  // Perform squash merge
+  const mergeResult = gitExec(["merge", "--squash", branchName], gitRoot);
+  if (mergeResult === null) {
+    console.warn(`[Git] Squash merge failed for ${branchName}`);
+    return null;
+  }
+
+  // Get file count for commit message
+  const statusOutput = gitExec(["status", "--short"], gitRoot);
+  const filesChanged = statusOutput ? statusOutput.split("\n").filter((line) => line.trim()).length : 0;
+
+  // Auto-commit the squashed merge with descriptive message
+  const commitMessage = `Merge worker changes from ${workerId}\n\n${filesChanged} files changed`;
+  const commitResult = gitExec(["commit", "-m", commitMessage], gitRoot);
+  if (commitResult === null) {
+    // Might fail if no changes - that's OK
+    console.log(`[Git] Commit after squash merge: no new changes`);
+    // Get current HEAD as commit hash anyway
+    const headHash = gitExec(["rev-parse", "HEAD"], gitRoot);
+    return headHash ? { commitHash: headHash, filesChanged } : null;
+  }
+
+  // Get the new commit hash
+  const commitHash = gitExec(["rev-parse", "HEAD"], gitRoot);
+  if (!commitHash) {
+    console.warn(`[Git] Failed to get commit hash after merge`);
+    return null;
+  }
+
+  console.log(`[Git] Squash merged ${branchName} into main: ${commitHash.slice(0, 7)} (${filesChanged} files)`);
+  return { commitHash, filesChanged };
+}
 
 // Track which sessions belong to which client for cleanup
 const clientSessions = new Map<WebSocket, Set<string>>();
@@ -537,6 +651,96 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       // Browser notifying that an agent's inbox has new messages
       const { agentId, messageCount, latestTimestamp } = msg.payload;
       notifyAgentInbox(agentId, messageCount, latestTimestamp);
+      break;
+    }
+
+    case "mcp.getWorkerDiff": {
+      // Server-side handling: get diff between main and worker branch
+      const req = msg as McpGetWorkerDiffRequest;
+      const workerId = req.payload.workerId;
+      const gitRoot = getGitRoot(process.cwd());
+
+      if (!gitRoot) {
+        ws.send(JSON.stringify({
+          type: "mcp.getWorkerDiff.result",
+          requestId: req.requestId,
+          payload: {
+            success: false,
+            error: "Not in a git repository",
+          },
+        }));
+        break;
+      }
+
+      // Get diff from worker's branch
+      const diffResult = getWorkerDiff(gitRoot, workerId);
+      if (!diffResult) {
+        ws.send(JSON.stringify({
+          type: "mcp.getWorkerDiff.result",
+          requestId: req.requestId,
+          payload: {
+            success: false,
+            error: `Failed to get diff for worker ${workerId}`,
+          },
+        }));
+        break;
+      }
+
+      ws.send(JSON.stringify({
+        type: "mcp.getWorkerDiff.result",
+        requestId: req.requestId,
+        payload: {
+          success: true,
+          diff: diffResult.diff,
+          stats: diffResult.stats,
+        },
+      }));
+      console.log(`[MCP] Diff retrieved for worker ${workerId}: ${diffResult.stats.files} files`);
+      break;
+    }
+
+    case "mcp.mergeWorkerChanges": {
+      // Server-side handling: merge worker branch into main
+      const req = msg as McpMergeWorkerChangesRequest;
+      const workerId = req.payload.workerId;
+      const gitRoot = getGitRoot(process.cwd());
+
+      if (!gitRoot) {
+        ws.send(JSON.stringify({
+          type: "mcp.mergeWorkerChanges.result",
+          requestId: req.requestId,
+          payload: {
+            success: false,
+            error: "Not in a git repository",
+          },
+        }));
+        break;
+      }
+
+      // Perform squash merge
+      const mergeResult = mergeWorkerChanges(gitRoot, workerId);
+      if (!mergeResult) {
+        ws.send(JSON.stringify({
+          type: "mcp.mergeWorkerChanges.result",
+          requestId: req.requestId,
+          payload: {
+            success: false,
+            error: `Failed to merge worker ${workerId}`,
+          },
+        }));
+        break;
+      }
+
+      ws.send(JSON.stringify({
+        type: "mcp.mergeWorkerChanges.result",
+        requestId: req.requestId,
+        payload: {
+          success: true,
+          commitHash: mergeResult.commitHash,
+          filesChanged: mergeResult.filesChanged,
+        },
+      }));
+      console.log(`[MCP] Merged worker ${workerId}: commit ${mergeResult.commitHash.slice(0, 7)}`);
       break;
     }
 
