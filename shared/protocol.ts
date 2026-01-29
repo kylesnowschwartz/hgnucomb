@@ -449,6 +449,55 @@ export interface McpMergeWorkerChangesResponse {
 }
 
 // ============================================================================
+// MCP Cleanup Worker Worktree Types
+// ============================================================================
+
+export interface McpCleanupWorkerWorktreeRequest {
+  type: 'mcp.cleanupWorkerWorktree';
+  requestId: string;
+  payload: {
+    callerId: string;
+    workerId: string;
+    force?: boolean;
+  };
+}
+
+export interface McpCleanupWorkerWorktreeResponse {
+  type: 'mcp.cleanupWorkerWorktree.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    message?: string;
+    error?: string;
+  };
+}
+
+// ============================================================================
+// MCP Kill Worker Types
+// ============================================================================
+
+export interface McpKillWorkerRequest {
+  type: 'mcp.killWorker';
+  requestId: string;
+  payload: {
+    callerId: string;
+    workerId: string;
+    force?: boolean;
+  };
+}
+
+export interface McpKillWorkerResponse {
+  type: 'mcp.killWorker.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    terminated?: boolean;
+    message?: string;
+    error?: string;
+  };
+}
+
+// ============================================================================
 // MCP Result Types (Worker -> Orchestrator)
 // ============================================================================
 
@@ -543,7 +592,9 @@ export type McpRequest =
   | McpGetMessagesRequest
   | McpGetWorkerStatusRequest
   | McpGetWorkerDiffRequest
-  | McpMergeWorkerChangesRequest;
+  | McpMergeWorkerChangesRequest
+  | McpCleanupWorkerWorktreeRequest
+  | McpKillWorkerRequest;
 
 export type McpResponse =
   | McpSpawnResponse
@@ -554,7 +605,9 @@ export type McpResponse =
   | McpGetMessagesResponse
   | McpGetWorkerStatusResponse
   | McpGetWorkerDiffResponse
-  | McpMergeWorkerChangesResponse;
+  | McpMergeWorkerChangesResponse
+  | McpCleanupWorkerWorktreeResponse
+  | McpKillWorkerResponse;
 
 export type McpNotification =
   | McpBroadcastDelivery
