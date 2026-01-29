@@ -23,7 +23,9 @@ import type {
   McpGetWorkerDiffRequest,
   McpListWorkerFilesRequest,
   McpListWorkerCommitsRequest,
-  McpMergeWorkerChangesRequest,
+  McpCheckMergeConflictsRequest,
+  McpMergeWorkerToStagingRequest,
+  McpMergeStagingToMainRequest,
   McpCleanupWorkerWorktreeRequest,
   McpCleanupWorkerWorktreeResponse,
   McpKillWorkerRequest,
@@ -111,117 +113,108 @@ function getWorkerDiff(gitRoot: string, workerId: string): { diff: string; stats
 
 /**
  * Get list of files changed by a worker since branching from main.
- * Uses git diff --numstat for per-file additions/deletions.
+ * Returns raw git diff --stat output for orchestrator to interpret.
  */
-function listWorkerFiles(gitRoot: string, workerId: string): {
-  files: { path: string; status: string; additions: number; deletions: number }[];
-  summary: { filesChanged: number; totalAdditions: number; totalDeletions: number };
-} | null {
-  // Get numstat for additions/deletions per file
-  const numstat = gitExec(["diff", "main...HEAD", "--numstat"], gitRoot);
-  if (numstat === null) {
-    console.warn(`[Git] Failed to get numstat for worker ${workerId}`);
+function listWorkerFiles(gitRoot: string, workerId: string): string | null {
+  const output = gitExec(["diff", "main...HEAD", "--stat"], gitRoot);
+  if (output === null) {
+    console.warn(`[Git] Failed to get diff stat for worker ${workerId}`);
     return null;
   }
-
-  // Get name-status for A/M/D classification
-  const nameStatus = gitExec(["diff", "main...HEAD", "--name-status"], gitRoot);
-  if (nameStatus === null) {
-    console.warn(`[Git] Failed to get name-status for worker ${workerId}`);
-    return null;
-  }
-
-  // Parse name-status into a map: path -> status
-  const statusMap = new Map<string, string>();
-  for (const line of nameStatus.split("\n").filter((l) => l.trim())) {
-    const parts = line.split("\t");
-    if (parts.length >= 2) {
-      const status = parts[0].charAt(0); // First char: A, M, D, R, C, U
-      const path = parts[parts.length - 1]; // Last part is always the (new) path
-      statusMap.set(path, status);
-    }
-  }
-
-  // Parse numstat: additions, deletions, path (tab-separated)
-  const files: { path: string; status: string; additions: number; deletions: number }[] = [];
-  let totalAdditions = 0;
-  let totalDeletions = 0;
-
-  for (const line of numstat.split("\n").filter((l) => l.trim())) {
-    const parts = line.split("\t");
-    if (parts.length >= 3) {
-      // Binary files show "-" for additions/deletions
-      const additions = parts[0] === "-" ? 0 : parseInt(parts[0]) || 0;
-      const deletions = parts[1] === "-" ? 0 : parseInt(parts[1]) || 0;
-      const path = parts[2];
-      const status = statusMap.get(path) || "M";
-
-      files.push({ path, status, additions, deletions });
-      totalAdditions += additions;
-      totalDeletions += deletions;
-    }
-  }
-
-  return {
-    files,
-    summary: {
-      filesChanged: files.length,
-      totalAdditions,
-      totalDeletions,
-    },
-  };
+  return output;
 }
 
 /**
  * Get list of commits made by a worker since branching from main.
+ * Returns raw git log output for orchestrator to interpret.
  */
-function listWorkerCommits(gitRoot: string, workerId: string): {
-  commits: { hash: string; message: string; author: string; date: string; filesChanged: number }[];
-} | null {
-  // Format: hash|subject|author|ISO date
-  // Using %x00 as delimiter to handle messages with special chars
-  const logOutput = gitExec(
-    ["log", "main..HEAD", "--format=%h%x00%s%x00%an%x00%aI", "--"],
-    gitRoot
-  );
-  if (logOutput === null) {
+function listWorkerCommits(gitRoot: string, workerId: string): string | null {
+  const output = gitExec(["log", "main..HEAD", "--oneline", "--stat"], gitRoot);
+  if (output === null) {
     console.warn(`[Git] Failed to get log for worker ${workerId}`);
     return null;
   }
-
-  if (!logOutput.trim()) {
-    return { commits: [] };
-  }
-
-  const commits: { hash: string; message: string; author: string; date: string; filesChanged: number }[] = [];
-
-  for (const line of logOutput.split("\n").filter((l) => l.trim())) {
-    const parts = line.split("\x00");
-    if (parts.length >= 4) {
-      const hash = parts[0];
-      const message = parts[1];
-      const author = parts[2];
-      const date = parts[3];
-
-      // Get file count for this commit
-      const filesOutput = gitExec(["show", hash, "--name-only", "--format="], gitRoot);
-      const filesChanged = filesOutput
-        ? filesOutput.split("\n").filter((f) => f.trim()).length
-        : 0;
-
-      commits.push({ hash, message, author, date, filesChanged });
-    }
-  }
-
-  return { commits };
+  return output;
 }
 
 /**
- * Merge worker branch into main using squash merge.
- * Returns commit hash or null on error.
+ * Check if merging a worker branch into main would cause conflicts.
+ * Does a dry-run merge and aborts, returning raw git output.
  */
-function mergeWorkerChanges(gitRoot: string, workerId: string): { commitHash: string; filesChanged: number } | null {
+function checkMergeConflicts(gitRoot: string, workerId: string): { canMerge: boolean; output: string } | null {
   const branchName = `hgnucomb/${workerId}`;
+
+  // Check if main has uncommitted changes
+  const status = gitExec(["status", "--porcelain"], gitRoot);
+  if (status === null) {
+    return null;
+  }
+  if (status.trim()) {
+    return {
+      canMerge: false,
+      output: `Cannot check merge: main has uncommitted changes:\n${status}`,
+    };
+  }
+
+  // Try dry-run merge (--no-commit keeps changes staged but not committed)
+  const mergeResult = gitExec(["merge", "--no-commit", "--no-ff", branchName], gitRoot);
+
+  // Capture status regardless of merge result
+  const mergeStatus = gitExec(["status"], gitRoot) ?? "";
+
+  // Always abort the merge to clean up
+  gitExec(["merge", "--abort"], gitRoot);
+
+  if (mergeResult === null) {
+    // Merge failed - likely has conflicts
+    return {
+      canMerge: false,
+      output: `Merge would have conflicts:\n${mergeStatus}`,
+    };
+  }
+
+  // Merge succeeded (no conflicts)
+  return {
+    canMerge: true,
+    output: `Merge would succeed cleanly:\n${mergeStatus}`,
+  };
+}
+
+/**
+ * Merge worker branch into orchestrator's staging worktree.
+ * Regular merge (preserves worker commit history).
+ */
+function mergeWorkerToStaging(gitRoot: string, orchestratorId: string, workerId: string): string | null {
+  const workerBranch = `hgnucomb/${workerId}`;
+  const stagingPath = join(gitRoot, ".hgnucomb", "agents", orchestratorId);
+
+  // Verify staging worktree exists
+  const currentBranch = gitExec(["rev-parse", "--abbrev-ref", "HEAD"], stagingPath);
+  if (currentBranch === null) {
+    console.warn(`[Git] Staging worktree not found at ${stagingPath}`);
+    return null;
+  }
+
+  // Regular merge (preserves history)
+  const mergeResult = gitExec(["merge", workerBranch, "-m", `Merge worker ${workerId}`], stagingPath);
+  if (mergeResult === null) {
+    // Merge failed - likely conflicts
+    const status = gitExec(["status"], stagingPath) ?? "Unknown error";
+    console.warn(`[Git] Merge failed: ${workerBranch} into staging`);
+    return `Merge failed:\n${status}`;
+  }
+
+  const log = gitExec(["log", "--oneline", "-5"], stagingPath) ?? "";
+  console.log(`[Git] Merged ${workerBranch} into staging (${orchestratorId})`);
+  return `Merge successful:\n${log}`;
+}
+
+/**
+ * Merge orchestrator's staging branch into main.
+ * Regular merge (preserves history from staging).
+ */
+function mergeStagingToMain(gitRoot: string, orchestratorId: string): string | null {
+  const stagingBranch = `hgnucomb/${orchestratorId}`;
 
   // Ensure we're on main branch
   const currentBranch = gitExec(["rev-parse", "--abbrev-ref", "HEAD"], gitRoot);
@@ -229,42 +222,27 @@ function mergeWorkerChanges(gitRoot: string, workerId: string): { commitHash: st
     console.warn(`[Git] Not on main branch, switching...`);
     const switchResult = gitExec(["checkout", "main"], gitRoot);
     if (switchResult === null) {
-      console.warn(`[Git] Failed to switch to main branch`);
-      return null;
+      return "Failed to switch to main branch";
     }
   }
 
-  // Perform squash merge
-  const mergeResult = gitExec(["merge", "--squash", branchName], gitRoot);
+  // Check for uncommitted changes in main
+  const status = gitExec(["status", "--porcelain"], gitRoot);
+  if (status && status.trim()) {
+    return `Cannot merge: main has uncommitted changes:\n${status}`;
+  }
+
+  // Regular merge (preserves staging history)
+  const mergeResult = gitExec(["merge", stagingBranch, "-m", `Merge staging from ${orchestratorId}`], gitRoot);
   if (mergeResult === null) {
-    console.warn(`[Git] Squash merge failed for ${branchName}`);
-    return null;
+    const mergeStatus = gitExec(["status"], gitRoot) ?? "Unknown error";
+    console.warn(`[Git] Merge failed: ${stagingBranch} into main`);
+    return `Merge failed:\n${mergeStatus}`;
   }
 
-  // Get file count for commit message
-  const statusOutput = gitExec(["status", "--short"], gitRoot);
-  const filesChanged = statusOutput ? statusOutput.split("\n").filter((line) => line.trim()).length : 0;
-
-  // Auto-commit the squashed merge with descriptive message
-  const commitMessage = `Merge worker changes from ${workerId}\n\n${filesChanged} files changed`;
-  const commitResult = gitExec(["commit", "-m", commitMessage], gitRoot);
-  if (commitResult === null) {
-    // Might fail if no changes - that's OK
-    console.log(`[Git] Commit after squash merge: no new changes`);
-    // Get current HEAD as commit hash anyway
-    const headHash = gitExec(["rev-parse", "HEAD"], gitRoot);
-    return headHash ? { commitHash: headHash, filesChanged } : null;
-  }
-
-  // Get the new commit hash
-  const commitHash = gitExec(["rev-parse", "HEAD"], gitRoot);
-  if (!commitHash) {
-    console.warn(`[Git] Failed to get commit hash after merge`);
-    return null;
-  }
-
-  console.log(`[Git] Squash merged ${branchName} into main: ${commitHash.slice(0, 7)} (${filesChanged} files)`);
-  return { commitHash, filesChanged };
+  const log = gitExec(["log", "--oneline", "-5"], gitRoot) ?? "";
+  console.log(`[Git] Merged staging (${orchestratorId}) into main`);
+  return `Merge successful:\n${log}`;
 }
 
 // Track which sessions belong to which client for cleanup
@@ -844,23 +822,17 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
         ws.send(JSON.stringify({
           type: "mcp.listWorkerFiles.result",
           requestId: req.requestId,
-          payload: {
-            success: false,
-            error: "Not in a git repository",
-          },
+          payload: { success: false, error: "Not in a git repository" },
         }));
         break;
       }
 
-      const filesResult = listWorkerFiles(gitRoot, workerId);
-      if (!filesResult) {
+      const output = listWorkerFiles(gitRoot, workerId);
+      if (output === null) {
         ws.send(JSON.stringify({
           type: "mcp.listWorkerFiles.result",
           requestId: req.requestId,
-          payload: {
-            success: false,
-            error: `Failed to list files for worker ${workerId}`,
-          },
+          payload: { success: false, error: `Failed to list files for worker ${workerId}` },
         }));
         break;
       }
@@ -868,13 +840,9 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       ws.send(JSON.stringify({
         type: "mcp.listWorkerFiles.result",
         requestId: req.requestId,
-        payload: {
-          success: true,
-          files: filesResult.files,
-          summary: filesResult.summary,
-        },
+        payload: { success: true, output },
       }));
-      console.log(`[MCP] Files listed for worker ${workerId}: ${filesResult.summary.filesChanged} files`);
+      console.log(`[MCP] Files listed for worker ${workerId}`);
       break;
     }
 
@@ -888,23 +856,17 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
         ws.send(JSON.stringify({
           type: "mcp.listWorkerCommits.result",
           requestId: req.requestId,
-          payload: {
-            success: false,
-            error: "Not in a git repository",
-          },
+          payload: { success: false, error: "Not in a git repository" },
         }));
         break;
       }
 
-      const commitsResult = listWorkerCommits(gitRoot, workerId);
-      if (!commitsResult) {
+      const output = listWorkerCommits(gitRoot, workerId);
+      if (output === null) {
         ws.send(JSON.stringify({
           type: "mcp.listWorkerCommits.result",
           requestId: req.requestId,
-          payload: {
-            success: false,
-            error: `Failed to list commits for worker ${workerId}`,
-          },
+          payload: { success: false, error: `Failed to list commits for worker ${workerId}` },
         }));
         break;
       }
@@ -912,57 +874,115 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       ws.send(JSON.stringify({
         type: "mcp.listWorkerCommits.result",
         requestId: req.requestId,
-        payload: {
-          success: true,
-          commits: commitsResult.commits,
-        },
+        payload: { success: true, output },
       }));
-      console.log(`[MCP] Commits listed for worker ${workerId}: ${commitsResult.commits.length} commits`);
+      console.log(`[MCP] Commits listed for worker ${workerId}`);
       break;
     }
 
-    case "mcp.mergeWorkerChanges": {
-      // Server-side handling: merge worker branch into main
-      const req = msg as McpMergeWorkerChangesRequest;
+    case "mcp.checkMergeConflicts": {
+      // Server-side handling: check if merge would have conflicts
+      const req = msg as McpCheckMergeConflictsRequest;
       const workerId = req.payload.workerId;
       const gitRoot = getGitRoot(process.cwd());
 
       if (!gitRoot) {
         ws.send(JSON.stringify({
-          type: "mcp.mergeWorkerChanges.result",
+          type: "mcp.checkMergeConflicts.result",
           requestId: req.requestId,
-          payload: {
-            success: false,
-            error: "Not in a git repository",
-          },
+          payload: { success: false, error: "Not in a git repository" },
         }));
         break;
       }
 
-      // Perform squash merge
-      const mergeResult = mergeWorkerChanges(gitRoot, workerId);
-      if (!mergeResult) {
+      const result = checkMergeConflicts(gitRoot, workerId);
+      if (result === null) {
         ws.send(JSON.stringify({
-          type: "mcp.mergeWorkerChanges.result",
+          type: "mcp.checkMergeConflicts.result",
           requestId: req.requestId,
-          payload: {
-            success: false,
-            error: `Failed to merge worker ${workerId}`,
-          },
+          payload: { success: false, error: `Failed to check merge conflicts for worker ${workerId}` },
         }));
         break;
       }
 
       ws.send(JSON.stringify({
-        type: "mcp.mergeWorkerChanges.result",
+        type: "mcp.checkMergeConflicts.result",
         requestId: req.requestId,
-        payload: {
-          success: true,
-          commitHash: mergeResult.commitHash,
-          filesChanged: mergeResult.filesChanged,
-        },
+        payload: { success: true, canMerge: result.canMerge, output: result.output },
       }));
-      console.log(`[MCP] Merged worker ${workerId}: commit ${mergeResult.commitHash.slice(0, 7)}`);
+      console.log(`[MCP] Merge conflict check for worker ${workerId}: canMerge=${result.canMerge}`);
+      break;
+    }
+
+    case "mcp.mergeWorkerToStaging": {
+      // Server-side handling: merge worker into orchestrator's staging worktree
+      const req = msg as McpMergeWorkerToStagingRequest;
+      const { callerId: orchestratorId, workerId } = req.payload;
+      const gitRoot = getGitRoot(process.cwd());
+
+      if (!gitRoot) {
+        ws.send(JSON.stringify({
+          type: "mcp.mergeWorkerToStaging.result",
+          requestId: req.requestId,
+          payload: { success: false, error: "Not in a git repository" },
+        }));
+        break;
+      }
+
+      const output = mergeWorkerToStaging(gitRoot, orchestratorId, workerId);
+      if (output === null) {
+        ws.send(JSON.stringify({
+          type: "mcp.mergeWorkerToStaging.result",
+          requestId: req.requestId,
+          payload: { success: false, error: `Failed to merge worker ${workerId} into staging` },
+        }));
+        break;
+      }
+
+      // Check if output indicates failure
+      const success = !output.startsWith("Merge failed:");
+      ws.send(JSON.stringify({
+        type: "mcp.mergeWorkerToStaging.result",
+        requestId: req.requestId,
+        payload: { success, output },
+      }));
+      console.log(`[MCP] Merge worker ${workerId} to staging: ${success ? "success" : "failed"}`);
+      break;
+    }
+
+    case "mcp.mergeStagingToMain": {
+      // Server-side handling: merge orchestrator's staging branch into main
+      const req = msg as McpMergeStagingToMainRequest;
+      const { callerId: orchestratorId } = req.payload;
+      const gitRoot = getGitRoot(process.cwd());
+
+      if (!gitRoot) {
+        ws.send(JSON.stringify({
+          type: "mcp.mergeStagingToMain.result",
+          requestId: req.requestId,
+          payload: { success: false, error: "Not in a git repository" },
+        }));
+        break;
+      }
+
+      const output = mergeStagingToMain(gitRoot, orchestratorId);
+      if (output === null) {
+        ws.send(JSON.stringify({
+          type: "mcp.mergeStagingToMain.result",
+          requestId: req.requestId,
+          payload: { success: false, error: "Failed to merge staging to main" },
+        }));
+        break;
+      }
+
+      // Check if output indicates failure
+      const success = output.startsWith("Merge successful:");
+      ws.send(JSON.stringify({
+        type: "mcp.mergeStagingToMain.result",
+        requestId: req.requestId,
+        payload: { success, output },
+      }));
+      console.log(`[MCP] Merge staging to main: ${success ? "success" : "failed"}`);
       break;
     }
 

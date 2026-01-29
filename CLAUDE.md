@@ -142,9 +142,11 @@ Agents interact with the grid via MCP:
 | `report_result` | Send task result to parent orchestrator (workers only) |
 | `get_messages` | Get inbox messages (use for broadcasts, not worker results) |
 | `get_worker_diff` | Get diff of worker's changes vs main (orchestrators only) |
-| `list_worker_files` | List files changed by worker with per-file stats (orchestrators only) |
-| `list_worker_commits` | List commits made by worker since branching (orchestrators only) |
-| `merge_worker_changes` | Squash-merge worker branch into main (orchestrators only) |
+| `list_worker_files` | List files changed by worker - raw git diff --stat output (orchestrators only) |
+| `list_worker_commits` | List commits made by worker - raw git log output (orchestrators only) |
+| `check_merge_conflicts` | Dry-run merge to detect conflicts - call BEFORE merge (orchestrators only) |
+| `merge_worker_to_staging` | Merge worker branch into your staging worktree (orchestrators only) |
+| `merge_staging_to_main` | Merge your staging branch into main after human approval (orchestrators only) |
 | `cleanup_worker_worktree` | Remove worker's git worktree and branch (orchestrators only) |
 | `kill_worker` | Forcibly terminate a worker's PTY session (orchestrators only) |
 
@@ -153,6 +155,21 @@ Agents interact with the grid via MCP:
 2. `await_worker(workerId=<agentId>)` → polls status until done/error, returns status + messages
 
 This is preferred over `get_messages(wait=true)` because workers take 10-30s to boot Claude CLI.
+
+**Staging Workflow (merging worker changes to main):**
+```
+workers ──merge──> orchestrator worktree ──human approval──> main
+                   (staging)
+```
+
+1. Workers complete their tasks and commit changes
+2. Orchestrator calls `merge_worker_to_staging(workerId)` for each worker
+3. Orchestrator reviews merged changes in their staging worktree
+4. Orchestrator outputs summary and asks human: "Ready to merge. Review above."
+5. Human types approval in orchestrator's terminal: "looks good, merge to main"
+6. Orchestrator calls `merge_staging_to_main()` to promote to main
+
+This gives human a review gate before changes land in main.
 
 **Status Semantics (`report_status`):**
 Status is for UI observability - it shows humans what each agent is doing. It's self-reported and has no effect on system behavior.

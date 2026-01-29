@@ -425,11 +425,11 @@ export interface McpGetWorkerDiffResponse {
 }
 
 // ============================================================================
-// MCP Merge Types (Merge Worker Changes)
+// MCP Check Merge Conflicts Types
 // ============================================================================
 
-export interface McpMergeWorkerChangesRequest {
-  type: 'mcp.mergeWorkerChanges';
+export interface McpCheckMergeConflictsRequest {
+  type: 'mcp.checkMergeConflicts';
   requestId: string;
   payload: {
     callerId: string;
@@ -437,13 +437,56 @@ export interface McpMergeWorkerChangesRequest {
   };
 }
 
-export interface McpMergeWorkerChangesResponse {
-  type: 'mcp.mergeWorkerChanges.result';
+export interface McpCheckMergeConflictsResponse {
+  type: 'mcp.checkMergeConflicts.result';
   requestId: string;
   payload: {
     success: boolean;
-    commitHash?: string;
-    filesChanged?: number;
+    canMerge?: boolean;
+    output?: string;  // Raw git output - orchestrator interprets
+    error?: string;
+  };
+}
+
+// ============================================================================
+// MCP Staging Merge Types
+// ============================================================================
+
+// Merge worker branch into orchestrator's staging worktree
+export interface McpMergeWorkerToStagingRequest {
+  type: 'mcp.mergeWorkerToStaging';
+  requestId: string;
+  payload: {
+    callerId: string;  // orchestrator's agent ID
+    workerId: string;  // worker to merge
+  };
+}
+
+export interface McpMergeWorkerToStagingResponse {
+  type: 'mcp.mergeWorkerToStaging.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    output?: string;  // Raw git merge output
+    error?: string;
+  };
+}
+
+// Merge orchestrator's staging branch into main
+export interface McpMergeStagingToMainRequest {
+  type: 'mcp.mergeStagingToMain';
+  requestId: string;
+  payload: {
+    callerId: string;  // orchestrator's agent ID (determines which staging branch)
+  };
+}
+
+export interface McpMergeStagingToMainResponse {
+  type: 'mcp.mergeStagingToMain.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    output?: string;  // Raw git merge output
     error?: string;
   };
 }
@@ -501,13 +544,6 @@ export interface McpKillWorkerResponse {
 // MCP List Worker Files Types
 // ============================================================================
 
-export interface WorkerFileChange {
-  path: string;
-  status: 'A' | 'M' | 'D' | 'R' | 'C' | 'U';  // Added, Modified, Deleted, Renamed, Copied, Unmerged
-  additions: number;
-  deletions: number;
-}
-
 export interface McpListWorkerFilesRequest {
   type: 'mcp.listWorkerFiles';
   requestId: string;
@@ -522,12 +558,7 @@ export interface McpListWorkerFilesResponse {
   requestId: string;
   payload: {
     success: boolean;
-    files?: WorkerFileChange[];
-    summary?: {
-      filesChanged: number;
-      totalAdditions: number;
-      totalDeletions: number;
-    };
+    output?: string;  // Raw git diff --stat output
     error?: string;
   };
 }
@@ -535,14 +566,6 @@ export interface McpListWorkerFilesResponse {
 // ============================================================================
 // MCP List Worker Commits Types
 // ============================================================================
-
-export interface WorkerCommit {
-  hash: string;
-  message: string;
-  author: string;
-  date: string;
-  filesChanged: number;
-}
 
 export interface McpListWorkerCommitsRequest {
   type: 'mcp.listWorkerCommits';
@@ -558,7 +581,7 @@ export interface McpListWorkerCommitsResponse {
   requestId: string;
   payload: {
     success: boolean;
-    commits?: WorkerCommit[];
+    output?: string;  // Raw git log output
     error?: string;
   };
 }
@@ -660,7 +683,9 @@ export type McpRequest =
   | McpGetWorkerDiffRequest
   | McpListWorkerFilesRequest
   | McpListWorkerCommitsRequest
-  | McpMergeWorkerChangesRequest
+  | McpCheckMergeConflictsRequest
+  | McpMergeWorkerToStagingRequest
+  | McpMergeStagingToMainRequest
   | McpCleanupWorkerWorktreeRequest
   | McpKillWorkerRequest;
 
@@ -675,7 +700,9 @@ export type McpResponse =
   | McpGetWorkerDiffResponse
   | McpListWorkerFilesResponse
   | McpListWorkerCommitsResponse
-  | McpMergeWorkerChangesResponse
+  | McpCheckMergeConflictsResponse
+  | McpMergeWorkerToStagingResponse
+  | McpMergeStagingToMainResponse
   | McpCleanupWorkerWorktreeResponse
   | McpKillWorkerResponse;
 
