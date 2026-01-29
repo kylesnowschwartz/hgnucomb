@@ -171,6 +171,21 @@ workers ──merge──> orchestrator worktree ──human approval──> mai
 
 This gives human a review gate before changes land in main.
 
+**Handling Merge Conflicts:**
+
+When `merge_worker_to_staging(workerId)` fails due to conflicts:
+
+1. **Review the conflict:** Your staging worktree has conflict markers. Read the affected files.
+
+2. **Resolution options:**
+   - **Manual resolve:** Edit files in your staging worktree to fix conflicts, then `git add` and `git commit`
+   - **Accept theirs:** `git checkout --theirs <file>` to take worker's version
+   - **Accept ours:** `git checkout --ours <file>` to keep staging version
+   - **Abort:** `git merge --abort` in staging worktree to undo the merge attempt
+   - **Discard worker:** `cleanup_worker_worktree(workerId)` to reject their work entirely
+
+3. **After resolving:** Continue merging remaining workers or proceed to human approval.
+
 **Status Semantics (`report_status`):**
 Status is for UI observability - it shows humans what each agent is doing. It's self-reported and has no effect on system behavior.
 
