@@ -43,13 +43,18 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
   });
 
   const executeAction = useCallback((action: KeyAction) => {
-    const { selectedHex, selectHex, selectedAgentId, selectAgent, clearSelection } =
+    const { selectedHex, selectHex, selectedAgentId, selectAgent, clearSelection, pendingKill, setPendingKill } =
       useUIStore.getState();
     const { getAllAgents } = useAgentStore.getState();
 
     switch (action.type) {
       case 'navigate':
       case 'navigate_vertical': {
+        // Cancel any pending kill when navigating
+        if (pendingKill) {
+          setPendingKill(null);
+        }
+
         // Get current position (selected hex or origin)
         const current = selectedHex ?? { q: 0, r: 0 };
 
@@ -120,7 +125,38 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
 
       case 'kill': {
         if (!selectedHex) break;
-        optionsRef.current.onKill?.(selectedHex);
+        // Check if there's an agent at the selected hex
+        const agents = getAllAgents();
+        const agentAtHex = agents.find(
+          (a) => a.hex.q === selectedHex.q && a.hex.r === selectedHex.r
+        );
+        if (!agentAtHex) break; // No agent to kill
+
+        // If no pending kill, initiate confirmation. Otherwise, confirm.
+        if (!pendingKill) {
+          setPendingKill(selectedHex);
+        } else {
+          // Confirm - execute kill
+          setPendingKill(null);
+          optionsRef.current.onKill?.(selectedHex);
+        }
+        break;
+      }
+
+      case 'confirm_kill': {
+        if (!pendingKill) break;
+        setPendingKill(null);
+        optionsRef.current.onKill?.(pendingKill);
+        break;
+      }
+
+      case 'cancel_kill': {
+        // If kill is pending, cancel it. Otherwise, clear selection (original behavior).
+        if (pendingKill) {
+          setPendingKill(null);
+        } else {
+          clearSelection();
+        }
         break;
       }
 
@@ -148,13 +184,19 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
       // Look up in active keymap
       const keymap = useKeyboardStore.getState().getActiveKeymap();
       const bindings = keymap.bindings[mode];
-      const action = bindings[combo];
+      let action = bindings[combo];
 
-      if (action) {
-        e.preventDefault();
-        e.stopPropagation();
-        executeAction(action);
+      if (!action) return;
+
+      // Handle kill confirmation: if pendingKill is set, Enter or Shift+X confirms
+      const pendingKill = useUIStore.getState().pendingKill;
+      if (pendingKill && (combo === 'Enter' || combo === 'Shift+X')) {
+        action = { type: 'confirm_kill' };
       }
+
+      e.preventDefault();
+      e.stopPropagation();
+      executeAction(action);
     };
 
     window.addEventListener('keydown', handleKeyDown);

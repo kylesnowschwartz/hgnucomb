@@ -88,11 +88,11 @@ export const vimKeymap: Keymap = {
       o: { type: 'spawn', cellType: 'orchestrator' },
       w: { type: 'spawn', cellType: 'worker' },
 
-      // Capital K and X to kill (avoid conflict with nav k)
+      // Shift+X to initiate/confirm kill
       'Shift+X': { type: 'kill' },
 
-      // Escape clears selection
-      Escape: { type: 'clear_selection' },
+      // Escape clears selection or cancels kill confirmation
+      Escape: { type: 'cancel_kill' },
 
       // Utilities
       g: { type: 'select_center' },
