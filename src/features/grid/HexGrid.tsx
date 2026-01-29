@@ -16,7 +16,6 @@ import { hexToPixel, hexesInRect } from '@shared/types';
 import type { AgentStatus, CellType, DetailedStatus } from '@shared/types';
 import { useAgentStore, type AgentState } from '@features/agents/agentStore';
 import { useUIStore } from '@features/controls/uiStore';
-import { useTerminalStore } from '@features/terminal/terminalStore';
 import { useEventLogStore } from '@features/events/eventLogStore';
 import { useViewportStore } from './viewportStore';
 import { useShallow } from 'zustand/shallow';
@@ -145,14 +144,9 @@ export function HexGrid({
   // Agent state - useShallow prevents infinite re-render from new array references
   const agents = useAgentStore(useShallow((s) => s.getAllAgents()));
   const spawnAgent = useAgentStore((s) => s.spawnAgent);
-  const removeAgent = useAgentStore((s) => s.removeAgent);
-
-  // Terminal cleanup
-  const removeSessionForAgent = useTerminalStore((s) => s.removeSessionForAgent);
 
   // Event logging
   const addSpawn = useEventLogStore((s) => s.addSpawn);
-  const addKill = useEventLogStore((s) => s.addKill);
 
   // UI state - selected agent for terminal, selected hex for focus (mouse or keyboard)
   const selectedAgentId = useUIStore((s) => s.selectedAgentId);
@@ -351,21 +345,6 @@ export function HexGrid({
               onContextMenu={(e) => {
                 e.evt.preventDefault();
                 e.evt.stopPropagation();
-                e.cancelBubble = true; // Prevent Konva event bubbling
-                if (agent) {
-                  // Deselect if this was selected
-                  if (selectedAgentId === agent.id) {
-                    selectAgent(null);
-                  }
-                  // Clear hex selection if this hex was focused
-                  if (isSelected) {
-                    selectHex(null);
-                  }
-                  // Log kill event, clean up terminal session, remove agent
-                  addKill(agent.id);
-                  removeSessionForAgent(agent.id);
-                  removeAgent(agent.id);
-                }
               }}
               onMouseEnter={() => selectHex(hex)}
               style={{ cursor: 'pointer' }}

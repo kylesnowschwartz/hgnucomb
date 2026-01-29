@@ -20,6 +20,10 @@ interface UIStore {
   selectHex: (hex: HexCoordinate | null) => void;
   clearSelection: () => void;
 
+  // Kill confirmation state (non-null means K was pressed, waiting for confirmation)
+  pendingKill: HexCoordinate | null;
+  setPendingKill: (hex: HexCoordinate | null) => void;
+
   // Derived input mode from state
   getMode: () => InputMode;
 }
@@ -27,6 +31,7 @@ interface UIStore {
 export const useUIStore = create<UIStore>()((set) => ({
   selectedAgentId: null,
   selectedHex: null,
+  pendingKill: null,
 
   selectAgent: (agentId) => {
     set({ selectedAgentId: agentId });
@@ -43,6 +48,10 @@ export const useUIStore = create<UIStore>()((set) => ({
 
   clearSelection: () => {
     set({ selectedHex: null });
+  },
+
+  setPendingKill: (hex) => {
+    set({ pendingKill: hex });
   },
 
   getMode: () => {

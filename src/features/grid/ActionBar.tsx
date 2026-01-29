@@ -23,6 +23,7 @@ interface ActionHint {
 export function ActionBar() {
   const selectedHex = useUIStore((s) => s.selectedHex);
   const selectedAgentId = useUIStore((s) => s.selectedAgentId);
+  const pendingKill = useUIStore((s) => s.pendingKill);
   const getAllAgents = useAgentStore((s) => s.getAllAgents);
 
   // Get viewport state from store
@@ -41,9 +42,12 @@ export function ActionBar() {
     );
   }, [selectedHex, getAllAgents]);
 
+  // Show kill confirmation if pending
+  const showKillConfirmation = !!pendingKill;
+
   // When terminal is open, only show for empty cells (spawn hints)
-  // When terminal is closed, show for any selected hex
-  const shouldShow = selectedHex && (!isTerminalOpen || !agentAtHex);
+  // When terminal is closed, show for any selected hex (or kill confirmation)
+  const shouldShow = (selectedHex || showKillConfirmation) && (!isTerminalOpen || !agentAtHex);
 
   // Fade-in delay
   const [delayedHexKey, setDelayedHexKey] = useState<string | null>(null);
@@ -79,22 +83,35 @@ export function ActionBar() {
 
   if (!shouldShow || !isVisible) return null;
 
+  // Determine which hex to use for positioning (pending kill or selected)
+  const displayHex = pendingKill || selectedHex;
+  if (!displayHex) return null;
+
   // Calculate screen position
-  const worldPos = hexToPixel(selectedHex, hexSize);
+  const worldPos = hexToPixel(displayHex, hexSize);
   const screenX = worldPos.x * scale + position.x;
   const screenY = worldPos.y * scale + position.y + hexSize * scale + 10;
 
-  // Hints based on cell state
-  const hints: ActionHint[] = agentAtHex
-    ? [
-        { key: 'Enter', label: 'open' },
-        { key: 'X', label: 'kill' },
-      ]
-    : [
-        { key: 't', label: 'terminal' },
-        { key: 'o', label: 'orchestrator' },
-        { key: 'w', label: 'worker' },
-      ];
+  // Hints based on state
+  let hints: ActionHint[];
+  if (showKillConfirmation) {
+    hints = [
+      { key: 'X', label: 'confirm' },
+      { key: 'Enter', label: 'confirm' },
+      { key: 'Esc', label: 'cancel' },
+    ];
+  } else {
+    hints = agentAtHex
+      ? [
+          { key: 'Enter', label: 'open' },
+          { key: 'X', label: 'kill' },
+        ]
+      : [
+          { key: 't', label: 'terminal' },
+          { key: 'o', label: 'orchestrator' },
+          { key: 'w', label: 'worker' },
+        ];
+  }
 
   return (
     <div

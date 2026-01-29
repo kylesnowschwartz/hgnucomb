@@ -36,7 +36,11 @@ function formatAction(action: KeyAction): string {
     case 'spawn':
       return `Spawn ${action.cellType}`;
     case 'kill':
-      return 'Kill agent';
+      return 'Initiate kill / Confirm kill';
+    case 'confirm_kill':
+      return 'Confirm kill';
+    case 'cancel_kill':
+      return 'Cancel kill / Clear selection';
     case 'show_help':
       return 'Show this help';
   }
