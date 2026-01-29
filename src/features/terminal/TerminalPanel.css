@@ -1,11 +1,7 @@
 @import '@xterm/xterm/css/xterm.css';
 
 .terminal-panel {
-  position: fixed;
-  top: 20px;
-  left: 20px;
-  width: 50%;
-  height: calc(100vh - 40px);
+  /* Position and dimensions set via inline styles */
   background: var(--ctp-mantle);
   border: 1px solid var(--ctp-surface0);
   border-radius: 4px;
@@ -13,7 +9,25 @@
   z-index: 100;
   display: flex;
   flex-direction: column;
-  transition: border-color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.25s ease;
+  /* Ensure panel doesn't exceed viewport */
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 40px);
+}
+
+/* Slide animation states */
+.terminal-panel--open {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.terminal-panel--closed {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .terminal-panel--focused {
@@ -62,6 +76,8 @@
   padding: 4px;
   overflow: hidden;
   background: var(--ctp-base);
+  /* Ensure body fills available space and xterm can measure correctly */
+  min-height: 0;
 }
 
 .terminal-panel__body .xterm {
@@ -79,4 +95,38 @@
 
 .terminal-panel__body .xterm-decoration-overview-ruler {
   display: none !important;
+}
+
+/* Resize handle - bottom-right corner */
+.terminal-panel__resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  /* Visual indicator - diagonal lines like macOS window resize */
+  background:
+    linear-gradient(
+      135deg,
+      transparent 30%,
+      var(--ctp-surface1) 30%,
+      var(--ctp-surface1) 40%,
+      transparent 40%,
+      transparent 50%,
+      var(--ctp-surface1) 50%,
+      var(--ctp-surface1) 60%,
+      transparent 60%,
+      transparent 70%,
+      var(--ctp-surface1) 70%,
+      var(--ctp-surface1) 80%,
+      transparent 80%
+    );
+  border-radius: 0 0 4px 0;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.terminal-panel__resize-handle:hover {
+  opacity: 1;
 }

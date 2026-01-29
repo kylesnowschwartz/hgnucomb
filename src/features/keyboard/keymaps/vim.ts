@@ -50,6 +50,9 @@ export const vimKeymap: Keymap = {
       'Meta+ArrowUp': { type: 'navigate_vertical', direction: 'up' },
       'Meta+ArrowDown': { type: 'navigate_vertical', direction: 'down' },
 
+      // Cmd+Escape is the global toggle - closes panel if open (no-op in grid mode)
+      'Meta+Escape': { type: 'close_panel' },
+
       // Utilities
       g: { type: 'select_center' },
       '?': { type: 'show_help' },
@@ -92,7 +95,11 @@ export const vimKeymap: Keymap = {
       'Shift+X': { type: 'kill' },
 
       // Escape clears selection (also cancels pending kill)
+      // When panel is open, this closes the panel first
       Escape: { type: 'clear_selection' },
+
+      // Cmd+Escape is the global toggle - closes panel if open
+      'Meta+Escape': { type: 'close_panel' },
 
       // Utilities
       g: { type: 'select_center' },

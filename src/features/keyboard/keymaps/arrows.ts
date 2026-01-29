@@ -32,6 +32,9 @@ export const arrowsKeymap: Keymap = {
       'Meta+ArrowUp': { type: 'navigate_vertical', direction: 'up' },
       'Meta+ArrowDown': { type: 'navigate_vertical', direction: 'down' },
 
+      // Cmd+Escape is the global toggle
+      'Meta+Escape': { type: 'close_panel' },
+
       g: { type: 'select_center' },
       '?': { type: 'show_help' },
     },
@@ -62,6 +65,7 @@ export const arrowsKeymap: Keymap = {
       'Shift+X': { type: 'kill' },
 
       Escape: { type: 'clear_selection' },
+      'Meta+Escape': { type: 'close_panel' },
       g: { type: 'select_center' },
       '?': { type: 'show_help' },
     },

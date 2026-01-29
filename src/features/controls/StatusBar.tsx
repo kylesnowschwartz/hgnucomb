@@ -22,8 +22,8 @@ const MODE_LABELS: Record<InputMode, string> = {
 
 const MODE_HINTS: Record<InputMode, string> = {
   grid: 'hjkl navigate | Shift+hjkl diagonals | g origin | ? help',
-  selected: 'hjkl nav | Enter open | t/o/w spawn | X kill | Esc clear',
-  terminal: 'Cmd+Esc close | Cmd+hjkl navigate',
+  selected: 'hjkl nav | Enter open | t/o/w spawn | X kill | Esc clear | Cmd+Esc close',
+  terminal: 'Cmd+Esc close/unfocus | Click outside for grid controls',
 };
 
 export function StatusBar() {

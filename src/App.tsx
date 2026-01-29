@@ -17,12 +17,102 @@ import { useShallow } from 'zustand/shallow';
 import { createMcpHandler, type McpHandlerDeps } from './handlers/mcpHandler';
 import type { CellType, HexCoordinate } from '@shared/types';
 
+// Animation duration for terminal panel slide (must match CSS)
+const PANEL_ANIMATION_MS = 250;
+
+type AnimPhase = 'unmounted' | 'entering' | 'open' | 'exiting';
+type AnimAction = { type: 'ACTIVATE' } | { type: 'DEACTIVATE' } | { type: 'TICK' };
+
+function animReducer(state: AnimPhase, action: AnimAction): AnimPhase {
+  switch (action.type) {
+    case 'ACTIVATE':
+      // Start opening: enter the DOM in entering state
+      return state === 'unmounted' || state === 'exiting' ? 'entering' : state;
+    case 'DEACTIVATE':
+      // Start closing: begin exit animation
+      return state === 'open' || state === 'entering' ? 'exiting' : state;
+    case 'TICK':
+      // Progress to next state
+      if (state === 'entering') return 'open';
+      if (state === 'exiting') return 'unmounted';
+      return state;
+    default:
+      return state;
+  }
+}
+
+/**
+ * Hook for managing mount/unmount animations with value caching.
+ * Returns { shouldRender, isOpen, cachedValue } where:
+ * - shouldRender: true when component should be in DOM
+ * - isOpen: true when component should be in "open" visual state
+ * - cachedValue: the last non-null value, persisted during exit animation
+ *
+ * Always starts unmounted - first activation triggers enter animation.
+ */
+function useAnimatedMount<T>(value: T | null, animationMs: number) {
+  const isActive = value !== null;
+
+  // Track phase and cached value together to avoid stale closure issues
+  const [state, setState] = useState<{ phase: AnimPhase; cached: T | null }>({
+    phase: 'unmounted',
+    cached: null,
+  });
+  const initializedRef = useRef(false);
+
+  // Handle activation/deactivation transitions (including initial)
+  // Note: setState in effect is intentional for animation state machine - this is a valid pattern
+  useEffect(() => {
+    if (isActive) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setState((s) => ({ phase: animReducer(s.phase, { type: 'ACTIVATE' }), cached: value }));
+    } else if (initializedRef.current) {
+      // Only deactivate after first activation (avoid no-op on mount)
+      // Keep cached value during exit
+      setState((s) => ({ ...s, phase: animReducer(s.phase, { type: 'DEACTIVATE' }) }));
+    }
+    initializedRef.current = true;
+  }, [isActive, value]);
+
+  // Handle timed phase transitions
+  useEffect(() => {
+    if (state.phase === 'entering') {
+      const frameId = requestAnimationFrame(() => {
+        setState((s) => ({ ...s, phase: animReducer(s.phase, { type: 'TICK' }) }));
+      });
+      return () => cancelAnimationFrame(frameId);
+    }
+    if (state.phase === 'exiting') {
+      const timer = setTimeout(() => {
+        setState((s) => ({ ...s, phase: animReducer(s.phase, { type: 'TICK' }) }));
+      }, animationMs);
+      return () => clearTimeout(timer);
+    }
+  }, [state.phase, animationMs]);
+
+  return {
+    shouldRender: state.phase !== 'unmounted',
+    isOpen: state.phase === 'open',
+    cachedValue: state.cached,
+  };
+}
+
+// Default panel dimensions
+const DEFAULT_PANEL_WIDTH = Math.min(800, window.innerWidth * 0.5);
+const DEFAULT_PANEL_HEIGHT = Math.min(600, window.innerHeight - 80);
+
 function App() {
   const [dimensions, setDimensions] = useState({
     width: window.innerWidth,
     height: window.innerHeight,
   });
   const [showHelp, setShowHelp] = useState(false);
+
+  // Terminal panel dimensions - persisted across open/close
+  const [panelDimensions, setPanelDimensions] = useState({
+    width: DEFAULT_PANEL_WIDTH,
+    height: DEFAULT_PANEL_HEIGHT,
+  });
 
   const {
     bridge,
@@ -403,6 +493,16 @@ function App() {
     onCenterOnHex: centerOnHex,
   });
 
+  // Animated mount/unmount for terminal panel
+  // Pass sessionId when panel should be open, null when closing
+  // Hook caches the value during exit animation so we can still render with it
+  const panelSessionId = activeSessionId && selectedAgentId ? activeSessionId : null;
+  const {
+    shouldRender: panelShouldRender,
+    isOpen: panelOpen,
+    cachedValue: cachedSessionId,
+  } = useAnimatedMount(panelSessionId, PANEL_ANIMATION_MS);
+
   const handleCloseTerminal = useCallback(async () => {
     // Just deselect agent - keep session alive in background
     selectAgent(null);
@@ -415,8 +515,14 @@ function App() {
       <ActionBar />
       <ControlPanel />
       <EventLog />
-      {activeSessionId && selectedAgentId && (
-        <TerminalPanel sessionId={activeSessionId} onClose={handleCloseTerminal} />
+      {panelShouldRender && cachedSessionId && (
+        <TerminalPanel
+          sessionId={cachedSessionId}
+          onClose={handleCloseTerminal}
+          isOpen={panelOpen}
+          dimensions={panelDimensions}
+          onDimensionsChange={setPanelDimensions}
+        />
       )}
       <StatusBar />
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}

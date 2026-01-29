@@ -92,7 +92,12 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
 
       case 'clear_selection':
         setPendingKill(null); // Also cancel any pending kill
-        clearSelection();
+        // If panel is open, close it first; otherwise clear hex selection
+        if (selectedAgentId) {
+          selectAgent(null);
+        } else {
+          clearSelection();
+        }
         break;
 
       case 'open_panel': {
@@ -159,13 +164,31 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Get current mode
-      const mode = useUIStore.getState().getMode();
+      // Check if focus is in the terminal panel
+      const terminalPanel = document.querySelector('.terminal-panel');
+      const focusIsInTerminal = terminalPanel?.contains(document.activeElement);
 
-      // In terminal mode, only intercept modified keys (Cmd+...)
-      // Let everything else flow through to the terminal
-      if (mode === 'terminal' && !e.metaKey) {
+      // Cmd+Esc is the global "escape hatch" - ALWAYS handled by app
+      // This lets user unfocus/close terminal even when it has focus
+      const isCmdEsc = e.metaKey && e.key === 'Escape';
+
+      // TERMINAL FOCUSED: Let terminal handle ALL keys (acts like real terminal)
+      // EXCEPT Cmd+Esc which is the global toggle
+      if (focusIsInTerminal && !isCmdEsc) {
         return;
+      }
+
+      // APP FOCUSED: We handle all keys for grid navigation/controls
+      // Determine mode based on UI state (not focus)
+      const { selectedHex, selectedAgentId } = useUIStore.getState();
+      let mode: 'grid' | 'selected' | 'terminal';
+      if (selectedAgentId) {
+        // Panel open but unfocused - use selected mode for grid interaction
+        mode = selectedHex ? 'selected' : 'grid';
+      } else if (selectedHex) {
+        mode = 'selected';
+      } else {
+        mode = 'grid';
       }
 
       // Serialize the key event
@@ -177,13 +200,19 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
       const bindings = keymap.bindings[mode];
       let action = bindings[combo];
 
-      if (!action) return;
-
       // Handle kill confirmation: if pendingKill is set, Enter or Shift+X confirms
       const pendingKill = useUIStore.getState().pendingKill;
       if (pendingKill && (combo === 'Enter' || combo === 'Shift+X')) {
         action = { type: 'confirm_kill' };
       }
+
+      // Prevent browser keybinds when app has focus (Cmd+D, Cmd+L, Cmd+K, etc.)
+      // Always preventDefault for Cmd/Ctrl combos to avoid browser behavior
+      if (e.metaKey || e.ctrlKey) {
+        e.preventDefault();
+      }
+
+      if (!action) return;
 
       e.preventDefault();
       e.stopPropagation();

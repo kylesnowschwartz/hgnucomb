@@ -1,7 +1,10 @@
 /**
  * Floating terminal panel with xterm.js.
  *
- * Renders left half of screen, wired to WebSocketBridge for real PTY sessions.
+ * Features:
+ * - Slide-out drawer animation from left
+ * - Draggable via header
+ * - Resizable via corner handle
  * Close via header X button or grid click-away.
  */
 
@@ -10,7 +13,6 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { useTerminalStore } from './terminalStore';
-import { useDraggable } from '@features/grid/useDraggable';
 import { xtermTheme } from '@theme/catppuccin-mocha';
 import './fonts.css';
 import './TerminalPanel.css';
@@ -18,26 +20,127 @@ import './TerminalPanel.css';
 // Use the Catppuccin theme directly (no transparency - better WebGL compatibility)
 const TERMINAL_THEME = xtermTheme;
 
+const MIN_WIDTH = 400;
+const MIN_HEIGHT = 300;
+
+interface PanelDimensions {
+  width: number;
+  height: number;
+}
+
 interface TerminalPanelProps {
   sessionId: string;
   onClose: () => void;
+  isOpen?: boolean;
+  /** Panel dimensions - controlled by parent for persistence */
+  dimensions: PanelDimensions;
+  onDimensionsChange: (dims: PanelDimensions) => void;
 }
 
-export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
+export function TerminalPanel({
+  sessionId,
+  onClose,
+  isOpen = true,
+  dimensions,
+  onDimensionsChange,
+}: TerminalPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const bridge = useTerminalStore((s) => s.bridge);
   const getSession = useTerminalStore((s) => s.getSession);
   const [isFocused, setIsFocused] = useState(false);
 
-  // Draggable panel - starts top-left
-  const { handleMouseDown, style: dragStyle } = useDraggable({ initialX: 20, initialY: 20 });
+  // Panel position (internal state - resets on remount)
+  const [position, setPosition] = useState({ x: 20, y: 20 });
+
+  // Drag state
+  const isDragging = useRef(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
+
+  // Resize state
+  const isResizing = useRef(false);
+  const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0 });
+
+  // Handle drag start on header
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    isDragging.current = true;
+    dragOffset.current = {
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    };
+  }, [position.x, position.y]);
+
+  // Handle resize start on corner
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    isResizing.current = true;
+    resizeStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      width: dimensions.width,
+      height: dimensions.height,
+    };
+  }, [dimensions.width, dimensions.height]);
+
+  // Global mouse move/up for drag and resize
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDragging.current) {
+        const newX = e.clientX - dragOffset.current.x;
+        const newY = e.clientY - dragOffset.current.y;
+        // Clamp to viewport bounds
+        const clampedX = Math.max(0, Math.min(newX, window.innerWidth - 100));
+        const clampedY = Math.max(0, Math.min(newY, window.innerHeight - 50));
+        setPosition({ x: clampedX, y: clampedY });
+      }
+
+      if (isResizing.current) {
+        const deltaX = e.clientX - resizeStart.current.x;
+        const deltaY = e.clientY - resizeStart.current.y;
+        const newWidth = Math.max(MIN_WIDTH, resizeStart.current.width + deltaX);
+        const newHeight = Math.max(MIN_HEIGHT, resizeStart.current.height + deltaY);
+        // Clamp to viewport
+        const maxWidth = window.innerWidth - position.x - 20;
+        const maxHeight = window.innerHeight - position.y - 20;
+        onDimensionsChange({
+          width: Math.min(newWidth, maxWidth),
+          height: Math.min(newHeight, maxHeight),
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      isDragging.current = false;
+      isResizing.current = false;
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [position.x, position.y, onDimensionsChange]);
 
   // Re-focus terminal to ensure keyboard input reaches xterm.js
   const focusTerminal = useCallback(() => {
     terminalRef.current?.focus();
   }, []);
+
+  // Refit terminal when dimensions change
+  useEffect(() => {
+    if (fitAddonRef.current && terminalRef.current && bridge) {
+      fitAddonRef.current.fit();
+      bridge.resize(sessionId, terminalRef.current.cols, terminalRef.current.rows);
+    }
+  }, [dimensions, bridge, sessionId]);
 
   // Track focus state for visual feedback
   useEffect(() => {
@@ -110,18 +213,14 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
     // Open terminal to DOM
     terminal.open(container);
 
-    // Let certain key combos pass through to window for keyboard navigation
-    // Return false = don't handle in xterm, let it bubble
+    // Terminal captures ALL keys when focused - acts like a real terminal
+    // EXCEPT Cmd+Esc which is a global toggle to unfocus/close panel
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-      // Let Cmd+Escape through for closing panel
-      if (e.metaKey && e.key === 'Escape') return false;
-      // Let Cmd+hjkl through for navigation
-      if (e.metaKey && ['h', 'j', 'k', 'l'].includes(e.key)) return false;
-      // Let Cmd+arrows through for navigation
-      if (e.metaKey && e.key.startsWith('Arrow')) return false;
-      // Let Cmd+? through for help
-      if (e.metaKey && e.key === '?') return false;
-      // Handle everything else in xterm (including Shift+Enter via Kitty protocol)
+      // Cmd+Esc is the global "escape hatch" - always passes through to app
+      if (e.metaKey && e.key === 'Escape') {
+        return false; // Don't handle in xterm, let it bubble to window
+      }
+      // Everything else stays in the terminal
       return true;
     });
 
@@ -186,13 +285,25 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
     };
   }, [sessionId, bridge, onClose, getSession]);
 
-  const panelClasses = `terminal-panel ${isFocused ? 'terminal-panel--focused' : ''}`;
+  const panelClasses = [
+    'terminal-panel',
+    isFocused ? 'terminal-panel--focused' : '',
+    isOpen ? 'terminal-panel--open' : 'terminal-panel--closed',
+  ].filter(Boolean).join(' ');
+
+  const panelStyle: React.CSSProperties = {
+    position: 'fixed',
+    left: position.x,
+    top: position.y,
+    width: dimensions.width,
+    height: dimensions.height,
+  };
 
   return (
-    <div className={panelClasses} style={dragStyle}>
+    <div className={panelClasses} style={panelStyle} ref={panelRef}>
       <div
         className="terminal-panel__header"
-        onMouseDown={handleMouseDown}
+        onMouseDown={handleDragStart}
         onMouseUp={focusTerminal} // Re-focus after drag
       >
         <span className="terminal-panel__title">Terminal - {sessionId}</span>
@@ -204,6 +315,11 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
         className="terminal-panel__body"
         ref={containerRef}
         onClick={focusTerminal} // Re-focus on click
+      />
+      <div
+        className="terminal-panel__resize-handle"
+        onMouseDown={handleResizeStart}
+        title="Drag to resize"
       />
     </div>
   );
