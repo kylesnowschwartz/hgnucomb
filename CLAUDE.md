@@ -11,6 +11,7 @@ Spatial terminal multiplexer: a 2D navigable canvas where terminals and Claude a
 ## Quick Start
 
 ```bash
+just test       # Run linter and tests
 just dev-all    # Start UI + server (or: pnpm dev:all)
 just kill       # Clean up orphaned processes
 just tasks      # Check beads-lite task queue

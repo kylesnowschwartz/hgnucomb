@@ -571,6 +571,13 @@ console.log(`Terminal WebSocket server listening on ws://localhost:${PORT}`);
 function shutdown(signal: string): void {
   console.log(`\n${signal} received, shutting down...`);
   manager.disposeAll();
+
+  // Forcibly close all WebSocket connections so the server can close immediately
+  // This is necessary for hot-reload to work - tsx --watch won't wait
+  for (const client of wss.clients) {
+    client.terminate();
+  }
+
   wss.close(() => {
     console.log("Server closed");
     process.exit(0);
@@ -579,7 +586,7 @@ function shutdown(signal: string): void {
   setTimeout(() => {
     console.log("Forcing exit");
     process.exit(1);
-  }, 3000);
+  }, 1000);
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));
