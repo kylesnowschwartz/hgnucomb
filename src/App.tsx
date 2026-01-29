@@ -41,6 +41,7 @@ function App() {
   const { getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addMessageToInbox, getMessages } = useAgentStore();
   const { addBroadcast, addStatusChange, addSpawn } = useEventLogStore();
   const panToHex = useViewportStore((s) => s.panToHex);
+  const centerOnHex = useViewportStore((s) => s.centerOnHex);
 
   // Track which agents we've already initiated session creation for
   const sessionCreationInitiated = useRef<Set<string>>(new Set());
@@ -399,6 +400,7 @@ function App() {
     onKill: handleKeyboardKill,
     onShowHelp: handleShowHelp,
     onPanToHex: panToHex,
+    onCenterOnHex: centerOnHex,
   });
 
   const handleCloseTerminal = useCallback(async () => {

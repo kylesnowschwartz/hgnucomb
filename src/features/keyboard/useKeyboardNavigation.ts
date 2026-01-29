@@ -20,8 +20,10 @@ interface UseKeyboardNavigationOptions {
   onSpawn?: (cellType: CellType, hex: HexCoordinate) => void;
   /** Called when kill is requested at a hex */
   onKill?: (hex: HexCoordinate) => void;
-  /** Called when navigation should pan the viewport */
+  /** Called when navigation should pan the viewport (edge-nudge) */
   onPanToHex?: (hex: HexCoordinate) => void;
+  /** Called when viewport should center on a hex (force-center) */
+  onCenterOnHex?: (hex: HexCoordinate) => void;
 }
 
 /**
@@ -80,7 +82,7 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
 
       case 'select_center':
         selectHex({ q: 0, r: 0 });
-        optionsRef.current.onPanToHex?.({ q: 0, r: 0 });
+        optionsRef.current.onCenterOnHex?.({ q: 0, r: 0 });
         break;
 
       case 'clear_selection':

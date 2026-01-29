@@ -111,6 +111,21 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
     // Open terminal to DOM
     terminal.open(container);
 
+    // Let certain key combos pass through to window for keyboard navigation
+    // Return false = don't handle in xterm, let it bubble
+    terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      // Let Cmd+Escape through for closing panel
+      if (e.metaKey && e.key === 'Escape') return false;
+      // Let Cmd+hjkl through for navigation
+      if (e.metaKey && ['h', 'j', 'k', 'l'].includes(e.key)) return false;
+      // Let Cmd+arrows through for navigation
+      if (e.metaKey && e.key.startsWith('Arrow')) return false;
+      // Let Cmd+? through for help
+      if (e.metaKey && e.key === '?') return false;
+      // Handle everything else in xterm
+      return true;
+    });
+
     // Enable GPU-accelerated rendering
     const webglAddon = new WebglAddon();
     webglAddon.onContextLoss(() => {

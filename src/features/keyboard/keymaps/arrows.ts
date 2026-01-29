@@ -70,6 +70,7 @@ export const arrowsKeymap: Keymap = {
     // Terminal mode
     // ========================================================================
     terminal: {
+      // Cmd+Escape closes panel
       'Meta+Escape': { type: 'close_panel' },
 
       'Meta+ArrowLeft': { type: 'navigate', direction: 'w' },

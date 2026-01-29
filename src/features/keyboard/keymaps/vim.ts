@@ -103,7 +103,7 @@ export const vimKeymap: Keymap = {
     // Terminal mode: panel open, most keys go to terminal
     // ========================================================================
     terminal: {
-      // Only Cmd+ modified keys escape to navigation
+      // Cmd+Escape closes panel
       'Meta+Escape': { type: 'close_panel' },
 
       // Cmd+hjkl for navigation while panel open

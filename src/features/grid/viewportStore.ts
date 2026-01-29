@@ -31,11 +31,18 @@ interface ViewportStore {
   setViewport: (scale: number, position: { x: number; y: number }) => void;
 
   /**
-   * Request pan to center a hex on screen.
-   * Only pans if hex is beyond threshold distance from current viewport center.
+   * Request pan to keep a hex visible on screen.
+   * Only pans when hex is near viewport edge (within 1 hex margin).
+   * Nudges by 2 hex widths instead of recentering.
    * Sets pendingPan for HexGrid to consume.
    */
-  panToHex: (hex: HexCoordinate, threshold?: number) => void;
+  panToHex: (hex: HexCoordinate) => void;
+
+  /**
+   * Force-center viewport on a hex (e.g., for 'g' go-to-origin).
+   * Always pans to center the hex on screen.
+   */
+  centerOnHex: (hex: HexCoordinate) => void;
 
   /** Clear pending pan (called by HexGrid after applying) */
   clearPendingPan: () => void;
@@ -56,32 +63,45 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
 
   setViewport: (scale, position) => set({ scale, position }),
 
-  panToHex: (hex: HexCoordinate, threshold = 3) => {
+  panToHex: (hex: HexCoordinate) => {
     const { scale, position, hexSize, containerSize } = get();
     const { width, height } = containerSize;
     if (width === 0 || height === 0) return; // Not initialized yet
 
-    // Calculate hex world position
+    // Calculate hex world position and screen position
     const worldPos = hexToPixel(hex, hexSize);
-
-    // Calculate hex screen position (where it currently is)
     const screenX = worldPos.x * scale + position.x;
     const screenY = worldPos.y * scale + position.y;
 
-    // Calculate distance from viewport center (in screen pixels)
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const distFromCenter = Math.sqrt(
-      Math.pow(screenX - centerX, 2) + Math.pow(screenY - centerY, 2)
-    );
+    // Edge margin: 1 hex from edge triggers pan
+    const margin = hexSize * scale;
+    // Nudge amount: 2 hex widths
+    const nudge = hexSize * scale * 2;
 
-    // Only pan if beyond threshold (threshold * hexSize pixels from center)
-    const thresholdPixels = threshold * hexSize * scale;
-    if (distFromCenter <= thresholdPixels) return;
+    let newX = position.x;
+    let newY = position.y;
 
-    // Calculate target position to center hex on screen
-    const targetX = centerX - worldPos.x * scale;
-    const targetY = centerY - worldPos.y * scale;
+    // Check edges and nudge (don't recenter, just nudge enough to keep visible)
+    if (screenX < margin) newX += nudge;
+    else if (screenX > width - margin) newX -= nudge;
+
+    if (screenY < margin) newY += nudge;
+    else if (screenY > height - margin) newY -= nudge;
+
+    // Only update if changed
+    if (newX !== position.x || newY !== position.y) {
+      set({ pendingPan: { position: { x: newX, y: newY } } });
+    }
+  },
+
+  centerOnHex: (hex: HexCoordinate) => {
+    const { scale, hexSize, containerSize } = get();
+    const { width, height } = containerSize;
+    if (width === 0 || height === 0) return;
+
+    const worldPos = hexToPixel(hex, hexSize);
+    const targetX = width / 2 - worldPos.x * scale;
+    const targetY = height / 2 - worldPos.y * scale;
 
     set({ pendingPan: { position: { x: targetX, y: targetY } } });
   },
