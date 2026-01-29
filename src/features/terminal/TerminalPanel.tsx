@@ -65,8 +65,12 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
   }, []);
 
   // Re-focus terminal on any keydown when panel is open but unfocused
+  // EXCEPT for Cmd+ modified keys which are handled by keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't refocus on Cmd+ keys - those are for navigation
+      if (e.metaKey) return;
+
       // If terminal exists and focus is outside the panel, refocus
       if (terminalRef.current && !containerRef.current?.contains(document.activeElement)) {
         terminalRef.current.focus();

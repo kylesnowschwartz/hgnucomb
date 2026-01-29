@@ -9,7 +9,7 @@
  * @see .agent-history/context-packet-task4-hex-grid.md
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Stage, Layer, Line, RegularPolygon, Circle } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { hexToPixel, hexesInRect } from '@shared/types';
@@ -18,6 +18,7 @@ import { useAgentStore, type AgentState } from '@features/agents/agentStore';
 import { useUIStore } from '@features/controls/uiStore';
 import { useTerminalStore } from '@features/terminal/terminalStore';
 import { useEventLogStore } from '@features/events/eventLogStore';
+import { useViewportStore } from './viewportStore';
 import { useShallow } from 'zustand/shallow';
 import type { AgentRole } from '@protocol/types';
 import { hexGrid, agentColors, palette } from '@theme/catppuccin-mocha';
@@ -93,9 +94,30 @@ export function HexGrid({
   height,
   hexSize = STYLE.hexSize,
 }: HexGridProps) {
-  // Viewport state
-  const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: width / 2, y: height / 2 });
+  // Viewport state (local + synced to store for external components)
+  const [scale, setScaleLocal] = useState(1);
+  const [position, setPositionLocal] = useState({ x: width / 2, y: height / 2 });
+  const setViewport = useViewportStore((s) => s.setViewport);
+  const setHexSizeStore = useViewportStore((s) => s.setHexSize);
+
+  // Sync viewport to store on changes
+  useEffect(() => {
+    setViewport(scale, position);
+  }, [scale, position, setViewport]);
+
+  // Sync hexSize to store on mount
+  useEffect(() => {
+    setHexSizeStore(hexSize);
+  }, [hexSize, setHexSizeStore]);
+
+  // Wrappers to update both local and store
+  const setScale = useCallback((newScale: number) => {
+    setScaleLocal(newScale);
+  }, []);
+
+  const setPosition = useCallback((newPos: { x: number; y: number }) => {
+    setPositionLocal(newPos);
+  }, []);
 
   // Agent state - useShallow prevents infinite re-render from new array references
   const agents = useAgentStore(useShallow((s) => s.getAllAgents()));

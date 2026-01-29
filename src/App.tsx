@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { HexGrid } from '@features/grid/HexGrid';
+import { ActionBar } from '@features/grid/ActionBar';
 import { ControlPanel } from '@features/controls/ControlPanel';
+import { StatusBar } from '@features/controls/StatusBar';
 import { TerminalPanel } from '@features/terminal/TerminalPanel';
 import { EventLog } from '@features/events/EventLog';
 import { WebSocketBridge } from '@features/terminal/index';
@@ -9,16 +11,17 @@ import { useUIStore } from '@features/controls/uiStore';
 import { useAgentStore, type AgentState } from '@features/agents/agentStore';
 import { agentToSnapshot } from '@features/agents/snapshot';
 import { useEventLogStore } from '@features/events/eventLogStore';
-import { SpawnMenu } from '@features/grid/SpawnMenu';
+import { useKeyboardNavigation, HelpModal } from '@features/keyboard';
 import { useShallow } from 'zustand/shallow';
 import { createMcpHandler, type McpHandlerDeps } from './handlers/mcpHandler';
-import type { CellType } from '@shared/types';
+import type { CellType, HexCoordinate } from '@shared/types';
 
 function App() {
   const [dimensions, setDimensions] = useState({
     width: window.innerWidth,
     height: window.innerHeight,
   });
+  const [showHelp, setShowHelp] = useState(false);
 
   const {
     bridge,
@@ -33,7 +36,7 @@ function App() {
     getSessionForAgent,
   } = useTerminalStore();
 
-  const { selectedAgentId, selectAgent, selectedHex, clearSelection } = useUIStore();
+  const { selectedAgentId, selectAgent } = useUIStore();
   const { getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addMessageToInbox, getMessages } = useAgentStore();
   const { addBroadcast, addStatusChange, addSpawn } = useEventLogStore();
 
@@ -360,31 +363,41 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Keyboard shortcuts for hex selection
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Escape: clear selection (only when panel not open)
-      if (e.key === 'Escape' && !activeSessionId) {
-        clearSelection();
-        return;
-      }
+  // Keyboard spawn handler
+  const handleKeyboardSpawn = useCallback(
+    (cellType: CellType, hex: HexCoordinate) => {
+      const newAgentId = spawnAgent(hex, cellType);
+      addSpawn(newAgentId, cellType, hex);
+    },
+    [spawnAgent, addSpawn]
+  );
 
-      // Enter: open panel for agent at selected hex (no-op if empty)
-      if (e.key === 'Enter' && selectedHex) {
-        const agents = getAllAgents();
-        const agentAtHex = agents.find(
-          (a) => a.hex.q === selectedHex.q && a.hex.r === selectedHex.r
-        );
-        if (agentAtHex) {
-          selectAgent(agentAtHex.id);
-        }
-        // Silent no-op if cell is empty - user must double-click to spawn first
+  // Keyboard kill handler
+  const handleKeyboardKill = useCallback(
+    (hex: HexCoordinate) => {
+      const agents = getAllAgents();
+      const agentAtHex = agents.find(
+        (a) => a.hex.q === hex.q && a.hex.r === hex.r
+      );
+      if (agentAtHex) {
+        useAgentStore.getState().removeAgent(agentAtHex.id);
       }
-    };
+    },
+    [getAllAgents]
+  );
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedHex, activeSessionId, clearSelection, selectAgent, getAllAgents]);
+  // Show help handler
+  const handleShowHelp = useCallback(() => {
+    setShowHelp(true);
+  }, []);
+
+  // Keyboard navigation - routes keys through keymap based on mode
+  useKeyboardNavigation({
+    onSpawn: handleKeyboardSpawn,
+    onKill: handleKeyboardKill,
+    onShowHelp: handleShowHelp,
+    // TODO: onPanToHex - viewport following
+  });
 
   const handleCloseTerminal = useCallback(async () => {
     // Just deselect agent - keep session alive in background
@@ -392,39 +405,17 @@ function App() {
     setActiveSession(null);
   }, [selectAgent, setActiveSession]);
 
-  // Spawn agent from menu at selected hex
-  const handleSpawnFromMenu = useCallback((cellType: CellType) => {
-    if (!selectedHex) return;
-    const newAgentId = spawnAgent(selectedHex, cellType);
-    addSpawn(newAgentId, cellType, selectedHex);
-    // Keep hex selected so user can open the panel
-  }, [selectedHex, spawnAgent, addSpawn]);
-
-  // Check if selected hex is empty (no agent there)
-  const selectedHexIsEmpty = useMemo(() => {
-    if (!selectedHex) return false;
-    const allAgents = getAllAgents();
-    return !allAgents.some(a => a.hex.q === selectedHex.q && a.hex.r === selectedHex.r);
-  }, [selectedHex, getAllAgents]);
-
-  // Show spawn menu when empty hex is selected (visible even with terminal panel open)
-  const showSpawnMenu = selectedHex && selectedHexIsEmpty;
-
   return (
     <>
       <HexGrid width={dimensions.width} height={dimensions.height} />
+      <ActionBar />
       <ControlPanel />
       <EventLog />
-      {showSpawnMenu && (
-        <SpawnMenu
-          selectedHex={selectedHex}
-          onSpawn={handleSpawnFromMenu}
-          onCancel={clearSelection}
-        />
-      )}
       {activeSessionId && selectedAgentId && (
         <TerminalPanel sessionId={activeSessionId} onClose={handleCloseTerminal} />
       )}
+      <StatusBar />
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </>
   );
 }

@@ -9,6 +9,7 @@
 
 import { create } from 'zustand';
 import type { HexCoordinate } from '@shared/types';
+import type { InputMode } from '@features/keyboard/types';
 
 interface UIStore {
   // Currently selected agent (terminal panel open for this agent)
@@ -23,6 +24,9 @@ interface UIStore {
   selectedHex: HexCoordinate | null;
   selectHex: (hex: HexCoordinate | null) => void;
   clearSelection: () => void;
+
+  // Derived input mode from state
+  getMode: () => InputMode;
 }
 
 export const useUIStore = create<UIStore>()((set) => ({
@@ -52,5 +56,12 @@ export const useUIStore = create<UIStore>()((set) => ({
 
   clearSelection: () => {
     set({ selectedHex: null });
+  },
+
+  getMode: () => {
+    const state = useUIStore.getState();
+    if (state.selectedAgentId) return 'terminal';
+    if (state.selectedHex) return 'selected';
+    return 'grid';
   },
 }));
