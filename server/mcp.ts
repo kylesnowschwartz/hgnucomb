@@ -27,6 +27,8 @@ import type {
   McpReportResultResponse,
   McpGetMessagesResponse,
   McpGetWorkerStatusResponse,
+  McpGetWorkerDiffResponse,
+  McpMergeWorkerChangesResponse,
   DetailedStatus,
   AgentMessage,
 } from "@shared/protocol.ts";
@@ -765,6 +767,132 @@ mcpServer.tool(
       content: [{ type: "text", text: `Timeout waiting for worker ${workerId} after ${effectiveTimeout}ms` }],
       isError: true,
     };
+  }
+);
+
+// Tool: get_worker_diff
+mcpServer.tool(
+  "get_worker_diff",
+  "Get diff of changes made by a worker since branching from main. Orchestrators only.",
+  {
+    workerId: z.string().describe("The agent ID of the worker to get diff for"),
+  },
+  async ({ workerId }) => {
+    // Permission check: only orchestrators can view worker diffs
+    if (!canSpawn()) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Permission denied: Only orchestrators can view worker diffs. You are a ${CELL_TYPE}.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    try {
+      const result = await sendRequest<McpGetWorkerDiffResponse["payload"]>("mcp.getWorkerDiff", {
+        workerId,
+      });
+
+      if (!result.success) {
+        return {
+          content: [{ type: "text", text: `Failed to get worker diff: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      const diff = result.diff ?? "";
+      const stats = result.stats;
+      const header = stats
+        ? `[${stats.files} files changed, +${stats.insertions} -${stats.deletions}]\n\n`
+        : "";
+
+      if (!diff) {
+        return {
+          content: [{ type: "text", text: "No changes (worker branch is identical to main)" }],
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${header}${diff}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Tool: merge_worker_changes
+mcpServer.tool(
+  "merge_worker_changes",
+  "Merge a worker's changes into main using a squash merge. Creates a single commit with all worker changes. Orchestrators only.",
+  {
+    workerId: z.string().describe("The agent ID of the worker to merge"),
+  },
+  async ({ workerId }) => {
+    // Permission check: only orchestrators can merge worker changes
+    if (!canSpawn()) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Permission denied: Only orchestrators can merge worker changes. You are a ${CELL_TYPE}.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    try {
+      const result = await sendRequest<McpMergeWorkerChangesResponse["payload"]>("mcp.mergeWorkerChanges", {
+        workerId,
+      });
+
+      if (!result.success) {
+        return {
+          content: [{ type: "text", text: `Failed to merge worker changes: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      const msg = result.commitHash
+        ? `Merged worker ${workerId} into main (commit: ${result.commitHash.slice(0, 7)})`
+        : `Merged worker ${workerId} into main`;
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${msg}${result.filesChanged ? ` [${result.filesChanged} files changed]` : ""}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 );
 

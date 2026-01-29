@@ -397,6 +397,58 @@ export interface McpGetWorkerStatusResponse {
 }
 
 // ============================================================================
+// MCP Diff Types (Get Worker Changes)
+// ============================================================================
+
+export interface McpGetWorkerDiffRequest {
+  type: 'mcp.getWorkerDiff';
+  requestId: string;
+  payload: {
+    callerId: string;
+    workerId: string;
+  };
+}
+
+export interface McpGetWorkerDiffResponse {
+  type: 'mcp.getWorkerDiff.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    diff?: string;
+    stats?: {
+      files: number;
+      insertions: number;
+      deletions: number;
+    };
+    error?: string;
+  };
+}
+
+// ============================================================================
+// MCP Merge Types (Merge Worker Changes)
+// ============================================================================
+
+export interface McpMergeWorkerChangesRequest {
+  type: 'mcp.mergeWorkerChanges';
+  requestId: string;
+  payload: {
+    callerId: string;
+    workerId: string;
+  };
+}
+
+export interface McpMergeWorkerChangesResponse {
+  type: 'mcp.mergeWorkerChanges.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    commitHash?: string;
+    filesChanged?: number;
+    error?: string;
+  };
+}
+
+// ============================================================================
 // MCP Result Types (Worker -> Orchestrator)
 // ============================================================================
 
@@ -489,7 +541,9 @@ export type McpRequest =
   | McpReportStatusRequest
   | McpReportResultRequest
   | McpGetMessagesRequest
-  | McpGetWorkerStatusRequest;
+  | McpGetWorkerStatusRequest
+  | McpGetWorkerDiffRequest
+  | McpMergeWorkerChangesRequest;
 
 export type McpResponse =
   | McpSpawnResponse
@@ -498,7 +552,9 @@ export type McpResponse =
   | McpReportStatusResponse
   | McpReportResultResponse
   | McpGetMessagesResponse
-  | McpGetWorkerStatusResponse;
+  | McpGetWorkerStatusResponse
+  | McpGetWorkerDiffResponse
+  | McpMergeWorkerChangesResponse;
 
 export type McpNotification =
   | McpBroadcastDelivery
