@@ -33,8 +33,7 @@ const STYLE = {
   hexFillHover: hexGrid.hexFillHover,
   hexStroke: hexGrid.hexStroke,
   hexStrokeSelected: hexGrid.hexStrokeSelected, // Panel open (pink)
-  hexStrokeFocused: hexGrid.hexStrokeFocused, // Cell selection (yellow)
-  hexStrokeHover: hexGrid.hexStrokeHover,
+  hexStrokeHighlight: hexGrid.hexStrokeHover, // Selected cell (blue)
   hexStrokeOrchestrator: hexGrid.hexStrokeOrchestrator,
   hexStrokeWorker: hexGrid.hexStrokeWorker,
   connectionStroke: agentColors.connection,
@@ -94,23 +93,47 @@ export function HexGrid({
   height,
   hexSize = STYLE.hexSize,
 }: HexGridProps) {
-  // Viewport state (local + synced to store for external components)
+  // Viewport state (local state, synced to store for external components)
   const [scale, setScaleLocal] = useState(1);
   const [position, setPositionLocal] = useState({ x: width / 2, y: height / 2 });
+
+  // Store setters and pending pan
   const setViewport = useViewportStore((s) => s.setViewport);
   const setHexSizeStore = useViewportStore((s) => s.setHexSize);
+  const setContainerSize = useViewportStore((s) => s.setContainerSize);
+  const pendingPan = useViewportStore((s) => s.pendingPan);
+  const clearPendingPan = useViewportStore((s) => s.clearPendingPan);
 
-  // Sync viewport to store on changes
+  // Sync local → store on local changes (from drag/zoom)
   useEffect(() => {
     setViewport(scale, position);
   }, [scale, position, setViewport]);
 
-  // Sync hexSize to store on mount
+  // Sync hexSize and container size to store on mount/resize
   useEffect(() => {
     setHexSizeStore(hexSize);
   }, [hexSize, setHexSizeStore]);
 
-  // Wrappers to update both local and store
+  useEffect(() => {
+    setContainerSize({ width, height });
+  }, [width, height, setContainerSize]);
+
+  // Initialize store position on mount
+  useEffect(() => {
+    setViewport(scale, { x: width / 2, y: height / 2 });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Apply pending pan from external source (keyboard navigation)
+  // This synchronizes external store state with local React state - intentional setState in effect
+  useEffect(() => {
+    if (pendingPan) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPositionLocal(pendingPan.position);
+      clearPendingPan();
+    }
+  }, [pendingPan, clearPendingPan]);
+
+  // Wrappers to update local state (triggers sync effect)
   const setScale = useCallback((newScale: number) => {
     setScaleLocal(newScale);
   }, []);
@@ -131,11 +154,9 @@ export function HexGrid({
   const addSpawn = useEventLogStore((s) => s.addSpawn);
   const addKill = useEventLogStore((s) => s.addKill);
 
-  // UI state - selected agent for terminal, hovered hex for visual feedback, selected hex for focus
+  // UI state - selected agent for terminal, selected hex for focus (mouse or keyboard)
   const selectedAgentId = useUIStore((s) => s.selectedAgentId);
   const selectAgent = useUIStore((s) => s.selectAgent);
-  const hoveredHex = useUIStore((s) => s.hoveredHex);
-  const setHoveredHex = useUIStore((s) => s.setHoveredHex);
   const selectedHex = useUIStore((s) => s.selectedHex);
   const selectHex = useUIStore((s) => s.selectHex);
 
@@ -236,40 +257,36 @@ export function HexGrid({
           const { x, y } = hexToPixel(hex, hexSize);
           const agent = agentByHex.get(`${hex.q},${hex.r}`);
           const isPanelOpen = agent && agent.id === selectedAgentId;
-          const isFocused =
+          const isSelected =
             selectedHex && selectedHex.q === hex.q && selectedHex.r === hex.r;
-          const isHovered =
-            hoveredHex && hoveredHex.q === hex.q && hoveredHex.r === hex.r;
           const isOrchestrator = agent?.cellType === 'orchestrator';
           const isWorker = agent?.cellType === 'worker';
           const isClaudeAgent = isOrchestrator || isWorker;
 
-          // Fill: agent role color > hover highlight > default
+          // Fill: agent role color > selected highlight > default
           const fill = agent
             ? ROLE_COLORS[agent.role]
-            : isHovered
+            : isSelected
               ? STYLE.hexFillHover
               : STYLE.hexFill;
 
-          // Stroke priority: panel-open (pink) > focused (yellow) > orchestrator > worker > hovered > default
+          // Stroke priority: panel-open (pink) > orchestrator > worker > selected (blue) > default
           const stroke = isPanelOpen
             ? STYLE.hexStrokeSelected
-            : isFocused
-              ? STYLE.hexStrokeFocused
-              : isOrchestrator
-                ? STYLE.hexStrokeOrchestrator
-                : isWorker
-                  ? STYLE.hexStrokeWorker
-                  : isHovered
-                    ? STYLE.hexStrokeHover
-                    : STYLE.hexStroke;
+            : isOrchestrator
+              ? STYLE.hexStrokeOrchestrator
+              : isWorker
+                ? STYLE.hexStrokeWorker
+                : isSelected
+                  ? STYLE.hexStrokeHighlight
+                  : STYLE.hexStroke;
 
-          // Stroke width: panel-open = thick, focused = medium-thick, Claude agents = medium, default = thin
+          // Stroke width: panel-open = thick, Claude agents = medium, selected = medium, default = thin
           const strokeWidth = isPanelOpen
             ? 3
-            : isFocused
-              ? 2.5
-              : isClaudeAgent
+            : isClaudeAgent
+              ? 2
+              : isSelected
                 ? 2
                 : STYLE.gridStrokeWidth;
           const opacity = agent ? STATUS_OPACITY[agent.status] : 1;
@@ -350,8 +367,7 @@ export function HexGrid({
                   removeAgent(agent.id);
                 }
               }}
-              onMouseEnter={() => setHoveredHex(hex)}
-              onMouseLeave={() => setHoveredHex(null)}
+              onMouseEnter={() => selectHex(hex)}
               style={{ cursor: 'pointer' }}
             />
           );

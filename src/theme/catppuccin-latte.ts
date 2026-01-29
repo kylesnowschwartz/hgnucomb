@@ -139,10 +139,11 @@ export const agentColors = {
 export const hexGrid = {
   background: palette.mantle,
   hexFill: palette.base,
+  hexFillHover: palette.surface0, // Subtle fill when cell is selected
   hexStroke: palette.surface1,
-  hexStrokeSelected: palette.pink,
-  hexStrokeHover: palette.lavender,
-  hexStrokeOrchestrator: palette.blue, // Distinct border for orchestrator cells
+  hexStrokeSelected: palette.pink, // Panel open (pink)
+  hexStrokeHover: palette.blue, // Selected cell highlight (blue)
+  hexStrokeOrchestrator: palette.sapphire, // Distinct border for orchestrator cells
   hexStrokeWorker: palette.teal, // Distinct border for worker cells
   originMarker: palette.overlay0,
 } as const;

@@ -44,6 +44,12 @@ export const vimKeymap: Keymap = {
       'Shift+ArrowLeft': { type: 'navigate', direction: 'nw' },
       'Shift+ArrowRight': { type: 'navigate', direction: 'sw' },
 
+      // Cmd+arrows - prevent browser back/forward navigation
+      'Meta+ArrowLeft': { type: 'navigate', direction: 'w' },
+      'Meta+ArrowRight': { type: 'navigate', direction: 'e' },
+      'Meta+ArrowUp': { type: 'navigate_vertical', direction: 'up' },
+      'Meta+ArrowDown': { type: 'navigate_vertical', direction: 'down' },
+
       // Utilities
       g: { type: 'select_center' },
       '?': { type: 'show_help' },
@@ -69,6 +75,12 @@ export const vimKeymap: Keymap = {
       'Shift+ArrowDown': { type: 'navigate', direction: 'se' },
       'Shift+ArrowLeft': { type: 'navigate', direction: 'nw' },
       'Shift+ArrowRight': { type: 'navigate', direction: 'sw' },
+
+      // Cmd+arrows - prevent browser back/forward navigation
+      'Meta+ArrowLeft': { type: 'navigate', direction: 'w' },
+      'Meta+ArrowRight': { type: 'navigate', direction: 'e' },
+      'Meta+ArrowUp': { type: 'navigate_vertical', direction: 'up' },
+      'Meta+ArrowDown': { type: 'navigate_vertical', direction: 'down' },
 
       // Cell actions
       Enter: { type: 'open_panel' },

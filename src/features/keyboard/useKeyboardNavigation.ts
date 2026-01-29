@@ -60,7 +60,8 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
         const next = getNeighborInDirection(current, direction);
         selectHex(next);
 
-        // If in terminal mode with panel open, also open panel for agent at new hex
+        // If in terminal mode with panel open, switch to agent at new hex if occupied
+        // Keep panel open when navigating to empty cells (user can close explicitly)
         if (selectedAgentId) {
           const agents = getAllAgents();
           const agentAtNext = agents.find(
@@ -69,11 +70,7 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
           if (agentAtNext) {
             selectAgent(agentAtNext.id);
           }
-          // If navigating to empty cell while panel open, close the panel
-          // but keep the hex selected
-          else {
-            selectAgent(null);
-          }
+          // Empty cell: keep current panel open, just move hex selection
         }
 
         // Pan viewport if needed

@@ -12,6 +12,7 @@ import { useAgentStore, type AgentState } from '@features/agents/agentStore';
 import { agentToSnapshot } from '@features/agents/snapshot';
 import { useEventLogStore } from '@features/events/eventLogStore';
 import { useKeyboardNavigation, HelpModal } from '@features/keyboard';
+import { useViewportStore } from '@features/grid/viewportStore';
 import { useShallow } from 'zustand/shallow';
 import { createMcpHandler, type McpHandlerDeps } from './handlers/mcpHandler';
 import type { CellType, HexCoordinate } from '@shared/types';
@@ -39,6 +40,7 @@ function App() {
   const { selectedAgentId, selectAgent } = useUIStore();
   const { getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addMessageToInbox, getMessages } = useAgentStore();
   const { addBroadcast, addStatusChange, addSpawn } = useEventLogStore();
+  const panToHex = useViewportStore((s) => s.panToHex);
 
   // Track which agents we've already initiated session creation for
   const sessionCreationInitiated = useRef<Set<string>>(new Set());
@@ -396,7 +398,7 @@ function App() {
     onSpawn: handleKeyboardSpawn,
     onKill: handleKeyboardKill,
     onShowHelp: handleShowHelp,
-    // TODO: onPanToHex - viewport following
+    onPanToHex: panToHex,
   });
 
   const handleCloseTerminal = useCallback(async () => {

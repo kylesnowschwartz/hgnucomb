@@ -3,9 +3,9 @@
  *
  * Shows available actions based on cell state:
  * - Empty cell: spawn hints (T/O/W)
- * - Occupied cell: action hints (Enter/X)
+ * - Occupied cell: action hints (Enter/X) - only when terminal closed
  *
- * Positioned below the selected hex with a 300ms fade-in delay.
+ * Positioned below the selected hex with a fade-in delay.
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -30,15 +30,28 @@ export function ActionBar() {
   const position = useViewportStore((s) => s.position);
   const hexSize = useViewportStore((s) => s.hexSize);
 
-  // Fade-in delay - show after 300ms of selection
+  const isTerminalOpen = !!selectedAgentId;
+
+  // Check if selected hex is occupied
+  const agentAtHex = useMemo(() => {
+    if (!selectedHex) return null;
+    const agents = getAllAgents();
+    return agents.find(
+      (a) => a.hex.q === selectedHex.q && a.hex.r === selectedHex.r
+    );
+  }, [selectedHex, getAllAgents]);
+
+  // When terminal is open, only show for empty cells (spawn hints)
+  // When terminal is closed, show for any selected hex
+  const shouldShow = selectedHex && (!isTerminalOpen || !agentAtHex);
+
+  // Fade-in delay
   const [delayedHexKey, setDelayedHexKey] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Current hex key
   const hexKey = selectedHex ? `${selectedHex.q},${selectedHex.r}` : null;
 
   useEffect(() => {
-    // Clear any existing timer
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -50,10 +63,10 @@ export function ActionBar() {
       return;
     }
 
-    // Delay before showing
+    // Short delay to avoid flicker during rapid movement
     timerRef.current = setTimeout(() => {
       setDelayedHexKey(hexKey);
-    }, 300);
+    }, 150);
 
     return () => {
       if (timerRef.current) {
@@ -62,31 +75,14 @@ export function ActionBar() {
     };
   }, [hexKey]);
 
-  // Visible when delayed key matches current key
   const isVisible = hexKey !== null && delayedHexKey === hexKey;
 
-  // Determine if selected hex is occupied
-  const agentAtHex = useMemo(() => {
-    if (!selectedHex) return null;
-    const agents = getAllAgents();
-    return agents.find(
-      (a) => a.hex.q === selectedHex.q && a.hex.r === selectedHex.r
-    );
-  }, [selectedHex, getAllAgents]);
-
-  // Don't show if no selection
-  if (!selectedHex) return null;
-
-  // Don't show if terminal panel is open (mode = terminal)
-  if (selectedAgentId) return null;
-
-  // Don't show until fade-in delay
-  if (!isVisible) return null;
+  if (!shouldShow || !isVisible) return null;
 
   // Calculate screen position
   const worldPos = hexToPixel(selectedHex, hexSize);
   const screenX = worldPos.x * scale + position.x;
-  const screenY = worldPos.y * scale + position.y + hexSize * scale + 10; // Below hex
+  const screenY = worldPos.y * scale + position.y + hexSize * scale + 10;
 
   // Hints based on cell state
   const hints: ActionHint[] = agentAtHex
