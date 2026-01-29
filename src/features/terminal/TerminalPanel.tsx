@@ -15,11 +15,8 @@ import { xtermTheme } from '@theme/catppuccin-mocha';
 import './fonts.css';
 import './TerminalPanel.css';
 
-// Catppuccin Latte theme with transparent background for panel integration
-const TERMINAL_THEME = {
-  ...xtermTheme,
-  background: 'transparent',
-};
+// Use the Catppuccin theme directly (no transparency - better WebGL compatibility)
+const TERMINAL_THEME = xtermTheme;
 
 interface TerminalPanelProps {
   sessionId: string;
@@ -91,15 +88,17 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
     const container = containerRef.current;
     if (!container || !bridge) return;
 
-    // Create terminal with Nerd Font and Tokyo Night theme
+    // Create terminal with Nerd Font and Catppuccin theme
+    // Enable Kitty keyboard protocol for proper Shift+Enter handling with Claude Code
     const terminal = new Terminal({
       fontFamily: '"JetBrainsMono Nerd Font", "SF Mono", Consolas, monospace',
       fontSize: 14,
       theme: TERMINAL_THEME,
-      allowTransparency: true,
       cursorBlink: true,
-      // xterm.js specific options for better rendering
-      customGlyphs: true, // Use built-in box drawing glyphs
+      overviewRuler: {}, // Disable overview ruler
+      vtExtensions: {
+        kittyKeyboard: true,
+      },
     });
 
     const fitAddon = new FitAddon();
@@ -122,14 +121,13 @@ export function TerminalPanel({ sessionId, onClose }: TerminalPanelProps) {
       if (e.metaKey && e.key.startsWith('Arrow')) return false;
       // Let Cmd+? through for help
       if (e.metaKey && e.key === '?') return false;
-      // Handle everything else in xterm
+      // Handle everything else in xterm (including Shift+Enter via Kitty protocol)
       return true;
     });
 
     // Enable GPU-accelerated rendering
     const webglAddon = new WebglAddon();
     webglAddon.onContextLoss(() => {
-      // WebGL context lost - fall back to canvas renderer
       webglAddon.dispose();
     });
     terminal.loadAddon(webglAddon);

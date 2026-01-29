@@ -67,3 +67,16 @@
 .terminal-panel__body .xterm {
   height: 100%;
 }
+
+/* Hide xterm internal scrollbar and overview ruler elements */
+.terminal-panel__body .xterm-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-panel__body .xterm-viewport {
+  scrollbar-width: none;
+}
+
+.terminal-panel__body .xterm-decoration-overview-ruler {
+  display: none !important;
+}

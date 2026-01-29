@@ -65,6 +65,12 @@ export const xtermTheme = {
   selectionBackground: palette.surface2,
   selectionForeground: palette.text,
 
+  // Hide scrollbar and overview ruler
+  scrollbarSliderBackground: 'transparent',
+  scrollbarSliderHoverBackground: 'transparent',
+  scrollbarSliderActiveBackground: 'transparent',
+  overviewRulerBorder: 'transparent',
+
   black: ansi.black,
   red: ansi.red,
   green: ansi.green,

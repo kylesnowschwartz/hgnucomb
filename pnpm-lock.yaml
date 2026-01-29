@@ -9,14 +9,14 @@ importers:
   .:
     dependencies:
       '@xterm/addon-fit':
-        specifier: ^0.11.0
-        version: 0.11.0
+        specifier: 0.12.0-beta.109
+        version: 0.12.0-beta.109(@xterm/xterm@6.1.0-beta.109)
       '@xterm/addon-webgl':
-        specifier: ^0.19.0
-        version: 0.19.0
+        specifier: 0.20.0-beta.108
+        version: 0.20.0-beta.108(@xterm/xterm@6.1.0-beta.109)
       '@xterm/xterm':
-        specifier: ^6.0.0
-        version: 6.0.0
+        specifier: 6.1.0-beta.109
+        version: 6.1.0-beta.109
       konva:
         specifier: ^10.2.0
         version: 10.2.0
@@ -660,14 +660,18 @@ packages:
   '@vitest/utils@4.0.18':
     resolution: {integrity: sha512-msMRKLMVLWygpK3u2Hybgi4MNjcYJvwTb0Ru09+fOyCXIgT5raYP041DRRdiJiI3k/2U6SEbAETB3YtBrUkCFA==}
 
-  '@xterm/addon-fit@0.11.0':
-    resolution: {integrity: sha512-jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g==}
+  '@xterm/addon-fit@0.12.0-beta.109':
+    resolution: {integrity: sha512-mb+3dOxGKxIEbyHA10fmefI1CuYIljHANWJgKo2bUd73IJyQXp55L4q/yGzB574FP6bnEV0NvNoRwo9iSBy7ZQ==}
+    peerDependencies:
+      '@xterm/xterm': ^6.1.0-beta.109
 
-  '@xterm/addon-webgl@0.19.0':
-    resolution: {integrity: sha512-b3fMOsyLVuCeNJWxolACEUED0vm7qC0cy4wRvf3oURSzDTYVQiGPhTnhWZwIHdvC48Y+oLhvYXnY4XDXPoJo6A==}
+  '@xterm/addon-webgl@0.20.0-beta.108':
+    resolution: {integrity: sha512-d4wscQpbiTgrOGiL29QxG9ulUkV5UQiz6L20o53C2QQVAJqdqhXP716ihbKirnlYlXi+ndB2Ox4fyn0ohU/fug==}
+    peerDependencies:
+      '@xterm/xterm': ^6.1.0-beta.109
 
-  '@xterm/xterm@6.0.0':
-    resolution: {integrity: sha512-TQwDdQGtwwDt+2cgKDLn0IRaSxYu1tSUjgKarSDkUM0ZNiSRXFpjxEsvc/Zgc5kq5omJ+V0a8/kIM2WD3sMOYg==}
+  '@xterm/xterm@6.1.0-beta.109':
+    resolution: {integrity: sha512-3MioB2ZPzf4Wli4W7rZNCvpSakCf/7FktoNqxrckKfeusTMtbFUgH1MZKVZ5yAy3DCv0ASOzDTGM0ELZDO7XWA==}
 
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
@@ -1921,11 +1925,15 @@ snapshots:
       '@vitest/pretty-format': 4.0.18
       tinyrainbow: 3.0.3
 
-  '@xterm/addon-fit@0.11.0': {}
+  '@xterm/addon-fit@0.12.0-beta.109(@xterm/xterm@6.1.0-beta.109)':
+    dependencies:
+      '@xterm/xterm': 6.1.0-beta.109
 
-  '@xterm/addon-webgl@0.19.0': {}
+  '@xterm/addon-webgl@0.20.0-beta.108(@xterm/xterm@6.1.0-beta.109)':
+    dependencies:
+      '@xterm/xterm': 6.1.0-beta.109
 
-  '@xterm/xterm@6.0.0': {}
+  '@xterm/xterm@6.1.0-beta.109': {}
 
   acorn-jsx@5.3.2(acorn@8.15.0):
     dependencies:
