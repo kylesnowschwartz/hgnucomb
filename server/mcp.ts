@@ -29,6 +29,8 @@ import type {
   McpGetWorkerStatusResponse,
   McpGetWorkerDiffResponse,
   McpMergeWorkerChangesResponse,
+  McpCleanupWorkerWorktreeResponse,
+  McpKillWorkerResponse,
   DetailedStatus,
   AgentMessage,
 } from "@shared/protocol.ts";
@@ -879,6 +881,120 @@ mcpServer.tool(
           {
             type: "text",
             text: `${msg}${result.filesChanged ? ` [${result.filesChanged} files changed]` : ""}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Tool: cleanup_worker_worktree
+mcpServer.tool(
+  "cleanup_worker_worktree",
+  "Clean up worker worktree and branch after merge. Removes the worker's git worktree directory and deletes the branch.",
+  {
+    workerId: z.string().describe("The agent ID of the worker to clean up"),
+    force: z.boolean().optional().describe("Force cleanup even if worktree appears stale (optional)"),
+  },
+  async ({ workerId, force }) => {
+    // Permission check: only orchestrators can cleanup workers
+    if (!canSpawn()) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Permission denied: Only orchestrators can cleanup workers. You are a ${CELL_TYPE}.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    try {
+      const result = await sendRequest<McpCleanupWorkerWorktreeResponse["payload"]>("mcp.cleanupWorkerWorktree", {
+        workerId,
+        force,
+      });
+
+      if (!result.success) {
+        return {
+          content: [{ type: "text", text: `Failed to cleanup worker worktree: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Cleaned up worker ${workerId}${result.message ? ` - ${result.message}` : ""}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Tool: kill_worker
+mcpServer.tool(
+  "kill_worker",
+  "Forcibly terminate a worker agent. Kills the PTY session and cleans up resources.",
+  {
+    workerId: z.string().describe("The agent ID of the worker to terminate"),
+    force: z.boolean().optional().describe("Force termination (optional)"),
+  },
+  async ({ workerId, force }) => {
+    // Permission check: only orchestrators can kill workers
+    if (!canSpawn()) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Permission denied: Only orchestrators can terminate workers. You are a ${CELL_TYPE}.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    try {
+      const result = await sendRequest<McpKillWorkerResponse["payload"]>("mcp.killWorker", {
+        workerId,
+        force,
+      });
+
+      if (!result.success) {
+        return {
+          content: [{ type: "text", text: `Failed to terminate worker: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Terminated worker ${workerId}${result.message ? ` - ${result.message}` : ""}`,
           },
         ],
       };

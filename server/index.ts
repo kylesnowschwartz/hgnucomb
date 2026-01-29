@@ -22,6 +22,10 @@ import type {
   McpGetWorkerStatusRequest,
   McpGetWorkerDiffRequest,
   McpMergeWorkerChangesRequest,
+  McpCleanupWorkerWorktreeRequest,
+  McpCleanupWorkerWorktreeResponse,
+  McpKillWorkerRequest,
+  McpKillWorkerResponse,
   InboxUpdatedMessage,
   StoredAgentMetadata,
 } from "@shared/protocol.ts";
@@ -206,6 +210,19 @@ function routeMcpResponse(msg: McpResponse): void {
     pending.mcpWs.send(JSON.stringify(msg));
   }
   pendingMcpRequests.delete(msg.requestId);
+}
+
+/**
+ * Find a session ID by agent ID.
+ * Returns undefined if agent not found.
+ */
+function findSessionByAgentId(agentId: string): string | undefined {
+  for (const [sessionId, metadata] of sessionMetadata.entries()) {
+    if (metadata.agentId === agentId) {
+      return sessionId;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -756,6 +773,163 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       pendingMcpRequests.set(msg.requestId, { mcpWs: ws, agentId });
       routeMcpToBrowser(msg);
       console.log(`[MCP] Routing ${msg.type} from ${agentId} to browser`);
+      break;
+    }
+
+    case "mcp.cleanupWorkerWorktree": {
+      // Handle server-side: cleanup worker worktree
+      const { callerId, workerId } = (msg as McpCleanupWorkerWorktreeRequest).payload;
+
+      // Validate caller exists and is orchestrator
+      const caller = Array.from(sessionMetadata.values()).find(m => m.agentId === callerId);
+      if (!caller || caller.cellType !== 'orchestrator') {
+        const response: McpCleanupWorkerWorktreeResponse = {
+          type: 'mcp.cleanupWorkerWorktree.result',
+          requestId: msg.requestId,
+          payload: {
+            success: false,
+            error: 'Only orchestrators can cleanup worker worktrees',
+          },
+        };
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(response));
+        }
+        break;
+      }
+
+      // Validate worker exists and is owned by caller
+      const worker = Array.from(sessionMetadata.values()).find(m => m.agentId === workerId);
+      if (!worker) {
+        const response: McpCleanupWorkerWorktreeResponse = {
+          type: 'mcp.cleanupWorkerWorktree.result',
+          requestId: msg.requestId,
+          payload: {
+            success: false,
+            error: `Worker not found: ${workerId}`,
+          },
+        };
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(response));
+        }
+        break;
+      }
+
+      if (worker.parentId !== callerId) {
+        const response: McpCleanupWorkerWorktreeResponse = {
+          type: 'mcp.cleanupWorkerWorktree.result',
+          requestId: msg.requestId,
+          payload: {
+            success: false,
+            error: `Worker ${workerId} is not your child`,
+          },
+        };
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(response));
+        }
+        break;
+      }
+
+      // Clean up the worktree
+      const result = removeWorktree(process.cwd(), workerId);
+      const response: McpCleanupWorkerWorktreeResponse = {
+        type: 'mcp.cleanupWorkerWorktree.result',
+        requestId: msg.requestId,
+        payload: {
+          success: result.success,
+          message: result.success ? `Cleaned up worktree for ${workerId}` : undefined,
+          error: result.error,
+        },
+      };
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(response));
+      }
+      console.log(`[MCP] Cleaned up worktree for worker ${workerId}`);
+      break;
+    }
+
+    case "mcp.killWorker": {
+      // Handle server-side: kill worker PTY session
+      const { callerId, workerId } = (msg as McpKillWorkerRequest).payload;
+
+      // Validate caller exists and is orchestrator
+      const caller = Array.from(sessionMetadata.values()).find(m => m.agentId === callerId);
+      if (!caller || caller.cellType !== 'orchestrator') {
+        const response: McpKillWorkerResponse = {
+          type: 'mcp.killWorker.result',
+          requestId: msg.requestId,
+          payload: {
+            success: false,
+            error: 'Only orchestrators can terminate workers',
+          },
+        };
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(response));
+        }
+        break;
+      }
+
+      // Validate worker exists and is owned by caller
+      const worker = Array.from(sessionMetadata.values()).find(m => m.agentId === workerId);
+      if (!worker) {
+        const response: McpKillWorkerResponse = {
+          type: 'mcp.killWorker.result',
+          requestId: msg.requestId,
+          payload: {
+            success: false,
+            error: `Worker not found: ${workerId}`,
+          },
+        };
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(response));
+        }
+        break;
+      }
+
+      if (worker.parentId !== callerId) {
+        const response: McpKillWorkerResponse = {
+          type: 'mcp.killWorker.result',
+          requestId: msg.requestId,
+          payload: {
+            success: false,
+            error: `Worker ${workerId} is not your child`,
+          },
+        };
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(response));
+        }
+        break;
+      }
+
+      // Find and dispose the session
+      const sessionId = findSessionByAgentId(workerId);
+      let terminated = false;
+      if (sessionId) {
+        terminated = manager.dispose(sessionId);
+        if (terminated) {
+          // Clean up tracking
+          clientSessions.forEach(sessions => sessions.delete(sessionId));
+          sessionClient.delete(sessionId);
+          // Clean up context file and worktree
+          cleanupContextFile(workerId);
+          removeWorktree(process.cwd(), workerId);
+          sessionMetadata.delete(sessionId);
+          console.log(`[MCP] Terminated worker ${workerId} (session: ${sessionId})`);
+        }
+      }
+
+      const response: McpKillWorkerResponse = {
+        type: 'mcp.killWorker.result',
+        requestId: msg.requestId,
+        payload: {
+          success: terminated,
+          terminated,
+          message: terminated ? `Terminated worker ${workerId}` : `Worker ${workerId} session not found`,
+          error: terminated ? undefined : `Failed to terminate worker ${workerId}`,
+        },
+      };
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(response));
+      }
       break;
     }
 
