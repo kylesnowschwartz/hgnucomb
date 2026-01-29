@@ -358,7 +358,7 @@ export function HexGrid({
                     selectAgent(null);
                   }
                   // Clear hex selection if this hex was focused
-                  if (isFocused) {
+                  if (isSelected) {
                     selectHex(null);
                   }
                   // Log kill event, clean up terminal session, remove agent

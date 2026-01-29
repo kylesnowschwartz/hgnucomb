@@ -1,15 +1,7 @@
 # Development recipes for hgnucomb
 
-# Start the Vite dev server (frontend)
+# Start frontend and server in parallel
 dev:
-    pnpm dev
-
-# Start the WebSocket terminal server
-server:
-    cd server && pnpm dev
-
-# Start both frontend and server in parallel
-dev-all:
     pnpm dev:all
 
 # Install all dependencies
@@ -17,36 +9,21 @@ install:
     pnpm install
     cd server && pnpm install
 
-# Run linter
-lint:
-    pnpm lint
-
 # Run typecheck, lint, and tests
 test:
     pnpm typecheck
     pnpm lint
     pnpm test
 
-# Run tests in watch mode
-test-watch:
-    pnpm test:watch
+# Pre-commit check: lint, typecheck, tests, then build
+check:
+    just test
+    just build
 
 # Build for production
 build:
     pnpm build
     cd server && pnpm build
-
-# Show project structure
-tree:
-    eza --tree --level 3 --git-ignore
-
-# Check beads-lite tasks
-tasks:
-    bl ready
-
-# List all tasks
-tasks-all:
-    bl list --tree
 
 # Kill orphaned dev processes
 kill:

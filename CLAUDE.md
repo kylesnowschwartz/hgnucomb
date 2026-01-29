@@ -12,9 +12,8 @@ Spatial terminal multiplexer: a 2D navigable canvas where terminals and Claude a
 
 ```bash
 just test       # Run linter and tests
-just dev-all    # Start UI + server (or: pnpm dev:all)
+just dev        # Start UI + server
 just kill       # Clean up orphaned processes
-just tasks      # Check beads-lite task queue
 ```
 
 ## Dev vs Prod Instances
@@ -23,7 +22,7 @@ Run two instances simultaneously for dogfooding (using hgnucomb to develop hgnuc
 
 | Instance | UI Port | Server Port | Command | Hot Reload |
 |----------|---------|-------------|---------|------------|
-| Dev | 5173 | 3001 | `just dev-all` | Yes |
+| Dev | 5173 | 3001 | `just dev` | Yes |
 | Prod | 5174 | 3002 | `just prod` | No (frozen) |
 
 ```bash
