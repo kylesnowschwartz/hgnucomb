@@ -40,7 +40,8 @@ fi
 
 # Check 2: report_result must be called
 # The transcript is JSONL; MCP tool calls appear as {"type":"tool_use","name":"mcp__hgnucomb__report_result",...}
-if grep -q '"name":"mcp__hgnucomb__report_result"' "$transcript_path" 2>/dev/null; then
+# Using -E for extended regex to handle optional whitespace around colons
+if grep -Eq '"name"\s*:\s*"mcp__hgnucomb__report_result"' "$transcript_path" 2>/dev/null; then
   exit 0
 fi
 
