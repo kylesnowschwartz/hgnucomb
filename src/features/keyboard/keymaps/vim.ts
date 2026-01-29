@@ -91,8 +91,8 @@ export const vimKeymap: Keymap = {
       // Shift+X to initiate/confirm kill
       'Shift+X': { type: 'kill' },
 
-      // Escape clears selection or cancels kill confirmation
-      Escape: { type: 'cancel_kill' },
+      // Escape clears selection (also cancels pending kill)
+      Escape: { type: 'clear_selection' },
 
       // Utilities
       g: { type: 'select_center' },

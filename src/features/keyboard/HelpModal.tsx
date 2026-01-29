@@ -28,7 +28,7 @@ function formatAction(action: KeyAction): string {
     case 'select_center':
       return 'Go to origin';
     case 'clear_selection':
-      return 'Clear selection';
+      return 'Clear selection / Cancel kill';
     case 'open_panel':
       return 'Open terminal panel';
     case 'close_panel':
@@ -39,8 +39,6 @@ function formatAction(action: KeyAction): string {
       return 'Initiate kill / Confirm kill';
     case 'confirm_kill':
       return 'Confirm kill';
-    case 'cancel_kill':
-      return 'Cancel kill / Clear selection';
     case 'show_help':
       return 'Show this help';
   }

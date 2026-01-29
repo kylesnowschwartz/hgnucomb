@@ -138,6 +138,10 @@ Agents interact with the grid via MCP:
 | `report_status` | Update status badge (UI observability). See semantics below. |
 | `report_result` | Send task result to parent orchestrator (workers only) |
 | `get_messages` | Get inbox messages (use for broadcasts, not worker results) |
+| `get_worker_diff` | Get diff of worker's changes vs main (orchestrators only) |
+| `merge_worker_changes` | Squash-merge worker branch into main (orchestrators only) |
+| `cleanup_worker_worktree` | Remove worker's git worktree and branch (orchestrators only) |
+| `kill_worker` | Forcibly terminate a worker's PTY session (orchestrators only) |
 
 **Two-Phase Worker Coordination Pattern:**
 1. `spawn_agent(task=...)` → returns `agentId` immediately

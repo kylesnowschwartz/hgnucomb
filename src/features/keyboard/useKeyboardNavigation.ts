@@ -91,6 +91,7 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
         break;
 
       case 'clear_selection':
+        setPendingKill(null); // Also cancel any pending kill
         clearSelection();
         break;
 
@@ -147,16 +148,6 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
         if (!pendingKill) break;
         setPendingKill(null);
         optionsRef.current.onKill?.(pendingKill);
-        break;
-      }
-
-      case 'cancel_kill': {
-        // If kill is pending, cancel it. Otherwise, clear selection (original behavior).
-        if (pendingKill) {
-          setPendingKill(null);
-        } else {
-          clearSelection();
-        }
         break;
       }
 
