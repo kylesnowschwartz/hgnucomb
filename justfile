@@ -38,6 +38,12 @@ kill-prod:
     -lsof -ti:5174 | xargs kill 2>/dev/null
     @echo "Cleaned up prod processes"
 
+# Remove all agent worktrees
+clean-worktrees:
+    rm -rf .worktrees/*
+    git worktree prune
+    @echo "Cleaned up agent worktrees"
+
 # Build prod bundle (with prod server URL baked in)
 build-prod:
     VITE_WS_URL=ws://localhost:3002 pnpm build

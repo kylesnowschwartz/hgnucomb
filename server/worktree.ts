@@ -7,7 +7,7 @@
  * Graceful degradation: non-git repos skip worktree, use normal CWD.
  */
 
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { existsSync, mkdirSync, rmSync, symlinkSync } from "fs";
 import { join } from "path";
 import { generateMcpConfig, writeMcpConfig } from "./mcp-config.js";
@@ -19,7 +19,7 @@ import type { CellType } from "@shared/types.ts";
  */
 function gitExec(args: string[], cwd: string): string | null {
   try {
-    const result = execSync(`git ${args.join(" ")}`, {
+    const result = execFileSync("git", args, {
       cwd,
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],

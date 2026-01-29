@@ -34,7 +34,7 @@ just kill-prod  # Clean up prod processes
 **How it works:**
 - Dev runs Vite dev server with HMR - code changes reload instantly
 - Prod runs built/compiled bundles - frozen until you rebuild
-- Agents work in isolated worktrees (`.hgnucomb/agents/<id>/`)
+- Agents work in isolated worktrees (`.worktrees/<id>/`)
 
 **Workflow:** Spawn agents in prod, they make changes, dev hot-reloads to show progress. Prod stays stable.
 
@@ -116,14 +116,14 @@ import { ... } from '@shared/protocol.ts';  // Note: .ts extension required
 Orchestrators receive:
 - `HGNUCOMB_AGENT_ID` - unique identifier
 - `HGNUCOMB_CONTEXT` - path to context JSON (grid state, nearby agents)
-- Isolated git worktree in `.hgnucomb/agents/<id>/`
+- Isolated git worktree in `.worktrees/<id>/`
 - MCP config with access to `spawn_agent`, `get_grid_state`, `broadcast`, `report_status`
 
 Workers receive (when spawned by an orchestrator):
 - `HGNUCOMB_AGENT_ID` - unique identifier
 - `HGNUCOMB_PARENT_ID` - parent orchestrator's agent ID (use this with `report_result`)
 - `HGNUCOMB_CONTEXT` - path to context JSON (includes task and parent info)
-- Isolated git worktree in `.hgnucomb/agents/<id>/`
+- Isolated git worktree in `.worktrees/<id>/`
 - MCP config with access to `report_status`, `report_result`
 
 ## MCP Tools (server/mcp.ts)

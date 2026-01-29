@@ -863,7 +863,7 @@ mcpServer.tool(
 
       if (!result.success) {
         return {
-          content: [{ type: "text", text: `Failed to list worker files: ${result.error}` }],
+          content: [{ type: "text", text: `Failed to list worker files: ${result.error ?? result.output}` }],
           isError: true,
         };
       }
@@ -901,7 +901,7 @@ mcpServer.tool(
 
       if (!result.success) {
         return {
-          content: [{ type: "text", text: `Failed to list worker commits: ${result.error}` }],
+          content: [{ type: "text", text: `Failed to list worker commits: ${result.error ?? result.output}` }],
           isError: true,
         };
       }
@@ -939,7 +939,7 @@ mcpServer.tool(
 
       if (!result.success) {
         return {
-          content: [{ type: "text", text: `Failed to check merge conflicts: ${result.error}` }],
+          content: [{ type: "text", text: `Failed to check merge conflicts: ${result.error ?? result.output}` }],
           isError: true,
         };
       }
@@ -979,7 +979,7 @@ mcpServer.tool(
 
       if (!result.success) {
         return {
-          content: [{ type: "text", text: `Failed to merge worker to staging: ${result.error}` }],
+          content: [{ type: "text", text: `Failed to merge worker to staging: ${result.error ?? result.output}` }],
           isError: true,
         };
       }
@@ -1014,7 +1014,7 @@ mcpServer.tool(
 
       if (!result.success) {
         return {
-          content: [{ type: "text", text: `Failed to merge staging to main: ${result.error}` }],
+          content: [{ type: "text", text: `Failed to merge staging to main: ${result.error ?? result.output}` }],
           isError: true,
         };
       }

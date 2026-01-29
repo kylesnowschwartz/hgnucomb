@@ -46,204 +46,18 @@ import {
   removeWorktree,
   getGitRoot,
 } from "./worktree.js";
-import { execSync } from "child_process";
+import {
+  getWorkerDiff,
+  listWorkerFiles,
+  listWorkerCommits,
+  checkMergeConflicts,
+  mergeWorkerToStaging,
+  mergeStagingToMain,
+} from "./git.js";
 import { join } from "path";
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const manager = new TerminalSessionManager();
-
-// ============================================================================
-// Git Helper Functions
-// ============================================================================
-
-/**
- * Execute git command safely, returning null on error.
- */
-function gitExec(args: string[], cwd: string): string | null {
-  try {
-    const result = execSync(`git ${args.join(" ")}`, {
-      cwd,
-      encoding: "utf8",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    return result.trim();
-  } catch (err) {
-    console.warn(`[Git] Command failed: git ${args.join(" ")} - ${err instanceof Error ? err.message : String(err)}`);
-    return null;
-  }
-}
-
-/**
- * Get diff between main and a worker branch.
- * Returns { diff, stats } or null on error.
- */
-function getWorkerDiff(gitRoot: string, workerId: string): { diff: string; stats: { files: number; insertions: number; deletions: number } } | null {
-  const branchName = `hgnucomb/${workerId}`;
-
-  // Get the diff
-  const diff = gitExec(["diff", "main...HEAD", "--"], gitRoot);
-  if (diff === null) {
-    console.warn(`[Git] Failed to get diff for ${branchName}`);
-    return null;
-  }
-
-  // Get stats: number of files changed, insertions, deletions
-  const statsOutput = gitExec(["diff", "main...HEAD", "--stat"], gitRoot);
-  if (statsOutput === null) {
-    console.warn(`[Git] Failed to get diff stats for ${branchName}`);
-    return { diff, stats: { files: 0, insertions: 0, deletions: 0 } };
-  }
-
-  // Parse stats from output like: "file1.ts | 5 ++", "file2.ts | 3 --"
-  // Last line is usually a summary like: "2 files changed, 8 insertions(+), 0 deletions(-)"
-  const lines = statsOutput.split("\n");
-  const summary = lines[lines.length - 2] || "";
-  const statsRegex = /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/;
-  const match = summary.match(statsRegex);
-
-  const files = match ? parseInt(match[1]) || 0 : 0;
-  const insertions = match ? parseInt(match[2]) || 0 : 0;
-  const deletions = match ? parseInt(match[3]) || 0 : 0;
-
-  return {
-    diff,
-    stats: { files, insertions, deletions },
-  };
-}
-
-/**
- * Get list of files changed by a worker since branching from main.
- * Returns raw git diff --stat output for orchestrator to interpret.
- */
-function listWorkerFiles(gitRoot: string, workerId: string): string | null {
-  const output = gitExec(["diff", "main...HEAD", "--stat"], gitRoot);
-  if (output === null) {
-    console.warn(`[Git] Failed to get diff stat for worker ${workerId}`);
-    return null;
-  }
-  return output;
-}
-
-/**
- * Get list of commits made by a worker since branching from main.
- * Returns raw git log output for orchestrator to interpret.
- */
-function listWorkerCommits(gitRoot: string, workerId: string): string | null {
-  const output = gitExec(["log", "main..HEAD", "--oneline", "--stat"], gitRoot);
-  if (output === null) {
-    console.warn(`[Git] Failed to get log for worker ${workerId}`);
-    return null;
-  }
-  return output;
-}
-
-/**
- * Check if merging a worker branch into main would cause conflicts.
- * Does a dry-run merge and aborts, returning raw git output.
- */
-function checkMergeConflicts(gitRoot: string, workerId: string): { canMerge: boolean; output: string } | null {
-  const branchName = `hgnucomb/${workerId}`;
-
-  // Check if main has uncommitted changes
-  const status = gitExec(["status", "--porcelain"], gitRoot);
-  if (status === null) {
-    return null;
-  }
-  if (status.trim()) {
-    return {
-      canMerge: false,
-      output: `Cannot check merge: main has uncommitted changes:\n${status}`,
-    };
-  }
-
-  // Try dry-run merge (--no-commit keeps changes staged but not committed)
-  const mergeResult = gitExec(["merge", "--no-commit", "--no-ff", branchName], gitRoot);
-
-  // Capture status regardless of merge result
-  const mergeStatus = gitExec(["status"], gitRoot) ?? "";
-
-  // Always abort the merge to clean up
-  gitExec(["merge", "--abort"], gitRoot);
-
-  if (mergeResult === null) {
-    // Merge failed - likely has conflicts
-    return {
-      canMerge: false,
-      output: `Merge would have conflicts:\n${mergeStatus}`,
-    };
-  }
-
-  // Merge succeeded (no conflicts)
-  return {
-    canMerge: true,
-    output: `Merge would succeed cleanly:\n${mergeStatus}`,
-  };
-}
-
-/**
- * Merge worker branch into orchestrator's staging worktree.
- * Regular merge (preserves worker commit history).
- */
-function mergeWorkerToStaging(gitRoot: string, orchestratorId: string, workerId: string): string | null {
-  const workerBranch = `hgnucomb/${workerId}`;
-  const stagingPath = join(gitRoot, ".hgnucomb", "agents", orchestratorId);
-
-  // Verify staging worktree exists
-  const currentBranch = gitExec(["rev-parse", "--abbrev-ref", "HEAD"], stagingPath);
-  if (currentBranch === null) {
-    console.warn(`[Git] Staging worktree not found at ${stagingPath}`);
-    return null;
-  }
-
-  // Regular merge (preserves history)
-  const mergeResult = gitExec(["merge", workerBranch, "-m", `Merge worker ${workerId}`], stagingPath);
-  if (mergeResult === null) {
-    // Merge failed - likely conflicts
-    const status = gitExec(["status"], stagingPath) ?? "Unknown error";
-    console.warn(`[Git] Merge failed: ${workerBranch} into staging`);
-    return `Merge failed:\n${status}`;
-  }
-
-  const log = gitExec(["log", "--oneline", "-5"], stagingPath) ?? "";
-  console.log(`[Git] Merged ${workerBranch} into staging (${orchestratorId})`);
-  return `Merge successful:\n${log}`;
-}
-
-/**
- * Merge orchestrator's staging branch into main.
- * Regular merge (preserves history from staging).
- */
-function mergeStagingToMain(gitRoot: string, orchestratorId: string): string | null {
-  const stagingBranch = `hgnucomb/${orchestratorId}`;
-
-  // Ensure we're on main branch
-  const currentBranch = gitExec(["rev-parse", "--abbrev-ref", "HEAD"], gitRoot);
-  if (currentBranch !== "main") {
-    console.warn(`[Git] Not on main branch, switching...`);
-    const switchResult = gitExec(["checkout", "main"], gitRoot);
-    if (switchResult === null) {
-      return "Failed to switch to main branch";
-    }
-  }
-
-  // Check for uncommitted changes in main
-  const status = gitExec(["status", "--porcelain"], gitRoot);
-  if (status && status.trim()) {
-    return `Cannot merge: main has uncommitted changes:\n${status}`;
-  }
-
-  // Regular merge (preserves staging history)
-  const mergeResult = gitExec(["merge", stagingBranch, "-m", `Merge staging from ${orchestratorId}`], gitRoot);
-  if (mergeResult === null) {
-    const mergeStatus = gitExec(["status"], gitRoot) ?? "Unknown error";
-    console.warn(`[Git] Merge failed: ${stagingBranch} into main`);
-    return `Merge failed:\n${mergeStatus}`;
-  }
-
-  const log = gitExec(["log", "--oneline", "-5"], gitRoot) ?? "";
-  console.log(`[Git] Merged staging (${orchestratorId}) into main`);
-  return `Merge successful:\n${log}`;
-}
 
 // Track which sessions belong to which client for cleanup
 const clientSessions = new Map<WebSocket, Set<string>>();
@@ -883,7 +697,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
     case "mcp.checkMergeConflicts": {
       // Server-side handling: check if merge would have conflicts
       const req = msg as McpCheckMergeConflictsRequest;
-      const workerId = req.payload.workerId;
+      const { callerId: orchestratorId, workerId } = req.payload;
       const gitRoot = getGitRoot(process.cwd());
 
       if (!gitRoot) {
@@ -895,7 +709,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
         break;
       }
 
-      const result = checkMergeConflicts(gitRoot, workerId);
+      const result = checkMergeConflicts(gitRoot, orchestratorId, workerId);
       if (result === null) {
         ws.send(JSON.stringify({
           type: "mcp.checkMergeConflicts.result",
