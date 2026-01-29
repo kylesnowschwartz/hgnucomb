@@ -46,3 +46,4 @@ export type { TestEntry } from './registry';
 export { createThreeWorkerTest, createOrchestratorStatusTest } from './scripts/threeWorkerTask';
 export { createBilateralCommunicationTest, createTaskAssignmentTest } from './scripts/bilateralCommunication';
 export { createMultiCycleDemoTest } from './scripts/multiCycleDemo';
+export { createStagingWorkflowTest, createSimpleMergeTest } from './scripts/stagingWorkflow';

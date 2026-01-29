@@ -5,8 +5,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts', 'shared/**/*.test.ts'],
-    exclude: ['node_modules', '.cloned-sources'],
+    include: ['src/**/*.test.ts', 'shared/**/*.test.ts', 'server/**/*.test.ts'],
+    exclude: ['node_modules', '.cloned-sources', 'server/node_modules'],
   },
   resolve: {
     alias: {

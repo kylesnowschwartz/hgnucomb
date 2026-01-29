@@ -10,6 +10,7 @@ import type { ConditionStores } from './conditions';
 import { createThreeWorkerTest, createOrchestratorStatusTest } from './scripts/threeWorkerTask';
 import { createBilateralCommunicationTest, createTaskAssignmentTest } from './scripts/bilateralCommunication';
 import { createMultiCycleDemoTest } from './scripts/multiCycleDemo';
+import { createStagingWorkflowTest, createSimpleMergeTest } from './scripts/stagingWorkflow';
 
 export interface TestEntry {
   /** Unique identifier for the test */
@@ -56,6 +57,18 @@ export const TEST_REGISTRY: TestEntry[] = [
     name: 'Orchestrator Status',
     description: 'Simple test: spawn orchestrator and verify status tracking',
     factory: createOrchestratorStatusTest,
+  },
+  {
+    id: 'simple-merge',
+    name: 'Simple Merge',
+    description: 'Single worker merge: spawn, merge to staging, approval, merge to main',
+    factory: createSimpleMergeTest,
+  },
+  {
+    id: 'staging-workflow',
+    name: 'Staging Workflow',
+    description: 'Full merge workflow with conflict resolution and human approval',
+    factory: createStagingWorkflowTest,
   },
 ];
 
