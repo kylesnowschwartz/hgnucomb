@@ -1,4 +1,34 @@
 {
-  "description": "Orchestrator hooks - reserved for future use",
-  "hooks": {}
+  "description": "Orchestrator workflow enforcement hooks",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__hgnucomb__spawn_agent|mcp__hgnucomb__await_worker|mcp__hgnucomb__merge_worker_to_staging|mcp__hgnucomb__cleanup_worker_worktree|AskUserQuestion",
+        "hooks": [{
+          "type": "command",
+          "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/track-state.sh",
+          "timeout": 5
+        }]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__hgnucomb__merge_staging_to_main",
+        "hooks": [{
+          "type": "command",
+          "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/require-approval.sh",
+          "timeout": 5
+        }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/verify-completion.sh",
+          "timeout": 5
+        }]
+      }
+    ]
+  }
 }

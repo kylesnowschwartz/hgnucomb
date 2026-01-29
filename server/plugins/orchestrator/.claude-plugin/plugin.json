@@ -1,7 +1,7 @@
 {
   "name": "hgnucomb-orchestrator",
   "version": "1.0.0",
-  "description": "hgnucomb orchestrator agent hooks (reserved for future use)",
+  "description": "hgnucomb orchestrator enforcement hooks - ensures workflow completion",
   "author": {
     "name": "hgnucomb"
   }
