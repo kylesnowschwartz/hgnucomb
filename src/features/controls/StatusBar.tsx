@@ -39,9 +39,11 @@ export function StatusBar() {
   return (
     <div className="status-bar">
       <div className="status-bar__left">
-        <span className={`status-bar__mode status-bar__mode--${mode}`}>
-          {MODE_LABELS[mode]}
-        </span>
+        {mode !== 'selected' && (
+          <span className={`status-bar__mode status-bar__mode--${mode}`}>
+            {MODE_LABELS[mode]}
+          </span>
+        )}
         <span className="status-bar__hints">{MODE_HINTS[mode]}</span>
       </div>
 
