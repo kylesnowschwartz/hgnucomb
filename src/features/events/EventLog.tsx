@@ -33,6 +33,8 @@ function formatEventSummary(event: LogEvent): string {
       return `${event.agentId}: ${event.previousStatus ?? '?'} -> ${event.newStatus}${event.message ? ` "${event.message}"` : ''}`;
     case 'messageReceived':
       return `${event.recipientId} <- ${event.senderId} [${event.messageType}]`;
+    case 'removal':
+      return `${event.agentId} ${event.reason === 'kill' ? 'terminated' : 'cleaned up'}`;
   }
 }
 
@@ -48,6 +50,8 @@ function getEventColor(kind: LogEvent['kind']): string {
       return palette.yellow;
     case 'messageReceived':
       return palette.mauve;
+    case 'removal':
+      return palette.maroon;
   }
 }
 
@@ -63,6 +67,8 @@ function getEventIcon(kind: LogEvent['kind']): string {
       return '\u25CF'; // filled circle
     case 'messageReceived':
       return '\u2709'; // envelope
+    case 'removal':
+      return '\u2717'; // ballot x
   }
 }
 
@@ -92,7 +98,7 @@ export function EventLog({ maxHeight = 200 }: EventLogProps) {
   const filteredEvents = events.filter((e) => {
     if (e.kind === 'broadcast') return showBroadcasts;
     if (e.kind === 'messageReceived') return showMessages;
-    return showLifecycle; // spawn, kill, status_change
+    return showLifecycle; // spawn, kill, statusChange, removal
   });
 
   return (

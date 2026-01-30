@@ -106,6 +106,12 @@ export interface TerminalBridge {
     latestTimestamp: string;
   }): void;
 
+  /**
+   * Subscribe to server notifications (agent removal, etc.)
+   * @returns Unsubscribe function
+   */
+  onNotification(handler: (notification: unknown) => void): () => void;
+
   // ============================================================================
   // Session Persistence (tmux-like attach/detach)
   // ============================================================================

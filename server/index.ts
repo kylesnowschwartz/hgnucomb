@@ -31,6 +31,7 @@ import type {
   McpKillWorkerRequest,
   McpKillWorkerResponse,
   InboxUpdatedMessage,
+  AgentRemovedNotification,
   StoredAgentMetadata,
 } from "@shared/protocol.ts";
 import { isClientMessage, isMcpMessage } from "@shared/protocol.ts";
@@ -125,6 +126,30 @@ function findSessionByAgentId(agentId: string): string | undefined {
     }
   }
   return undefined;
+}
+
+/**
+ * Broadcast agent removal to all connected browser clients.
+ * Called after successful cleanup or kill operations.
+ */
+function broadcastAgentRemoval(
+  agentId: string,
+  reason: 'cleanup' | 'kill',
+  sessionId?: string
+): void {
+  const notification: AgentRemovedNotification = {
+    type: 'agent.removed',
+    payload: { agentId, reason, sessionId },
+  };
+
+  const message = JSON.stringify(notification);
+  for (const client of browserClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  }
+
+  console.log(`[Server] Broadcasted agent removal: ${agentId} (${reason})`);
 }
 
 /**
@@ -564,7 +589,7 @@ wss.on("connection", (ws) => {
 /**
  * Handle MCP protocol messages.
  */
-function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNotification | InboxUpdatedMessage): void {
+function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNotification | InboxUpdatedMessage | AgentRemovedNotification): void {
   switch (msg.type) {
     case "mcp.register": {
       // This client is an MCP server, not a browser
@@ -870,6 +895,12 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
 
       // Clean up the worktree
       const result = removeWorktree(process.cwd(), workerId);
+
+      // Broadcast removal to all browser clients (even if cleanup had issues - agent is gone)
+      if (result.success) {
+        broadcastAgentRemoval(workerId, 'cleanup');
+      }
+
       const response: McpCleanupWorkerWorktreeResponse = {
         type: 'mcp.cleanupWorkerWorktree.result',
         requestId: msg.requestId,
@@ -952,6 +983,10 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
           cleanupContextFile(workerId);
           removeWorktree(process.cwd(), workerId);
           sessionMetadata.delete(sessionId);
+
+          // Broadcast removal to all browser clients
+          broadcastAgentRemoval(workerId, 'kill', sessionId);
+
           console.log(`[MCP] Terminated worker ${workerId} (session: ${sessionId})`);
         }
       }

@@ -43,8 +43,11 @@ interface SessionListeners {
 
 export type McpRequestHandler = (request: McpRequest) => void;
 
+export type NotificationHandler = (notification: unknown) => void;
+
 export class WebSocketBridge implements TerminalBridge {
   private mcpRequestHandlers = new Set<McpRequestHandler>();
+  private notificationListeners = new Set<NotificationHandler>();
   private ws: WebSocket | null = null;
   private url: string;
   private _connectionState: ConnectionState = 'disconnected';
@@ -409,6 +412,16 @@ export class WebSocketBridge implements TerminalBridge {
     this.ws.send(JSON.stringify(msg));
   }
 
+  /**
+   * Subscribe to server notifications (agent removal, status updates, etc.)
+   */
+  onNotification(handler: NotificationHandler): () => void {
+    this.notificationListeners.add(handler);
+    return () => {
+      this.notificationListeners.delete(handler);
+    };
+  }
+
   private nextRequestId(): string {
     return `req-${++this.requestCounter}-${Date.now()}`;
   }
@@ -521,6 +534,15 @@ export class WebSocketBridge implements TerminalBridge {
           clearTimeout(pending.timeout);
           this.pendingRequests.delete(msg.requestId);
           pending.resolve(msg.payload);
+        }
+        break;
+      }
+
+      default: {
+        // Handle server notifications (e.g., agent.removed)
+        const msgAny = msg as { type: string };
+        if (msgAny.type === 'agent.removed') {
+          this.notificationListeners.forEach((handler) => handler(msg));
         }
         break;
       }

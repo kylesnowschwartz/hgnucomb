@@ -668,6 +668,23 @@ export interface InboxUpdatedMessage {
 }
 
 // ============================================================================
+// Agent Removal Notification (server -> browser)
+// ============================================================================
+
+/**
+ * Broadcast when an agent is cleaned up or killed.
+ * All browser clients receive this to remove the agent from their UI.
+ */
+export interface AgentRemovedNotification {
+  type: 'agent.removed';
+  payload: {
+    agentId: string;
+    reason: 'cleanup' | 'kill';
+    sessionId?: string;
+  };
+}
+
+// ============================================================================
 // MCP Aggregate Types
 // ============================================================================
 
@@ -713,11 +730,11 @@ export type McpNotification =
 
 export function isMcpMessage(
   msg: unknown
-): msg is McpRequest | McpResponse | McpNotification | InboxUpdatedMessage {
+): msg is McpRequest | McpResponse | McpNotification | InboxUpdatedMessage | AgentRemovedNotification {
   if (typeof msg !== 'object' || msg === null) return false;
   const m = msg as Record<string, unknown>;
   return (
     typeof m.type === 'string' &&
-    (m.type.startsWith('mcp.') || m.type === 'inbox.updated')
+    (m.type.startsWith('mcp.') || m.type === 'inbox.updated' || m.type === 'agent.removed')
   );
 }

@@ -11,6 +11,7 @@ import { createThreeWorkerTest, createOrchestratorStatusTest } from './scripts/t
 import { createBilateralCommunicationTest, createTaskAssignmentTest } from './scripts/bilateralCommunication';
 import { createMultiCycleDemoTest } from './scripts/multiCycleDemo';
 import { createStagingWorkflowTest, createSimpleMergeTest } from './scripts/stagingWorkflow';
+import { createCleanupCoordinationTest, createKillWorkerTest } from './scripts/cleanupCoordination';
 
 export interface TestEntry {
   /** Unique identifier for the test */
@@ -69,6 +70,18 @@ export const TEST_REGISTRY: TestEntry[] = [
     name: 'Staging Workflow',
     description: 'Full merge workflow with conflict resolution and human approval',
     factory: createStagingWorkflowTest,
+  },
+  {
+    id: 'cleanup-coordination',
+    name: 'Cleanup Coordination',
+    description: 'Orchestrator spawns worker, cleans up worktree, verifies UI removal',
+    factory: createCleanupCoordinationTest,
+  },
+  {
+    id: 'kill-worker',
+    name: 'Kill Worker',
+    description: 'Orchestrator spawns worker, forcibly kills it, verifies UI removal',
+    factory: createKillWorkerTest,
   },
 ];
 

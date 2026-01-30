@@ -56,7 +56,13 @@ export interface MessageReceivedEvent extends BaseEvent {
   payloadPreview: string;
 }
 
-export type LogEvent = BroadcastEvent | SpawnEvent | KillEvent | StatusChangeEvent | MessageReceivedEvent;
+export interface RemovalEvent extends BaseEvent {
+  kind: 'removal';
+  agentId: string;
+  reason: 'cleanup' | 'kill';
+}
+
+export type LogEvent = BroadcastEvent | SpawnEvent | KillEvent | StatusChangeEvent | MessageReceivedEvent | RemovalEvent;
 
 // ============================================================================
 // Store
@@ -90,6 +96,7 @@ interface EventLogStore {
     messageType: 'result' | 'broadcast',
     payload: unknown
   ) => void;
+  addRemoval: (agentId: string, reason: 'cleanup' | 'kill') => void;
   clear: () => void;
 }
 
@@ -213,6 +220,23 @@ export const useEventLogStore = create<EventLogStore>()((set) => ({
         senderId,
         messageType,
         payloadPreview: truncatePayload(payload),
+      };
+      const events = [...state.events, event];
+      if (events.length > state.maxEvents) {
+        return { events: events.slice(-state.maxEvents) };
+      }
+      return { events };
+    });
+  },
+
+  addRemoval: (agentId, reason) => {
+    set((state) => {
+      const event: RemovalEvent = {
+        id: nextEventId(),
+        timestamp: new Date().toISOString(),
+        kind: 'removal',
+        agentId,
+        reason,
       };
       const events = [...state.events, event];
       if (events.length > state.maxEvents) {

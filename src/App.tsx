@@ -122,14 +122,15 @@ function App() {
     addSession,
     appendData,
     markExited,
+    removeSession,
     activeSessionId,
     setActiveSession,
     getSessionForAgent,
   } = useTerminalStore();
 
   const { selectedAgentId, selectAgent } = useUIStore();
-  const { getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addMessageToInbox, getMessages } = useAgentStore();
-  const { addBroadcast, addStatusChange, addSpawn } = useEventLogStore();
+  const { getAgent, getAllAgents, spawnAgent, removeAgent, updateDetailedStatus, addMessageToInbox, getMessages } = useAgentStore();
+  const { addBroadcast, addStatusChange, addSpawn, addRemoval } = useEventLogStore();
   const panToHex = useViewportStore((s) => s.panToHex);
   const centerOnHex = useViewportStore((s) => s.centerOnHex);
 
@@ -299,6 +300,45 @@ function App() {
     const handler = createMcpHandler(mcpDeps, bridge);
     return bridge.onMcpRequest(handler);
   }, [bridge, mcpDeps]);
+
+  // Handle agent removal notifications from server
+  useEffect(() => {
+    if (!bridge) return;
+
+    const handleNotification = (notification: unknown) => {
+      if (typeof notification !== 'object' || notification === null) return;
+      const msg = notification as { type: string; payload?: { agentId: string; reason: 'cleanup' | 'kill'; sessionId?: string } };
+
+      if (msg.type !== 'agent.removed' || !msg.payload) return;
+
+      const { agentId, reason, sessionId } = msg.payload;
+      console.log(`[App] Agent removed: ${agentId} (${reason})`);
+
+      // Remove from agent store
+      removeAgent(agentId);
+
+      // Remove associated terminal session
+      if (sessionId) {
+        removeSession(sessionId);
+      } else {
+        // Fallback: lookup session by agentId
+        const session = getSessionForAgent(agentId);
+        if (session) {
+          removeSession(session.sessionId);
+        }
+      }
+
+      // Log removal event
+      addRemoval(agentId, reason);
+
+      // Clear selection if this was the selected agent
+      if (useUIStore.getState().selectedAgentId === agentId) {
+        selectAgent(null);
+      }
+    };
+
+    return bridge.onNotification(handleNotification);
+  }, [bridge, removeAgent, removeSession, getSessionForAgent, addRemoval, selectAgent]);
 
   // Create terminal session for an agent (without activating it)
   const createSessionForAgent = useCallback(
