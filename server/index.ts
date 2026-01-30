@@ -95,7 +95,7 @@ function cleanupActivityTracking(sessionId: string): void {
   if (activity?.workingDebounceTimer) {
     clearTimeout(activity.workingDebounceTimer);
   }
-  cleanupActivityTracking(sessionId);
+  sessionActivity.delete(sessionId);
 }
 
 /**
