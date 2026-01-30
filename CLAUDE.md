@@ -278,6 +278,92 @@ pnpm theme    # Regenerate CSS manually
 TypeScript: `import { palette, ui, hexGrid } from '@theme/catppuccin-mocha'`
 CSS: Use `--ctp-<colorname>` custom properties
 
+## Integration Testing
+
+Live integration tests that exercise real multi-agent workflows through the UI.
+
+**Location:** `src/integration/`
+
+```
+src/integration/
+  types.ts                    # TestStep, WaitCondition, TestResult types
+  conditions.ts               # Wait condition factories (agentCountEquals, statusIs, etc.)
+  IntegrationTestRunner.ts    # Executes test steps, manages timeouts
+  registry.ts                 # Test catalog with factory functions
+  index.ts                    # Exports
+  scripts/                    # Test definitions
+    bilateralCommunication.ts # Spawn worker, report result, orchestrator receives
+    threeWorkerTask.ts        # Spawn multiple workers, coordinate via broadcast
+    multiCycleDemo.ts         # Multiple spawn/result cycles
+    stagingWorkflow.ts        # Git merge flow with human approval
+    cleanupCoordination.ts    # Cleanup/kill worker and verify UI removal
+```
+
+**Test Structure:**
+```typescript
+interface IntegrationTest {
+  config: { name: string; description: string; timeout: number };
+  steps: TestStep[];  // spawn_orchestrator | wait_condition | assert | send_command
+}
+```
+
+**Key Patterns:**
+
+1. **Condition Factories** (`conditions.ts`) create reusable `WaitCondition` objects:
+   - `agentCountEquals(stores, 3)` - wait for N agents
+   - `agentStatusIs(stores, agentId, 'done')` - wait for status
+   - `eventLogged(stores, 'removal')` - wait for event type
+   - `allConditions([...])` - composite AND
+
+2. **Store Access** - tests receive `ConditionStores` to query live state:
+   - `getAllAgents()` - current agents on grid
+   - `getAgent(id)` - specific agent
+   - `getEvents()` - event log entries
+   - `getSessionForAgent(id)` - terminal session lookup
+
+3. **Capturing IDs** - use closure variables in predicates:
+   ```typescript
+   let workerId: string | null = null;
+   {
+     type: 'wait_condition',
+     condition: {
+       predicate: () => {
+         const workers = stores.getAllAgents().filter(a => a.cellType === 'worker');
+         if (workers.length > 0) { workerId = workers[0].id; return true; }
+         return false;
+       }
+     }
+   }
+   ```
+
+**Running Tests:**
+1. Start dev server: `just dev`
+2. Open UI in browser
+3. Open ControlPanel (top-left gear icon)
+4. Select test from dropdown
+5. Click "Run Test"
+6. Watch steps execute with pass/fail indicators
+
+**Adding New Tests:**
+1. Create `src/integration/scripts/<name>.ts`
+2. Export factory: `export function createMyTest(stores: ConditionStores): IntegrationTest`
+3. Register in `registry.ts`:
+   ```typescript
+   import { createMyTest } from './scripts/myTest';
+   // Add to TEST_REGISTRY array
+   { id: 'my-test', name: 'My Test', description: '...', factory: createMyTest }
+   ```
+
+**Available Tests:**
+| Test | What it verifies |
+|------|-----------------|
+| `bilateral-communication` | Orchestrator spawns worker with task, worker reports result |
+| `three-worker` | Orchestrator spawns 3 workers, coordinates via broadcast |
+| `multi-cycle-demo` | Multiple spawn/result cycles in sequence |
+| `staging-workflow` | Git merge flow: worker -> staging -> main |
+| `cleanup-coordination` | cleanup_worker_worktree removes agent from UI |
+| `kill-worker` | kill_worker terminates PTY and removes from UI |
+
 ## Task Tracking
 
 ```bash
