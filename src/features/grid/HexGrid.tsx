@@ -33,13 +33,8 @@ const STYLE = {
   hexFillHover: hexGrid.hexFillHover,
   hexStroke: hexGrid.hexStroke,
   hexStrokeSelected: hexGrid.hexStrokeSelected, // Panel open (pink)
-  hexStrokeHighlight: hexGrid.hexStrokeHover, // Selected cell (blue)
-  hexStrokeOrchestrator: hexGrid.hexStrokeOrchestrator,
-  hexStrokeWorker: hexGrid.hexStrokeWorker,
-  connectionStroke: agentColors.connection,
   originMarkerStroke: hexGrid.originMarker,
   gridStrokeWidth: 1,
-  connectionStrokeWidth: 2,
   hexSize: 40,
   minZoom: 0.3,
   maxZoom: 3.0,
@@ -56,19 +51,6 @@ const STATUS_OPACITY: Record<AgentStatus, number> = {
   working: 1.0,
   blocked: 0.5,
   offline: 0.3,
-};
-
-// Status badge colors - 9-state model
-const DETAILED_STATUS_COLORS: Record<DetailedStatus, string> = {
-  pending: palette.surface1,        // Dim gray - spawned, booting
-  idle: palette.overlay0,           // Gray - at prompt
-  working: palette.blue,            // Blue - actively executing
-  waiting_input: palette.yellow,    // Yellow - needs text input
-  waiting_permission: palette.peach,// Peach - needs Y/N approval
-  done: palette.green,              // Green - completed
-  stuck: palette.maroon,            // Maroon - needs help
-  error: palette.red,               // Red - failed
-  cancelled: palette.flamingo,      // Flamingo - aborted/timeout
 };
 
 // Status visual categories - map DetailedStatus to display bucket
@@ -125,19 +107,10 @@ function BusyBadge({ x, y }: { x: number; y: number }) {
 
   const dotRadius = 2;
   const spacing = 5;
-  const bgPadding = 4;
-  // Use high-contrast colors: dark background, light dots
-  // This ensures visibility on any hex fill color (blue orchestrators, teal workers, etc.)
-  const dotColor = palette.text;  // Light dots
-  const bgColor = palette.crust;  // Dark background
+  const dotColor = palette.crust;  // Dark dots for contrast on any background
 
   return (
     <Group ref={groupRef} x={x} y={y} listening={false}>
-      {/* Dark pill background for contrast */}
-      <Circle x={-spacing} y={0} radius={dotRadius + bgPadding} fill={bgColor} opacity={0.8} />
-      <Circle x={0} y={0} radius={dotRadius + bgPadding} fill={bgColor} opacity={0.8} />
-      <Circle x={spacing} y={0} radius={dotRadius + bgPadding} fill={bgColor} opacity={0.8} />
-      {/* Animated dots */}
       <Circle ref={dot1Ref} x={-spacing} y={0} radius={dotRadius} fill={dotColor} />
       <Circle ref={dot2Ref} x={0} y={0} radius={dotRadius} fill={dotColor} />
       <Circle ref={dot3Ref} x={spacing} y={0} radius={dotRadius} fill={dotColor} />
@@ -146,7 +119,7 @@ function BusyBadge({ x, y }: { x: number; y: number }) {
 }
 
 /** Flashing indicator for attention-needed states */
-function AttentionBadge({ x, y, color }: { x: number; y: number; color: string }) {
+function AttentionBadge({ x, y }: { x: number; y: number }) {
   const circleRef = useRef<Konva.Circle>(null);
 
   useEffect(() => {
@@ -158,8 +131,8 @@ function AttentionBadge({ x, y, color }: { x: number; y: number; color: string }
       if (!frame || !circleRef.current) return;
 
       const t = frame.time / 1000;
-      // Flash: oscillate opacity between 0.2 and 1.0
-      const opacity = 0.6 + Math.sin(t * Math.PI * 2) * 0.4;
+      // Flash: oscillate opacity between 0.5 and 1.0
+      const opacity = 0.75 + Math.sin(t * Math.PI * 2) * 0.25;
       circleRef.current.opacity(opacity);
     }, layer);
 
@@ -168,54 +141,58 @@ function AttentionBadge({ x, y, color }: { x: number; y: number; color: string }
   }, []);
 
   return (
-    <Group x={x} y={y} listening={false}>
-      {/* Dark background for contrast */}
-      <Circle radius={6} fill={palette.crust} opacity={0.9} />
-      <Circle ref={circleRef} radius={4} fill={color} />
-    </Group>
+    <Circle
+      x={x}
+      y={y}
+      ref={circleRef}
+      radius={4}
+      fill={palette.crust}
+      listening={false}
+    />
   );
 }
 
-/** Static circle for idle states (hollow) */
+/** Static circle for idle states (hollow ring) */
 function IdleBadge({ x, y }: { x: number; y: number }) {
   return (
-    <Group x={x} y={y} listening={false}>
-      {/* Dark filled background for contrast */}
-      <Circle radius={5} fill={palette.crust} opacity={0.9} />
-      {/* Light ring on top */}
-      <Circle radius={3} stroke={palette.overlay0} strokeWidth={1.5} />
-    </Group>
+    <Circle
+      x={x}
+      y={y}
+      radius={3}
+      stroke={palette.crust}
+      strokeWidth={1.5}
+      listening={false}
+    />
   );
 }
 
-/** Solid circle for terminal states (done = green, failed = red) */
-function TerminalBadge({ x, y, color }: { x: number; y: number; color: string }) {
+/** Solid circle for terminal states (done, failed) */
+function TerminalBadge({ x, y }: { x: number; y: number }) {
   return (
-    <Group x={x} y={y} listening={false}>
-      {/* Dark outline for contrast */}
-      <Circle radius={5} fill={palette.crust} opacity={0.9} />
-      <Circle radius={4} fill={color} />
-    </Group>
+    <Circle
+      x={x}
+      y={y}
+      radius={4}
+      fill={palette.crust}
+      listening={false}
+    />
   );
 }
 
 function KonvaStatusBadge({ status, x, y }: KonvaStatusBadgeProps) {
   const bucket = STATUS_BUCKETS[status];
-  const color = DETAILED_STATUS_COLORS[status];
 
   switch (bucket) {
     case 'busy':
       return <BusyBadge x={x} y={y} />;
     case 'needs_attention':
-      return <AttentionBadge x={x} y={y} color={color} />;
+      return <AttentionBadge x={x} y={y} />;
     case 'idle':
       return <IdleBadge x={x} y={y} />;
     case 'done':
-      return <TerminalBadge x={x} y={y} color={palette.green} />;
     case 'failed':
-      return <TerminalBadge x={x} y={y} color={palette.red} />;
     default:
-      return <TerminalBadge x={x} y={y} color={color} />;
+      return <TerminalBadge x={x} y={y} />;
   }
 }
 
@@ -323,6 +300,23 @@ export function HexGrid({
     return map;
   }, [agents]);
 
+  // Build set of agents that are part of a "family" (have parent-child connections)
+  // Used to give connected agents a shared thick black border
+  const familyMembers = useMemo(() => {
+    const members = new Set<string>();
+    for (const agent of agents) {
+      // Agent has connections (it's a child with a parent)
+      if (agent.connections.length > 0) {
+        members.add(agent.id);
+        // Also add all its connections (the parents)
+        for (const connId of agent.connections) {
+          members.add(connId);
+        }
+      }
+    }
+    return members;
+  }, [agents]);
+
   /**
    * Handle wheel zoom - scales toward cursor position.
    */
@@ -402,9 +396,7 @@ export function HexGrid({
           const isPanelOpen = agent && agent.id === selectedAgentId;
           const isSelected =
             selectedHex && selectedHex.q === hex.q && selectedHex.r === hex.r;
-          const isOrchestrator = agent?.cellType === 'orchestrator';
-          const isWorker = agent?.cellType === 'worker';
-          const isClaudeAgent = isOrchestrator || isWorker;
+          const isInFamily = agent && familyMembers.has(agent.id);
 
           // Fill: agent role color > selected highlight > default
           const fill = agent
@@ -413,22 +405,20 @@ export function HexGrid({
               ? STYLE.hexFillHover
               : STYLE.hexFill;
 
-          // Stroke priority: panel-open (pink) > orchestrator > worker > selected (blue) > default
+          // Stroke priority: panel-open (pink) > family member (black) > selected (black) > default
           const stroke = isPanelOpen
             ? STYLE.hexStrokeSelected
-            : isOrchestrator
-              ? STYLE.hexStrokeOrchestrator
-              : isWorker
-                ? STYLE.hexStrokeWorker
-                : isSelected
-                  ? STYLE.hexStrokeHighlight
-                  : STYLE.hexStroke;
+            : isInFamily
+              ? palette.crust
+              : isSelected
+                ? palette.crust
+                : STYLE.hexStroke;
 
-          // Stroke width: panel-open = thick, Claude agents = medium, selected = medium, default = thin
+          // Stroke width: panel-open = thick, family = thick, selected = medium, default = thin
           const strokeWidth = isPanelOpen
-            ? 3
-            : isClaudeAgent
-              ? 2
+            ? 4
+            : isInFamily
+              ? 4
               : isSelected
                 ? 2
                 : STYLE.gridStrokeWidth;
@@ -502,34 +492,6 @@ export function HexGrid({
         })}
 
 
-        {/* Render connection lines (on top of hexes) */}
-        {agents.flatMap((agent) =>
-          agent.connections
-            .filter((id) => agents.some((a) => a.id === id)) // Only draw if target exists
-            .filter((connectionId) => agent.id < connectionId) // Dedupe: only draw once per pair
-            .map((connectionId) => {
-              const target = agents.find((a) => a.id === connectionId);
-              if (!target) return null;
-
-              const from = hexToPixel(agent.hex, hexSize);
-              const to = hexToPixel(target.hex, hexSize);
-
-              // Hierarchy = either agent is orchestrator; Peer = both non-orchestrators
-              const isHierarchy =
-                agent.role === 'orchestrator' || target.role === 'orchestrator';
-
-              return (
-                <Line
-                  key={`conn-${agent.id}-${connectionId}`}
-                  points={[from.x, from.y, to.x, to.y]}
-                  stroke={STYLE.connectionStroke}
-                  strokeWidth={STYLE.connectionStrokeWidth}
-                  dash={isHierarchy ? undefined : [6, 4]} // Dotted for peer connections
-                  listening={false}
-                />
-              );
-            })
-        )}
 
         {/* Render status badges for agents (native Konva) */}
         {agents.map((agent) => {

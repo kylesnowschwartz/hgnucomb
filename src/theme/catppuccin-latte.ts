@@ -86,53 +86,12 @@ export const xtermTheme = {
   brightWhite: ansi.brightWhite,
 } as const;
 
-// Semantic UI colors
-export const ui = {
-  // Backgrounds
-  background: palette.base,
-  backgroundAlt: palette.mantle,
-  backgroundMuted: palette.crust,
-
-  // Surfaces (cards, panels, interactive elements)
-  surface: palette.surface0,
-  surfaceHover: palette.surface1,
-  surfaceActive: palette.surface2,
-
-  // Text
-  textPrimary: palette.text,
-  textSecondary: palette.subtext1,
-  textMuted: palette.subtext0,
-  textDisabled: palette.overlay0,
-
-  // Borders
-  border: palette.surface0,
-  borderSubtle: palette.surface1,
-  borderStrong: palette.overlay0,
-
-  // States
-  error: palette.red,
-  errorMuted: palette.maroon,
-  warning: palette.peach,
-  warningMuted: palette.yellow,
-  success: palette.green,
-  successMuted: palette.teal,
-  info: palette.blue,
-  infoMuted: palette.sapphire,
-
-  // Interactive
-  link: palette.sapphire,
-  linkHover: palette.blue,
-  focus: palette.lavender,
-  selection: palette.pink,
-} as const;
-
 // Agent type colors (for hex grid)
 export const agentColors = {
   orchestrator: palette.blue,
   worker: palette.green,
   // Connection lines between agents
   connection: palette.overlay0,
-  connectionActive: palette.sapphire,
 } as const;
 
 // Hex grid specific
@@ -143,7 +102,5 @@ export const hexGrid = {
   hexStroke: palette.surface1,
   hexStrokeSelected: palette.pink, // Panel open (pink)
   hexStrokeHover: palette.blue, // Selected cell highlight (blue)
-  hexStrokeOrchestrator: palette.sapphire, // Distinct border for orchestrator cells
-  hexStrokeWorker: palette.teal, // Distinct border for worker cells
   originMarker: palette.overlay0,
 } as const;
