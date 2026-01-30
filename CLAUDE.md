@@ -10,10 +10,10 @@ Spatial terminal multiplexer: a 2D navigable canvas where terminals and Claude a
 
 ## Quick Start
 
+Use our Justfile commands `just or mcp__just` to lint, test, chec, and build.
+
 ```bash
-just test       # Run linter and tests
-just dev        # Start UI + server
-just kill       # Clean up orphaned processes
+just check      # Lint, test, and build
 ```
 
 ## Dev vs Prod Instances
@@ -26,8 +26,10 @@ Run two instances simultaneously for dogfooding (using hgnucomb to develop hgnuc
 | Prod | 5174 | 3002 | `just prod` | No (frozen) |
 
 ```bash
+just dev        # Start the dev servers, mcp and vitest
+just kill-dev   # Clean up prod processes
+
 just prod       # Build and start frozen prod instance (3002/5174)
-just build-prod # Rebuild prod without restarting
 just kill-prod  # Clean up prod processes
 ```
 
@@ -37,6 +39,8 @@ just kill-prod  # Clean up prod processes
 - Agents work in isolated worktrees (`.worktrees/<id>/`)
 
 **Workflow:** Spawn agents in prod, they make changes, dev hot-reloads to show progress. Prod stays stable.
+
+IMPORTANT: do not start the server, the User will run it in a dedicated terminal manually
 
 ## Architecture
 
