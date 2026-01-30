@@ -13,6 +13,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { useTerminalStore } from './terminalStore';
+import { TERMINAL_FONT } from './terminalConfig';
 import { xtermTheme } from '@theme/catppuccin-mocha';
 import './fonts.css';
 import './TerminalPanel.css';
@@ -202,8 +203,8 @@ export function TerminalPanel({
     const terminal = new Terminal({
       cols: initialCols,
       rows: initialRows,
-      fontFamily: '"JetBrainsMono Nerd Font", "SF Mono", Consolas, monospace',
-      fontSize: 14,
+      fontFamily: TERMINAL_FONT.family,
+      fontSize: TERMINAL_FONT.size,
       theme: TERMINAL_THEME,
       cursorBlink: true,
       overviewRuler: {}, // Disable overview ruler

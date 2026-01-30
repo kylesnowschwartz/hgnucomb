@@ -7,6 +7,7 @@ import { TerminalPanel } from '@features/terminal/TerminalPanel';
 import { EventLog } from '@features/events/EventLog';
 import { WebSocketBridge } from '@features/terminal/index';
 import { useTerminalStore } from '@features/terminal/terminalStore';
+import { calculateTerminalDimensions } from '@features/terminal/terminalConfig';
 import { useUIStore } from '@features/controls/uiStore';
 import { useAgentStore, type AgentState } from '@features/agents/agentStore';
 import { agentToSnapshot } from '@features/agents/snapshot';
@@ -97,40 +98,9 @@ function useAnimatedMount<T>(value: T | null, animationMs: number) {
   };
 }
 
-// Default panel dimensions
-const DEFAULT_PANEL_WIDTH = Math.min(800, window.innerWidth * 0.5);
+// Default panel dimensions (930px width = 115 columns at 8px cell width)
+const DEFAULT_PANEL_WIDTH = Math.min(930, window.innerWidth * 0.5);
 const DEFAULT_PANEL_HEIGHT = Math.min(600, window.innerHeight - 80);
-
-// Terminal cell dimensions (JetBrains Mono at 14px font)
-// Measured from xterm.js: 8.00x18.00px at fontSize 14
-const CELL_WIDTH = 8.0;
-const CELL_HEIGHT = 18.0;
-// Panel chrome - tuned to match FitAddon's calculation
-const PANEL_HEADER_HEIGHT = 17; // ~11px font + 4px padding + 1px border
-const PANEL_BORDER = 2; // 1px each side
-const BODY_PADDING_H = 8; // 4px left + 4px right (affects computed width)
-
-/**
- * Calculate terminal cols/rows from panel pixel dimensions.
- * Matches xterm.js FitAddon's calculation to avoid resize on mount.
- *
- * FitAddon calculates: cols = floor((parentWidth - scrollbarWidth) / cellWidth)
- * The parent is .terminal-panel__body, which gets:
- *   bodyWidth = panelWidth - panelBorder - bodyPadding
- */
-function calculateTerminalDimensions(panelWidth: number, panelHeight: number) {
-  // FitAddon measures parentElement's computed dimensions
-  // For box-sizing: content-box, computed width/height excludes padding
-  const bodyWidth = panelWidth - PANEL_BORDER - BODY_PADDING_H;
-  // Height: panel - border - header; body padding doesn't affect flex height distribution
-  const bodyHeight = panelHeight - PANEL_BORDER - PANEL_HEADER_HEIGHT;
-  const usableWidth = bodyWidth;
-  const usableHeight = bodyHeight;
-  return {
-    cols: Math.max(40, Math.floor(usableWidth / CELL_WIDTH)),
-    rows: Math.max(10, Math.floor(usableHeight / CELL_HEIGHT)),
-  };
-}
 
 function App() {
   const [dimensions, setDimensions] = useState({
