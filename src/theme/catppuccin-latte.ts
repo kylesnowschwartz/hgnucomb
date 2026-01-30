@@ -100,7 +100,5 @@ export const hexGrid = {
   hexFill: palette.base,
   hexFillHover: palette.surface0, // Subtle fill when cell is selected
   hexStroke: palette.surface1,
-  hexStrokeSelected: palette.pink, // Panel open (pink)
-  hexStrokeHover: palette.blue, // Selected cell highlight (blue)
   originMarker: palette.overlay0,
 } as const;

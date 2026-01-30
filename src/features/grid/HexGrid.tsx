@@ -24,6 +24,19 @@ import type { AgentRole } from '@protocol/types';
 import { hexGrid, agentColors, palette } from '@theme/catppuccin-mocha';
 
 // ============================================================================
+// Color Utilities
+// ============================================================================
+
+/** Darken a hex color by a factor (0-1, where 0.3 = 30% darker) */
+function darkenColor(hex: string, factor: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const darken = (c: number) => Math.round(c * (1 - factor));
+  return `#${darken(r).toString(16).padStart(2, '0')}${darken(g).toString(16).padStart(2, '0')}${darken(b).toString(16).padStart(2, '0')}`;
+}
+
+// ============================================================================
 // Style Constants
 // ============================================================================
 
@@ -32,7 +45,6 @@ const STYLE = {
   hexFill: hexGrid.hexFill,
   hexFillHover: hexGrid.hexFillHover,
   hexStroke: hexGrid.hexStroke,
-  hexStrokeSelected: hexGrid.hexStrokeSelected, // Panel open (pink)
   originMarkerStroke: hexGrid.originMarker,
   gridStrokeWidth: 1,
   hexSize: 40,
@@ -317,6 +329,19 @@ export function HexGrid({
     return members;
   }, [agents]);
 
+  // Sort hexes so active ones render last (strokes on top of adjacent hexes)
+  const sortedHexes = useMemo(() => {
+    return [...visibleHexes].sort((a, b) => {
+      const aAgent = agentByHex.get(`${a.q},${a.r}`);
+      const bAgent = agentByHex.get(`${b.q},${b.r}`);
+      const aActive = (aAgent && (aAgent.id === selectedAgentId || familyMembers.has(aAgent.id)))
+        || (selectedHex && selectedHex.q === a.q && selectedHex.r === a.r);
+      const bActive = (bAgent && (bAgent.id === selectedAgentId || familyMembers.has(bAgent.id)))
+        || (selectedHex && selectedHex.q === b.q && selectedHex.r === b.r);
+      return (aActive ? 1 : 0) - (bActive ? 1 : 0);
+    });
+  }, [visibleHexes, agentByHex, selectedAgentId, selectedHex, familyMembers]);
+
   /**
    * Handle wheel zoom - scales toward cursor position.
    */
@@ -389,14 +414,15 @@ export function HexGrid({
         style={{ background: STYLE.background }}
       >
       <Layer>
-        {/* Render hex grid with agent fills */}
-        {visibleHexes.map((hex) => {
+        {/* Render hex grid - active hexes last so strokes render on top */}
+        {sortedHexes.map((hex) => {
           const { x, y } = hexToPixel(hex, hexSize);
           const agent = agentByHex.get(`${hex.q},${hex.r}`);
           const isPanelOpen = agent && agent.id === selectedAgentId;
           const isSelected =
             selectedHex && selectedHex.q === hex.q && selectedHex.r === hex.r;
           const isInFamily = agent && familyMembers.has(agent.id);
+          const isActive = isPanelOpen || isInFamily || isSelected;
 
           // Fill: agent role color > selected highlight > default
           const fill = agent
@@ -405,14 +431,10 @@ export function HexGrid({
               ? STYLE.hexFillHover
               : STYLE.hexFill;
 
-          // Stroke priority: panel-open (pink) > family member (black) > selected (black) > default
-          const stroke = isPanelOpen
-            ? STYLE.hexStrokeSelected
-            : isInFamily
-              ? palette.crust
-              : isSelected
-                ? palette.crust
-                : STYLE.hexStroke;
+          // Stroke: darkened fill for active states, default gray otherwise
+          const stroke = isActive
+            ? darkenColor(fill, 0.3)
+            : STYLE.hexStroke;
 
           // Stroke width: panel-open = thick, family = thick, selected = medium, default = thin
           const strokeWidth = isPanelOpen
