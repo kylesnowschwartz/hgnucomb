@@ -9,8 +9,9 @@
  * @see .agent-history/context-packet-task4-hex-grid.md
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { Stage, Layer, Line, RegularPolygon, Circle } from 'react-konva';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { Stage, Layer, Line, RegularPolygon, Circle, Group } from 'react-konva';
+import Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { hexToPixel, hexesInRect } from '@shared/types';
 import type { AgentStatus, CellType, DetailedStatus } from '@shared/types';
@@ -69,6 +70,154 @@ const DETAILED_STATUS_COLORS: Record<DetailedStatus, string> = {
   error: palette.red,               // Red - failed
   cancelled: palette.flamingo,      // Flamingo - aborted/timeout
 };
+
+// Status visual categories - map DetailedStatus to display bucket
+type StatusBucket = 'busy' | 'needs_attention' | 'done' | 'failed' | 'idle';
+
+const STATUS_BUCKETS: Record<DetailedStatus, StatusBucket> = {
+  pending: 'idle',
+  working: 'busy',
+  idle: 'idle',
+  waiting_input: 'needs_attention',
+  waiting_permission: 'needs_attention',
+  stuck: 'needs_attention',
+  done: 'done',
+  error: 'failed',
+  cancelled: 'failed',
+};
+
+// ============================================================================
+// Status Badge Components (Native Konva with animations)
+// ============================================================================
+
+interface KonvaStatusBadgeProps {
+  status: DetailedStatus;
+  x: number;
+  y: number;
+}
+
+/** 3-dot bouncing loader for busy states */
+function BusyBadge({ x, y }: { x: number; y: number }) {
+  const groupRef = useRef<Konva.Group>(null);
+  const dot1Ref = useRef<Konva.Circle>(null);
+  const dot2Ref = useRef<Konva.Circle>(null);
+  const dot3Ref = useRef<Konva.Circle>(null);
+
+  useEffect(() => {
+    const group = groupRef.current;
+    const layer = group?.getLayer();
+    if (!layer || !dot1Ref.current || !dot2Ref.current || !dot3Ref.current) return;
+
+    const anim = new Konva.Animation((frame) => {
+      if (!frame || !dot1Ref.current || !dot2Ref.current || !dot3Ref.current) return;
+
+      const t = frame.time / 1000; // seconds
+      const bounce = (offset: number) => Math.sin((t + offset) * Math.PI * 2) * 2;
+
+      dot1Ref.current.y(bounce(0));
+      dot2Ref.current.y(bounce(0.15));
+      dot3Ref.current.y(bounce(0.3));
+    }, layer);
+
+    anim.start();
+    return () => { anim.stop(); };
+  }, []);
+
+  const dotRadius = 2;
+  const spacing = 5;
+  const bgPadding = 4;
+  // Use high-contrast colors: dark background, light dots
+  // This ensures visibility on any hex fill color (blue orchestrators, teal workers, etc.)
+  const dotColor = palette.text;  // Light dots
+  const bgColor = palette.crust;  // Dark background
+
+  return (
+    <Group ref={groupRef} x={x} y={y} listening={false}>
+      {/* Dark pill background for contrast */}
+      <Circle x={-spacing} y={0} radius={dotRadius + bgPadding} fill={bgColor} opacity={0.8} />
+      <Circle x={0} y={0} radius={dotRadius + bgPadding} fill={bgColor} opacity={0.8} />
+      <Circle x={spacing} y={0} radius={dotRadius + bgPadding} fill={bgColor} opacity={0.8} />
+      {/* Animated dots */}
+      <Circle ref={dot1Ref} x={-spacing} y={0} radius={dotRadius} fill={dotColor} />
+      <Circle ref={dot2Ref} x={0} y={0} radius={dotRadius} fill={dotColor} />
+      <Circle ref={dot3Ref} x={spacing} y={0} radius={dotRadius} fill={dotColor} />
+    </Group>
+  );
+}
+
+/** Flashing indicator for attention-needed states */
+function AttentionBadge({ x, y, color }: { x: number; y: number; color: string }) {
+  const circleRef = useRef<Konva.Circle>(null);
+
+  useEffect(() => {
+    const circle = circleRef.current;
+    const layer = circle?.getLayer();
+    if (!layer || !circle) return;
+
+    const anim = new Konva.Animation((frame) => {
+      if (!frame || !circleRef.current) return;
+
+      const t = frame.time / 1000;
+      // Flash: oscillate opacity between 0.2 and 1.0
+      const opacity = 0.6 + Math.sin(t * Math.PI * 2) * 0.4;
+      circleRef.current.opacity(opacity);
+    }, layer);
+
+    anim.start();
+    return () => { anim.stop(); };
+  }, []);
+
+  return (
+    <Group x={x} y={y} listening={false}>
+      {/* Dark background for contrast */}
+      <Circle radius={6} fill={palette.crust} opacity={0.9} />
+      <Circle ref={circleRef} radius={4} fill={color} />
+    </Group>
+  );
+}
+
+/** Static circle for idle states (hollow) */
+function IdleBadge({ x, y }: { x: number; y: number }) {
+  return (
+    <Group x={x} y={y} listening={false}>
+      {/* Dark filled background for contrast */}
+      <Circle radius={5} fill={palette.crust} opacity={0.9} />
+      {/* Light ring on top */}
+      <Circle radius={3} stroke={palette.overlay0} strokeWidth={1.5} />
+    </Group>
+  );
+}
+
+/** Solid circle for terminal states (done = green, failed = red) */
+function TerminalBadge({ x, y, color }: { x: number; y: number; color: string }) {
+  return (
+    <Group x={x} y={y} listening={false}>
+      {/* Dark outline for contrast */}
+      <Circle radius={5} fill={palette.crust} opacity={0.9} />
+      <Circle radius={4} fill={color} />
+    </Group>
+  );
+}
+
+function KonvaStatusBadge({ status, x, y }: KonvaStatusBadgeProps) {
+  const bucket = STATUS_BUCKETS[status];
+  const color = DETAILED_STATUS_COLORS[status];
+
+  switch (bucket) {
+    case 'busy':
+      return <BusyBadge x={x} y={y} />;
+    case 'needs_attention':
+      return <AttentionBadge x={x} y={y} color={color} />;
+    case 'idle':
+      return <IdleBadge x={x} y={y} />;
+    case 'done':
+      return <TerminalBadge x={x} y={y} color={palette.green} />;
+    case 'failed':
+      return <TerminalBadge x={x} y={y} color={palette.red} />;
+    default:
+      return <TerminalBadge x={x} y={y} color={color} />;
+  }
+}
 
 // ============================================================================
 // Component Props
@@ -227,24 +376,24 @@ export function HexGrid({
 
   return (
     <Stage
-      width={width}
-      height={height}
-      draggable
-      scaleX={scale}
-      scaleY={scale}
-      x={position.x}
-      y={position.y}
-      onWheel={handleWheel}
-      onDragEnd={handleDragEnd}
-      onClick={(e) => {
-        // Click on background (Stage itself) = clear selection
-        if (e.target === e.target.getStage()) {
-          selectHex(null);
-        }
-      }}
-      onContextMenu={(e) => e.evt.preventDefault()}
-      style={{ background: STYLE.background }}
-    >
+        width={width}
+        height={height}
+        draggable
+        scaleX={scale}
+        scaleY={scale}
+        x={position.x}
+        y={position.y}
+        onWheel={handleWheel}
+        onDragEnd={handleDragEnd}
+        onClick={(e) => {
+          // Click on background (Stage itself) = clear selection
+          if (e.target === e.target.getStage()) {
+            selectHex(null);
+          }
+        }}
+        onContextMenu={(e) => e.evt.preventDefault()}
+        style={{ background: STYLE.background }}
+      >
       <Layer>
         {/* Render hex grid with agent fills */}
         {visibleHexes.map((hex) => {
@@ -352,28 +501,6 @@ export function HexGrid({
           );
         })}
 
-        {/* Render status badges for agents */}
-        {agents.map((agent) => {
-          const { x, y } = hexToPixel(agent.hex, hexSize);
-          const badgeColor = DETAILED_STATUS_COLORS[agent.detailedStatus];
-          const badgeRadius = 6;
-          // Position badge at top-right of hex
-          const badgeX = x + hexSize * 0.5;
-          const badgeY = y - hexSize * 0.5;
-
-          return (
-            <Circle
-              key={`badge-${agent.id}`}
-              x={badgeX}
-              y={badgeY}
-              radius={badgeRadius}
-              fill={badgeColor}
-              stroke={palette.crust}
-              strokeWidth={1}
-              listening={false}
-            />
-          );
-        })}
 
         {/* Render connection lines (on top of hexes) */}
         {agents.flatMap((agent) =>
@@ -403,6 +530,23 @@ export function HexGrid({
               );
             })
         )}
+
+        {/* Render status badges for agents (native Konva) */}
+        {agents.map((agent) => {
+          const { x, y } = hexToPixel(agent.hex, hexSize);
+          // Position badge at top-right of hex
+          const badgeX = x + hexSize * 0.5;
+          const badgeY = y - hexSize * 0.5;
+
+          return (
+            <KonvaStatusBadge
+              key={`badge-${agent.id}`}
+              status={agent.detailedStatus}
+              x={badgeX}
+              y={badgeY}
+            />
+          );
+        })}
 
         {/* Origin marker */}
         <Line

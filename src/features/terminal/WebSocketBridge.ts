@@ -539,9 +539,9 @@ export class WebSocketBridge implements TerminalBridge {
       }
 
       default: {
-        // Handle server notifications (e.g., agent.removed)
+        // Handle server notifications (e.g., agent.removed, mcp.statusUpdate)
         const msgAny = msg as { type: string };
-        if (msgAny.type === 'agent.removed') {
+        if (msgAny.type === 'agent.removed' || msgAny.type === 'mcp.statusUpdate') {
           this.notificationListeners.forEach((handler) => handler(msg));
         }
         break;

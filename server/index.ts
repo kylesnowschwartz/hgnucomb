@@ -71,6 +71,66 @@ const sessionMetadata = new Map<string, StoredAgentMetadata>();
 const sessionClient = new Map<string, WebSocket>();
 
 // ============================================================================
+// PTY Activity Detection (Inferred Status)
+// ============================================================================
+
+const IDLE_THRESHOLD_MS = 3000;  // 3 seconds of silence = idle
+const ACTIVITY_CHECK_INTERVAL_MS = 1000;  // Check every second
+const WORKING_DEBOUNCE_MS = 500;  // Require 500ms of sustained output to trigger 'working'
+
+interface SessionActivityState {
+  lastOutputTime: number;  // Date.now() of last PTY output
+  inferredStatus: 'working' | 'idle';
+  workingDebounceTimer?: ReturnType<typeof setTimeout>;  // Pending idle->working transition
+}
+
+// Track sessionId -> activity state for agents
+const sessionActivity = new Map<string, SessionActivityState>();
+
+/**
+ * Clean up activity tracking for a session (clears pending timers).
+ */
+function cleanupActivityTracking(sessionId: string): void {
+  const activity = sessionActivity.get(sessionId);
+  if (activity?.workingDebounceTimer) {
+    clearTimeout(activity.workingDebounceTimer);
+  }
+  cleanupActivityTracking(sessionId);
+}
+
+/**
+ * Check if we should use inferred status (PTY activity) for this agent.
+ * Returns false for terminal/sticky states that should not be overridden.
+ */
+function shouldInferStatus(currentStatus: string): boolean {
+  const stickyStates = ['done', 'error', 'cancelled', 'waiting_input', 'waiting_permission', 'stuck'];
+  return !stickyStates.includes(currentStatus);
+}
+
+/**
+ * Broadcast inferred status update to all browser clients.
+ */
+function broadcastInferredStatus(agentId: string, status: 'working' | 'idle'): void {
+  const notification = {
+    type: 'mcp.statusUpdate',
+    payload: {
+      agentId,
+      state: status,
+      message: 'Inferred from PTY activity',
+    },
+  };
+
+  const json = JSON.stringify(notification);
+  for (const browser of browserClients) {
+    if (browser.readyState === WebSocket.OPEN) {
+      browser.send(json);
+    }
+  }
+
+  console.log(`[Activity] ${agentId} -> ${status} (inferred)`);
+}
+
+// ============================================================================
 // MCP Routing
 // ============================================================================
 
@@ -293,6 +353,12 @@ Work autonomously. Do not ask questions.`;
           instructions,
           detailedStatus: 'pending',
         });
+
+        // Initialize activity tracking for agents
+        sessionActivity.set(sessionId, {
+          lastOutputTime: Date.now(),
+          inferredStatus: 'idle',  // Start idle until first output
+        });
       }
 
       // Track session for this client
@@ -310,6 +376,30 @@ Work autonomously. Do not ask questions.`;
       // IMPORTANT: Don't capture `ws` directly - look up current client dynamically
       // This allows reconnected clients to receive output from existing sessions
       session.onData((data) => {
+        // Update activity tracking for status inference
+        const activity = sessionActivity.get(sessionId);
+        if (activity) {
+          const wasIdle = activity.inferredStatus === 'idle';
+          activity.lastOutputTime = Date.now();
+
+          // Transition: idle -> working (debounced to filter panel-switch artifacts)
+          // Start a timer on first output; only broadcast if output continues
+          if (wasIdle && !activity.workingDebounceTimer) {
+            activity.workingDebounceTimer = setTimeout(() => {
+              activity.workingDebounceTimer = undefined;
+              // Only transition if we've had recent output (sustained activity)
+              const elapsed = Date.now() - activity.lastOutputTime;
+              if (elapsed < WORKING_DEBOUNCE_MS) {
+                activity.inferredStatus = 'working';
+                const metadata = sessionMetadata.get(sessionId);
+                if (metadata?.detailedStatus && shouldInferStatus(metadata.detailedStatus)) {
+                  broadcastInferredStatus(metadata.agentId, 'working');
+                }
+              }
+            }, WORKING_DEBOUNCE_MS);
+          }
+        }
+
         const client = sessionClient.get(sessionId);
         if (client && client.readyState === WebSocket.OPEN) {
           send(client, {
@@ -330,6 +420,7 @@ Work autonomously. Do not ask questions.`;
         // Clean up tracking
         sessions?.delete(sessionId);
         sessionClient.delete(sessionId);
+        cleanupActivityTracking(sessionId);
         // Clean up context file and worktree if this was an agent
         const metadata = sessionMetadata.get(sessionId);
         if (metadata) {
@@ -407,6 +498,7 @@ Work autonomously. Do not ask questions.`;
       if (disposed) {
         clientSessions.get(ws)?.delete(sessionId);
         sessionClient.delete(sessionId);
+        cleanupActivityTracking(sessionId);
         // Clean up context file and worktree if this was an agent
         const metadata = sessionMetadata.get(sessionId);
         if (metadata) {
@@ -480,6 +572,10 @@ Work autonomously. Do not ask questions.`;
       }
       sessionMetadata.clear();
       sessionClient.clear();
+      // Clear all activity timers before clearing the map
+      for (const sessionId of sessionActivity.keys()) {
+        cleanupActivityTracking(sessionId);
+      }
 
       // Dispose all PTY sessions
       manager.disposeAll();
@@ -1024,9 +1120,33 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
 
 console.log(`Terminal WebSocket server listening on ws://localhost:${PORT}`);
 
+// ============================================================================
+// Activity Check Interval (idle detection)
+// ============================================================================
+
+const activityCheckInterval = setInterval(() => {
+  const now = Date.now();
+
+  for (const [sessionId, activity] of sessionActivity.entries()) {
+    // Only check sessions that are currently "working"
+    if (activity.inferredStatus === 'working') {
+      const elapsed = now - activity.lastOutputTime;
+
+      if (elapsed > IDLE_THRESHOLD_MS) {
+        activity.inferredStatus = 'idle';
+        const metadata = sessionMetadata.get(sessionId);
+        if (metadata?.detailedStatus && shouldInferStatus(metadata.detailedStatus)) {
+          broadcastInferredStatus(metadata.agentId, 'idle');
+        }
+      }
+    }
+  }
+}, ACTIVITY_CHECK_INTERVAL_MS);
+
 // Graceful shutdown
 function shutdown(signal: string): void {
   console.log(`\n${signal} received, shutting down...`);
+  clearInterval(activityCheckInterval);
   manager.disposeAll();
 
   // Forcibly close all WebSocket connections so the server can close immediately

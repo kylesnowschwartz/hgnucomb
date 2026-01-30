@@ -16,7 +16,7 @@ import { useKeyboardNavigation, HelpModal } from '@features/keyboard';
 import { useViewportStore } from '@features/grid/viewportStore';
 import { useShallow } from 'zustand/shallow';
 import { createMcpHandler, type McpHandlerDeps } from './handlers/mcpHandler';
-import type { CellType, HexCoordinate } from '@shared/types';
+import type { CellType, HexCoordinate, DetailedStatus } from '@shared/types';
 
 // Animation duration for terminal panel slide (must match CSS)
 const PANEL_ANIMATION_MS = 250;
@@ -302,44 +302,62 @@ function App() {
     return bridge.onMcpRequest(handler);
   }, [bridge, mcpDeps]);
 
-  // Handle agent removal notifications from server
+  // Handle server notifications (agent removal, status updates)
   useEffect(() => {
     if (!bridge) return;
 
     const handleNotification = (notification: unknown) => {
       if (typeof notification !== 'object' || notification === null) return;
-      const msg = notification as { type: string; payload?: { agentId: string; reason: 'cleanup' | 'kill'; sessionId?: string } };
+      const msg = notification as { type: string; payload?: Record<string, unknown> };
+      if (!msg.payload) return;
 
-      if (msg.type !== 'agent.removed' || !msg.payload) return;
+      // Handle agent removal
+      if (msg.type === 'agent.removed') {
+        const { agentId, reason, sessionId } = msg.payload as {
+          agentId: string;
+          reason: 'cleanup' | 'kill';
+          sessionId?: string;
+        };
+        console.log(`[App] Agent removed: ${agentId} (${reason})`);
 
-      const { agentId, reason, sessionId } = msg.payload;
-      console.log(`[App] Agent removed: ${agentId} (${reason})`);
+        // Remove from agent store
+        removeAgent(agentId);
 
-      // Remove from agent store
-      removeAgent(agentId);
-
-      // Remove associated terminal session
-      if (sessionId) {
-        removeSession(sessionId);
-      } else {
-        // Fallback: lookup session by agentId
-        const session = getSessionForAgent(agentId);
-        if (session) {
-          removeSession(session.sessionId);
+        // Remove associated terminal session
+        if (sessionId) {
+          removeSession(sessionId);
+        } else {
+          // Fallback: lookup session by agentId
+          const session = getSessionForAgent(agentId);
+          if (session) {
+            removeSession(session.sessionId);
+          }
         }
+
+        // Log removal event
+        addRemoval(agentId, reason);
+
+        // Clear selection if this was the selected agent
+        if (useUIStore.getState().selectedAgentId === agentId) {
+          selectAgent(null);
+        }
+        return;
       }
 
-      // Log removal event
-      addRemoval(agentId, reason);
-
-      // Clear selection if this was the selected agent
-      if (useUIStore.getState().selectedAgentId === agentId) {
-        selectAgent(null);
+      // Handle inferred status updates (from PTY activity detection)
+      if (msg.type === 'mcp.statusUpdate') {
+        const { agentId, state } = msg.payload as {
+          agentId: string;
+          state: DetailedStatus;
+          message?: string;
+        };
+        updateDetailedStatus(agentId, state);
+        return;
       }
     };
 
     return bridge.onNotification(handleNotification);
-  }, [bridge, removeAgent, removeSession, getSessionForAgent, addRemoval, selectAgent]);
+  }, [bridge, removeAgent, removeSession, getSessionForAgent, addRemoval, selectAgent, updateDetailedStatus]);
 
   // Create terminal session for an agent (without activating it)
   const createSessionForAgent = useCallback(
