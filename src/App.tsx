@@ -105,16 +105,27 @@ const DEFAULT_PANEL_HEIGHT = Math.min(600, window.innerHeight - 80);
 // Measured from xterm.js: 8.00x18.00px at fontSize 14
 const CELL_WIDTH = 8.0;
 const CELL_HEIGHT = 18.0;
-const PANEL_HEADER_HEIGHT = 32;
-const PANEL_PADDING = 16; // Total horizontal/vertical padding
+// Panel chrome - tuned to match FitAddon's calculation
+const PANEL_HEADER_HEIGHT = 17; // ~11px font + 4px padding + 1px border
+const PANEL_BORDER = 2; // 1px each side
+const BODY_PADDING_H = 8; // 4px left + 4px right (affects computed width)
 
 /**
  * Calculate terminal cols/rows from panel pixel dimensions.
  * Matches xterm.js FitAddon's calculation to avoid resize on mount.
+ *
+ * FitAddon calculates: cols = floor((parentWidth - scrollbarWidth) / cellWidth)
+ * The parent is .terminal-panel__body, which gets:
+ *   bodyWidth = panelWidth - panelBorder - bodyPadding
  */
 function calculateTerminalDimensions(panelWidth: number, panelHeight: number) {
-  const usableWidth = panelWidth - PANEL_PADDING;
-  const usableHeight = panelHeight - PANEL_HEADER_HEIGHT - PANEL_PADDING;
+  // FitAddon measures parentElement's computed dimensions
+  // For box-sizing: content-box, computed width/height excludes padding
+  const bodyWidth = panelWidth - PANEL_BORDER - BODY_PADDING_H;
+  // Height: panel - border - header; body padding doesn't affect flex height distribution
+  const bodyHeight = panelHeight - PANEL_BORDER - PANEL_HEADER_HEIGHT;
+  const usableWidth = bodyWidth;
+  const usableHeight = bodyHeight;
   return {
     cols: Math.max(40, Math.floor(usableWidth / CELL_WIDTH)),
     rows: Math.max(10, Math.floor(usableHeight / CELL_HEIGHT)),

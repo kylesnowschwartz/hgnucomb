@@ -58,8 +58,26 @@ export class TerminalSession {
       cols: this.cols,
       rows: this.rows,
       cwd: options.cwd ?? DEFAULT_CWD,
-      env: { ...process.env, ...options.env } as Record<string, string>,
+      // Explicitly set COLUMNS/LINES to match PTY size - some programs read these
+      // instead of querying the TTY directly
+      env: {
+        ...process.env,
+        ...options.env,
+        COLUMNS: String(this.cols),
+        LINES: String(this.rows),
+      } as Record<string, string>,
     });
+
+    // Force resize signals after spawn to ensure SIGWINCH is sent
+    // Some programs (like Ink-based TUIs) need this to properly detect terminal size
+    // Send multiple times as Claude Code takes a few seconds to initialize
+    for (const delay of [100, 500, 2000]) {
+      setTimeout(() => {
+        if (!this.disposed) {
+          this.ptyProcess.resize(this.cols, this.rows);
+        }
+      }, delay);
+    }
 
     this.ptyProcess.onData((data) => {
       if (!this.disposed) {
