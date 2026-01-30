@@ -191,9 +191,17 @@ export function TerminalPanel({
     const container = containerRef.current;
     if (!container || !bridge) return;
 
+    // Get session dimensions to initialize xterm.js at the correct size
+    // This prevents the resize race where xterm defaults to 80x24
+    const session = getSession(sessionId);
+    const initialCols = session?.cols ?? 80;
+    const initialRows = session?.rows ?? 24;
+
     // Create terminal with Nerd Font and Catppuccin theme
     // Enable Kitty keyboard protocol for proper Shift+Enter handling with Claude Code
     const terminal = new Terminal({
+      cols: initialCols,
+      rows: initialRows,
       fontFamily: '"JetBrainsMono Nerd Font", "SF Mono", Consolas, monospace',
       fontSize: 14,
       theme: TERMINAL_THEME,
@@ -233,7 +241,7 @@ export function TerminalPanel({
 
     // Snapshot the buffer BEFORE setting up data handlers to avoid duplicates
     // Any data that arrives after this will be handled by the live data handler
-    const session = getSession(sessionId);
+    // Reuse session from above (already fetched for dimensions)
     const bufferSnapshot = session?.buffer ? [...session.buffer] : [];
 
     // Wire data handlers to catch any incoming data

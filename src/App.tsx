@@ -101,6 +101,26 @@ function useAnimatedMount<T>(value: T | null, animationMs: number) {
 const DEFAULT_PANEL_WIDTH = Math.min(800, window.innerWidth * 0.5);
 const DEFAULT_PANEL_HEIGHT = Math.min(600, window.innerHeight - 80);
 
+// Terminal cell dimensions (JetBrains Mono at 14px font)
+// Measured from xterm.js: 8.00x18.00px at fontSize 14
+const CELL_WIDTH = 8.0;
+const CELL_HEIGHT = 18.0;
+const PANEL_HEADER_HEIGHT = 32;
+const PANEL_PADDING = 16; // Total horizontal/vertical padding
+
+/**
+ * Calculate terminal cols/rows from panel pixel dimensions.
+ * Matches xterm.js FitAddon's calculation to avoid resize on mount.
+ */
+function calculateTerminalDimensions(panelWidth: number, panelHeight: number) {
+  const usableWidth = panelWidth - PANEL_PADDING;
+  const usableHeight = panelHeight - PANEL_HEADER_HEIGHT - PANEL_PADDING;
+  return {
+    cols: Math.max(40, Math.floor(usableWidth / CELL_WIDTH)),
+    rows: Math.max(10, Math.floor(usableHeight / CELL_HEIGHT)),
+  };
+}
+
 function App() {
   const [dimensions, setDimensions] = useState({
     width: window.innerWidth,
@@ -364,10 +384,17 @@ function App() {
         ? getAllAgents().map(agentToSnapshot)
         : undefined;
 
+      // Calculate initial terminal size from panel dimensions
+      // This avoids the resize race where PTY starts at 80x24 but panel is narrower
+      const { cols, rows } = calculateTerminalDimensions(
+        panelDimensions.width,
+        panelDimensions.height
+      );
+
       try {
         const session = await bridge.createSession({
-          cols: 80,
-          rows: 24,
+          cols,
+          rows,
           shell,
           env,
           agentSnapshot,
@@ -408,7 +435,7 @@ function App() {
         return null;
       }
     },
-    [bridge, getAllAgents, addSession, appendData, markExited, setActiveSession]
+    [bridge, getAllAgents, addSession, appendData, markExited, setActiveSession, panelDimensions]
   );
 
   // Auto-create terminal sessions for Claude agents when they appear
