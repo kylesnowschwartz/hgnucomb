@@ -34,6 +34,16 @@
   border-color: var(--ctp-lavender);
 }
 
+.terminal-panel--drag-over {
+  border-color: var(--ctp-green);
+  border-width: 2px;
+  box-shadow: 0 0 0 2px rgba(166, 227, 161, 0.2);
+}
+
+.terminal-panel--drag-over .terminal-panel__body {
+  background: rgba(166, 227, 161, 0.05);
+}
+
 .terminal-panel__header {
   display: flex;
   align-items: center;

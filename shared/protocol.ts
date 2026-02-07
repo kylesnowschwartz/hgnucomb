@@ -143,13 +143,25 @@ export interface SessionsClearRequest {
   payload: Record<string, never>;
 }
 
+export interface UploadImageRequest {
+  type: 'terminal.uploadImage';
+  requestId: string;
+  payload: {
+    sessionId: string;
+    filename: string;
+    data: string; // base64-encoded image data
+    mimeType: string;
+  };
+}
+
 export type ClientMessage =
   | CreateRequest
   | WriteRequest
   | ResizeRequest
   | DisposeRequest
   | SessionsListRequest
-  | SessionsClearRequest;
+  | SessionsClearRequest
+  | UploadImageRequest;
 
 // ============================================================================
 // Response Types (Server -> Client)
@@ -214,6 +226,16 @@ export interface SessionsClearResponse {
   };
 }
 
+export interface UploadImageResponse {
+  type: 'terminal.uploadImage.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    path?: string; // Absolute path to saved image
+    error?: string;
+  };
+}
+
 export type ServerMessage =
   | CreatedMessage
   | DataMessage
@@ -221,7 +243,8 @@ export type ServerMessage =
   | DisposedMessage
   | ErrorMessage
   | SessionsListResponse
-  | SessionsClearResponse;
+  | SessionsClearResponse
+  | UploadImageResponse;
 
 // ============================================================================
 // Type Guards
