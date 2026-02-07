@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * MCP Server for hgnucomb grid operations.
  *
@@ -18,7 +18,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import WebSocket from "ws";
 import type {
   McpSpawnResponse,
   McpGetGridResponse,
@@ -60,7 +59,7 @@ function canSpawn(): boolean {
 }
 
 // ============================================================================
-// WebSocket Client
+// WebSocket Client (Bun built-in browser-style WebSocket)
 // ============================================================================
 
 let ws: WebSocket | null = null;
@@ -78,7 +77,7 @@ async function connectWebSocket(): Promise<void> {
   return new Promise((resolve, reject) => {
     ws = new WebSocket(WS_URL);
 
-    ws.on("open", () => {
+    ws.onopen = () => {
       // Register as MCP client
       ws?.send(
         JSON.stringify({
@@ -88,26 +87,26 @@ async function connectWebSocket(): Promise<void> {
       );
       console.error(`[MCP] Connected to ${WS_URL} as agent ${AGENT_ID}`);
       resolve();
-    });
+    };
 
-    ws.on("message", (data) => {
+    ws.onmessage = (event) => {
       try {
-        const msg = JSON.parse(data.toString());
+        const msg = JSON.parse(typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data));
         handleWsMessage(msg);
       } catch (err) {
         console.error("[MCP] Failed to parse message:", err);
       }
-    });
+    };
 
-    ws.on("close", () => {
+    ws.onclose = () => {
       console.error("[MCP] WebSocket closed, exiting");
       process.exit(1);
-    });
+    };
 
-    ws.on("error", (err) => {
-      console.error("[MCP] WebSocket error:", err.message);
-      reject(err);
-    });
+    ws.onerror = () => {
+      console.error("[MCP] WebSocket error");
+      reject(new Error("WebSocket connection error"));
+    };
 
     // Connection timeout
     setTimeout(() => {
@@ -121,7 +120,7 @@ async function connectWebSocket(): Promise<void> {
 // Pending wait for inbox notification (used by get_messages with wait=true)
 let pendingInboxWait: {
   resolve: () => void;
-  timeout: NodeJS.Timeout;
+  timeout: ReturnType<typeof setTimeout>;
 } | null = null;
 
 function handleWsMessage(msg: McpSpawnResponse | McpGetGridResponse | { type: string; payload?: unknown }): void {
@@ -784,23 +783,15 @@ mcpServer.tool(
     workerId: z.string().describe("The agent ID of the worker to get diff for"),
   },
   async ({ workerId }) => {
-    // Permission check: only orchestrators can view worker diffs
     if (!canSpawn()) {
       return {
-        content: [
-          {
-            type: "text",
-            text: `Permission denied: Only orchestrators can view worker diffs. You are a ${CELL_TYPE}.`,
-          },
-        ],
+        content: [{ type: "text", text: `Permission denied: Only orchestrators can view worker diffs. You are a ${CELL_TYPE}.` }],
         isError: true,
       };
     }
 
     try {
-      const result = await sendRequest<McpGetWorkerDiffResponse["payload"]>("mcp.getWorkerDiff", {
-        workerId,
-      });
+      const result = await sendRequest<McpGetWorkerDiffResponse["payload"]>("mcp.getWorkerDiff", { workerId });
 
       if (!result.success) {
         return {
@@ -811,9 +802,7 @@ mcpServer.tool(
 
       const diff = result.diff ?? "";
       const stats = result.stats;
-      const header = stats
-        ? `[${stats.files} files changed, +${stats.insertions} -${stats.deletions}]\n\n`
-        : "";
+      const header = stats ? `[${stats.files} files changed, +${stats.insertions} -${stats.deletions}]\n\n` : "";
 
       if (!diff) {
         return {
@@ -822,21 +811,11 @@ mcpServer.tool(
       }
 
       return {
-        content: [
-          {
-            type: "text",
-            text: `${header}${diff}`,
-          },
-        ],
+        content: [{ type: "text", text: `${header}${diff}` }],
       };
     } catch (err) {
       return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
-          },
-        ],
+        content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
         isError: true,
       };
     }
@@ -847,37 +826,14 @@ mcpServer.tool(
 mcpServer.tool(
   "list_worker_files",
   "List files changed by a worker since branching from main (git diff --stat output). Orchestrators only.",
-  {
-    workerId: z.string().describe("The agent ID of the worker to list files for"),
-  },
+  { workerId: z.string().describe("The agent ID of the worker to list files for") },
   async ({ workerId }) => {
-    if (!canSpawn()) {
-      return {
-        content: [{ type: "text", text: `Permission denied: Only orchestrators can list worker files. You are a ${CELL_TYPE}.` }],
-        isError: true,
-      };
-    }
-
+    if (!canSpawn()) return { content: [{ type: "text", text: `Permission denied: Only orchestrators can list worker files. You are a ${CELL_TYPE}.` }], isError: true };
     try {
       const result = await sendRequest<McpListWorkerFilesResponse["payload"]>("mcp.listWorkerFiles", { workerId });
-
-      if (!result.success) {
-        return {
-          content: [{ type: "text", text: `Failed to list worker files: ${result.error ?? result.output}` }],
-          isError: true,
-        };
-      }
-
-      const output = result.output ?? "";
-      return {
-        content: [{ type: "text", text: output || "No files changed (worker branch is identical to main)" }],
-      };
-    } catch (err) {
-      return {
-        content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        isError: true,
-      };
-    }
+      if (!result.success) return { content: [{ type: "text", text: `Failed to list worker files: ${result.error ?? result.output}` }], isError: true };
+      return { content: [{ type: "text", text: result.output ?? "No files changed (worker branch is identical to main)" }] };
+    } catch (err) { return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }; }
   }
 );
 
@@ -885,37 +841,14 @@ mcpServer.tool(
 mcpServer.tool(
   "list_worker_commits",
   "List commits made by a worker since branching from main (git log --oneline --stat output). Orchestrators only.",
-  {
-    workerId: z.string().describe("The agent ID of the worker to list commits for"),
-  },
+  { workerId: z.string().describe("The agent ID of the worker to list commits for") },
   async ({ workerId }) => {
-    if (!canSpawn()) {
-      return {
-        content: [{ type: "text", text: `Permission denied: Only orchestrators can list worker commits. You are a ${CELL_TYPE}.` }],
-        isError: true,
-      };
-    }
-
+    if (!canSpawn()) return { content: [{ type: "text", text: `Permission denied: Only orchestrators can list worker commits. You are a ${CELL_TYPE}.` }], isError: true };
     try {
       const result = await sendRequest<McpListWorkerCommitsResponse["payload"]>("mcp.listWorkerCommits", { workerId });
-
-      if (!result.success) {
-        return {
-          content: [{ type: "text", text: `Failed to list worker commits: ${result.error ?? result.output}` }],
-          isError: true,
-        };
-      }
-
-      const output = result.output ?? "";
-      return {
-        content: [{ type: "text", text: output || "No commits (worker has not committed any changes)" }],
-      };
-    } catch (err) {
-      return {
-        content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        isError: true,
-      };
-    }
+      if (!result.success) return { content: [{ type: "text", text: `Failed to list worker commits: ${result.error ?? result.output}` }], isError: true };
+      return { content: [{ type: "text", text: result.output ?? "No commits (worker has not committed any changes)" }] };
+    } catch (err) { return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }; }
   }
 );
 
@@ -923,39 +856,14 @@ mcpServer.tool(
 mcpServer.tool(
   "check_merge_conflicts",
   "Check if merging a worker's branch into main would cause conflicts. Does a dry-run merge and reports the result. Always call this BEFORE merge_worker_changes. Orchestrators only.",
-  {
-    workerId: z.string().describe("The agent ID of the worker to check"),
-  },
+  { workerId: z.string().describe("The agent ID of the worker to check") },
   async ({ workerId }) => {
-    if (!canSpawn()) {
-      return {
-        content: [{ type: "text", text: `Permission denied: Only orchestrators can check merge conflicts. You are a ${CELL_TYPE}.` }],
-        isError: true,
-      };
-    }
-
+    if (!canSpawn()) return { content: [{ type: "text", text: `Permission denied: Only orchestrators can check merge conflicts. You are a ${CELL_TYPE}.` }], isError: true };
     try {
       const result = await sendRequest<McpCheckMergeConflictsResponse["payload"]>("mcp.checkMergeConflicts", { workerId });
-
-      if (!result.success) {
-        return {
-          content: [{ type: "text", text: `Failed to check merge conflicts: ${result.error ?? result.output}` }],
-          isError: true,
-        };
-      }
-
-      const canMerge = result.canMerge ?? false;
-      const output = result.output ?? "";
-
-      return {
-        content: [{ type: "text", text: `canMerge: ${canMerge}\n\n${output}` }],
-      };
-    } catch (err) {
-      return {
-        content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        isError: true,
-      };
-    }
+      if (!result.success) return { content: [{ type: "text", text: `Failed to check merge conflicts: ${result.error ?? result.output}` }], isError: true };
+      return { content: [{ type: "text", text: `canMerge: ${result.canMerge ?? false}\n\n${result.output ?? ""}` }] };
+    } catch (err) { return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }; }
   }
 );
 
@@ -963,36 +871,14 @@ mcpServer.tool(
 mcpServer.tool(
   "merge_worker_to_staging",
   "Merge a worker's branch into your staging worktree. Call this after worker completes to pull their changes into your staging area for review. Orchestrators only.",
-  {
-    workerId: z.string().describe("The agent ID of the worker to merge into staging"),
-  },
+  { workerId: z.string().describe("The agent ID of the worker to merge into staging") },
   async ({ workerId }) => {
-    if (!canSpawn()) {
-      return {
-        content: [{ type: "text", text: `Permission denied: Only orchestrators can merge to staging. You are a ${CELL_TYPE}.` }],
-        isError: true,
-      };
-    }
-
+    if (!canSpawn()) return { content: [{ type: "text", text: `Permission denied: Only orchestrators can merge to staging. You are a ${CELL_TYPE}.` }], isError: true };
     try {
       const result = await sendRequest<McpMergeWorkerToStagingResponse["payload"]>("mcp.mergeWorkerToStaging", { workerId });
-
-      if (!result.success) {
-        return {
-          content: [{ type: "text", text: `Failed to merge worker to staging: ${result.error ?? result.output}` }],
-          isError: true,
-        };
-      }
-
-      return {
-        content: [{ type: "text", text: result.output ?? "Merge completed" }],
-      };
-    } catch (err) {
-      return {
-        content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        isError: true,
-      };
-    }
+      if (!result.success) return { content: [{ type: "text", text: `Failed to merge worker to staging: ${result.error ?? result.output}` }], isError: true };
+      return { content: [{ type: "text", text: result.output ?? "Merge completed" }] };
+    } catch (err) { return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }; }
   }
 );
 
@@ -1002,32 +888,12 @@ mcpServer.tool(
   "Merge your staging branch into main. Call this AFTER human approval to promote your staged changes to main. Orchestrators only.",
   {},
   async () => {
-    if (!canSpawn()) {
-      return {
-        content: [{ type: "text", text: `Permission denied: Only orchestrators can merge to main. You are a ${CELL_TYPE}.` }],
-        isError: true,
-      };
-    }
-
+    if (!canSpawn()) return { content: [{ type: "text", text: `Permission denied: Only orchestrators can merge to main. You are a ${CELL_TYPE}.` }], isError: true };
     try {
       const result = await sendRequest<McpMergeStagingToMainResponse["payload"]>("mcp.mergeStagingToMain", {});
-
-      if (!result.success) {
-        return {
-          content: [{ type: "text", text: `Failed to merge staging to main: ${result.error ?? result.output}` }],
-          isError: true,
-        };
-      }
-
-      return {
-        content: [{ type: "text", text: result.output ?? "Merge completed" }],
-      };
-    } catch (err) {
-      return {
-        content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-        isError: true,
-      };
-    }
+      if (!result.success) return { content: [{ type: "text", text: `Failed to merge staging to main: ${result.error ?? result.output}` }], isError: true };
+      return { content: [{ type: "text", text: result.output ?? "Merge completed" }] };
+    } catch (err) { return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }; }
   }
 );
 
@@ -1040,51 +906,12 @@ mcpServer.tool(
     force: z.boolean().optional().describe("Force cleanup even if worktree appears stale (optional)"),
   },
   async ({ workerId, force }) => {
-    // Permission check: only orchestrators can cleanup workers
-    if (!canSpawn()) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Permission denied: Only orchestrators can cleanup workers. You are a ${CELL_TYPE}.`,
-          },
-        ],
-        isError: true,
-      };
-    }
-
+    if (!canSpawn()) return { content: [{ type: "text", text: `Permission denied: Only orchestrators can cleanup workers. You are a ${CELL_TYPE}.` }], isError: true };
     try {
-      const result = await sendRequest<McpCleanupWorkerWorktreeResponse["payload"]>("mcp.cleanupWorkerWorktree", {
-        workerId,
-        force,
-      });
-
-      if (!result.success) {
-        return {
-          content: [{ type: "text", text: `Failed to cleanup worker worktree: ${result.error}` }],
-          isError: true,
-        };
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Cleaned up worker ${workerId}${result.message ? ` - ${result.message}` : ""}`,
-          },
-        ],
-      };
-    } catch (err) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
+      const result = await sendRequest<McpCleanupWorkerWorktreeResponse["payload"]>("mcp.cleanupWorkerWorktree", { workerId, force });
+      if (!result.success) return { content: [{ type: "text", text: `Failed to cleanup worker worktree: ${result.error}` }], isError: true };
+      return { content: [{ type: "text", text: `Cleaned up worker ${workerId}${result.message ? ` - ${result.message}` : ""}` }] };
+    } catch (err) { return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }; }
   }
 );
 
@@ -1097,51 +924,12 @@ mcpServer.tool(
     force: z.boolean().optional().describe("Force termination (optional)"),
   },
   async ({ workerId, force }) => {
-    // Permission check: only orchestrators can kill workers
-    if (!canSpawn()) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Permission denied: Only orchestrators can terminate workers. You are a ${CELL_TYPE}.`,
-          },
-        ],
-        isError: true,
-      };
-    }
-
+    if (!canSpawn()) return { content: [{ type: "text", text: `Permission denied: Only orchestrators can terminate workers. You are a ${CELL_TYPE}.` }], isError: true };
     try {
-      const result = await sendRequest<McpKillWorkerResponse["payload"]>("mcp.killWorker", {
-        workerId,
-        force,
-      });
-
-      if (!result.success) {
-        return {
-          content: [{ type: "text", text: `Failed to terminate worker: ${result.error}` }],
-          isError: true,
-        };
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Terminated worker ${workerId}${result.message ? ` - ${result.message}` : ""}`,
-          },
-        ],
-      };
-    } catch (err) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
+      const result = await sendRequest<McpKillWorkerResponse["payload"]>("mcp.killWorker", { workerId, force });
+      if (!result.success) return { content: [{ type: "text", text: `Failed to terminate worker: ${result.error}` }], isError: true };
+      return { content: [{ type: "text", text: `Terminated worker ${workerId}${result.message ? ` - ${result.message}` : ""}` }] };
+    } catch (err) { return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }; }
   }
 );
 

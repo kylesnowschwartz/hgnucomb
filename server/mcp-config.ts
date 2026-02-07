@@ -7,6 +7,11 @@
  * Solution: Generate .mcp.json with absolute paths and write it to the worktree.
  * This follows the claude-swarm pattern of per-instance MCP config generation.
  *
+ * ## Dev vs Prod
+ *
+ * - Dev: `bun server/mcp.ts` (Bun runs TypeScript directly)
+ * - Prod: `HGNUCOMB_MCP_BIN=/path/to/hgnucomb-mcp` points to compiled binary
+ *
  * ## Future: Per-Agent Settings
  *
  * When we need per-agent prompts, permissions, or tool restrictions, use:
@@ -51,16 +56,19 @@ export function generateMcpConfig(
   cellType: CellType,
   wsUrl: string = "ws://localhost:3001"
 ): GeneratedMcpConfig {
-  // Use tsx to run TypeScript directly (no dist/ build)
   const serverDir = join(gitRoot, "server");
-  const tsxBin = join(serverDir, "node_modules", ".bin", "tsx");
-  const mcpServerPath = join(serverDir, "mcp.ts");
+
+  // Prod: use compiled binary if HGNUCOMB_MCP_BIN is set
+  // Dev: use bun to run TypeScript directly (no tsx needed)
+  const mcpBin = process.env.HGNUCOMB_MCP_BIN;
+  const command = mcpBin ?? "bun";
+  const args = mcpBin ? [] : [join(serverDir, "mcp.ts")];
 
   return {
     mcpServers: {
       hgnucomb: {
-        command: tsxBin,
-        args: [mcpServerPath],
+        command,
+        args,
         env: {
           HGNUCOMB_AGENT_ID: agentId,
           HGNUCOMB_CELL_TYPE: cellType,
