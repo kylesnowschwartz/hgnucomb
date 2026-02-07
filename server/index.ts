@@ -1,11 +1,12 @@
 /**
- * WebSocket server for terminal sessions.
+ * HTTP + WebSocket server for terminal sessions.
  *
- * Listens on PORT env var (default 3001), manages PTY sessions, and routes
- * messages between browser clients and terminal processes.
+ * Uses Bun.serve to handle both HTTP (static files in prod) and WebSocket
+ * connections on a single port. Manages PTY sessions and routes messages
+ * between browser clients and terminal processes.
  */
 
-import { WebSocketServer, WebSocket } from "ws";
+import { join } from "path";
 import { TerminalSessionManager } from "./manager.js";
 import type {
   ClientMessage,
@@ -56,20 +57,36 @@ import {
   mergeWorkerToStaging,
   mergeStagingToMain,
 } from "./git.js";
-import { join } from "path";
+
+import type { ServerWebSocket } from "bun";
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
+const IS_PROD = process.env.NODE_ENV === 'production';
+// DIST_DIR relative to CWD, not source file (import.meta.dir breaks in compiled binaries)
+const DIST_DIR = process.env.HGNUCOMB_DIST_DIR ?? join(process.cwd(), 'dist');
+
 const manager = new TerminalSessionManager();
 
+// ============================================================================
+// WebSocket Data & Client Tracking
+// ============================================================================
+
+interface WsData {
+  type: 'browser' | 'mcp';
+  agentId?: string;
+}
+
+type WS = ServerWebSocket<WsData>;
+
 // Track which sessions belong to which client for cleanup
-const clientSessions = new Map<WebSocket, Set<string>>();
+const clientSessions = new Map<WS, Set<string>>();
 
 // Track sessionId -> agent metadata for persistence and cleanup
 const sessionMetadata = new Map<string, StoredAgentMetadata>();
 
 // Track sessionId -> currently attached browser client
 // Updated on session create and on reconnect (sessions.list)
-const sessionClient = new Map<string, WebSocket>();
+const sessionClient = new Map<string, WS>();
 
 // ============================================================================
 // PTY Activity Detection (Inferred Status)
@@ -123,7 +140,7 @@ function broadcastInferredStatus(agentId: string, status: 'working' | 'idle'): v
 
   const json = JSON.stringify(notification);
   for (const browser of browserClients) {
-    if (browser.readyState === WebSocket.OPEN) {
+    if (browser.readyState === 1) { // OPEN
       browser.send(json);
     }
   }
@@ -136,14 +153,14 @@ function broadcastInferredStatus(agentId: string, status: 'working' | 'idle'): v
 // ============================================================================
 
 // MCP clients (identified by agentId after registration)
-const mcpClients = new Map<string, WebSocket>();
+const mcpClients = new Map<string, WS>();
 
 // Browser clients (non-MCP WebSocket connections)
-const browserClients = new Set<WebSocket>();
+const browserClients = new Set<WS>();
 
 // Pending MCP requests waiting for browser response
 interface PendingMcpRequest {
-  mcpWs: WebSocket;
+  mcpWs: WS;
   agentId: string;
 }
 const pendingMcpRequests = new Map<string, PendingMcpRequest>();
@@ -154,7 +171,7 @@ const pendingMcpRequests = new Map<string, PendingMcpRequest>();
 function routeMcpToBrowser(msg: McpSpawnRequest | McpGetGridRequest | McpBroadcastRequest | McpReportStatusRequest | McpReportResultRequest | McpGetMessagesRequest | McpGetWorkerStatusRequest): void {
   const json = JSON.stringify(msg);
   for (const browser of browserClients) {
-    if (browser.readyState === WebSocket.OPEN) {
+    if (browser.readyState === 1) { // OPEN
       browser.send(json);
     }
   }
@@ -170,7 +187,7 @@ function routeMcpResponse(msg: McpResponse): void {
     return;
   }
 
-  if (pending.mcpWs.readyState === WebSocket.OPEN) {
+  if (pending.mcpWs.readyState === 1) { // OPEN
     pending.mcpWs.send(JSON.stringify(msg));
   }
   pendingMcpRequests.delete(msg.requestId);
@@ -205,7 +222,7 @@ function broadcastAgentRemoval(
 
   const message = JSON.stringify(notification);
   for (const client of browserClients) {
-    if (client.readyState === WebSocket.OPEN) {
+    if (client.readyState === 1) { // OPEN
       client.send(message);
     }
   }
@@ -219,7 +236,7 @@ function broadcastAgentRemoval(
  */
 function notifyAgentInbox(agentId: string, messageCount: number, latestTimestamp: string): void {
   const mcpWs = mcpClients.get(agentId);
-  if (!mcpWs || mcpWs.readyState !== WebSocket.OPEN) {
+  if (!mcpWs || mcpWs.readyState !== 1) { // OPEN
     return;
   }
   mcpWs.send(JSON.stringify({
@@ -229,13 +246,13 @@ function notifyAgentInbox(agentId: string, messageCount: number, latestTimestamp
   console.log(`[MCP] Inbox notification sent to ${agentId}`);
 }
 
-function send(ws: WebSocket, msg: ServerMessage): void {
-  if (ws.readyState === WebSocket.OPEN) {
+function send(ws: WS, msg: ServerMessage): void {
+  if (ws.readyState === 1) { // OPEN
     ws.send(JSON.stringify(msg));
   }
 }
 
-function handleMessage(ws: WebSocket, msg: ClientMessage): void {
+function handleMessage(ws: WS, msg: ClientMessage): void {
   switch (msg.type) {
     case "terminal.create": {
       const { cols, rows, shell, cwd, env, agentSnapshot, allAgents, initialPrompt, instructions, task, taskDetails, parentId, parentHex } = msg.payload;
@@ -406,7 +423,7 @@ Work autonomously. Do not ask questions.`;
         }
 
         const client = sessionClient.get(sessionId);
-        if (client && client.readyState === WebSocket.OPEN) {
+        if (client && client.readyState === 1) { // OPEN
           send(client, {
             type: "terminal.data",
             payload: { sessionId, data },
@@ -416,7 +433,7 @@ Work autonomously. Do not ask questions.`;
 
       session.onExit((exitCode) => {
         const client = sessionClient.get(sessionId);
-        if (client && client.readyState === WebSocket.OPEN) {
+        if (client && client.readyState === 1) { // OPEN
           send(client, {
             type: "terminal.exit",
             payload: { sessionId, exitCode },
@@ -604,93 +621,10 @@ Work autonomously. Do not ask questions.`;
   }
 }
 
-const wss = new WebSocketServer({ port: PORT });
-
-wss.on("error", (err: NodeJS.ErrnoException) => {
-  if (err.code === "EADDRINUSE") {
-    console.error(`Port ${PORT} is already in use. Kill the existing process:`);
-    console.error(`  lsof -ti:${PORT} | xargs kill`);
-    console.error(`  # or: just kill`);
-    process.exit(1);
-  }
-  console.error("Server error:", err.message);
-  process.exit(1);
-});
-
-wss.on("connection", (ws) => {
-  console.log("Client connected");
-
-  // Assume browser client until mcp.register received
-  browserClients.add(ws);
-
-  ws.on("message", (raw) => {
-    try {
-      const msg = JSON.parse(raw.toString());
-
-      // Handle MCP messages
-      if (isMcpMessage(msg)) {
-        handleMcpMessage(ws, msg);
-        return;
-      }
-
-      // Handle terminal messages
-      if (!isClientMessage(msg)) {
-        send(ws, {
-          type: "terminal.error",
-          payload: { message: "Invalid message format" },
-        });
-        return;
-      }
-      handleMessage(ws, msg);
-    } catch (err) {
-      send(ws, {
-        type: "terminal.error",
-        payload: {
-          message: `Failed to parse message: ${err instanceof Error ? err.message : String(err)}`,
-        },
-      });
-    }
-  });
-
-  ws.on("close", () => {
-    // Clean up browser client
-    browserClients.delete(ws);
-
-    // Clean up MCP client
-    for (const [agentId, mcpWs] of mcpClients.entries()) {
-      if (mcpWs === ws) {
-        mcpClients.delete(agentId);
-        console.log(`[MCP] Agent ${agentId} disconnected`);
-        break;
-      }
-    }
-
-    // Clean up pending MCP requests from this client
-    for (const [requestId, pending] of pendingMcpRequests.entries()) {
-      if (pending.mcpWs === ws) {
-        pendingMcpRequests.delete(requestId);
-      }
-    }
-
-    // Detach client from sessions (tmux-like: sessions survive disconnect)
-    // PTYs keep running; client can reconnect and re-attach
-    const sessions = clientSessions.get(ws);
-    if (sessions && sessions.size > 0) {
-      console.log(`[Session] Detached ${sessions.size} session(s) - PTYs survive disconnect`);
-    }
-    clientSessions.delete(ws);
-    console.log("Client disconnected");
-  });
-
-  ws.on("error", (err) => {
-    console.error("WebSocket error:", err.message);
-  });
-});
-
 /**
  * Handle MCP protocol messages.
  */
-function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNotification | InboxUpdatedMessage | AgentRemovedNotification): void {
+function handleMcpMessage(ws: WS, msg: McpRequest | McpResponse | McpNotification | InboxUpdatedMessage | AgentRemovedNotification): void {
   switch (msg.type) {
     case "mcp.register": {
       // This client is an MCP server, not a browser
@@ -967,7 +901,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
             error: 'Only orchestrators can cleanup worker worktrees',
           },
         };
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws.readyState === 1) { // OPEN
           ws.send(JSON.stringify(response));
         }
         break;
@@ -984,7 +918,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
             error: `Worker not found: ${workerId}`,
           },
         };
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws.readyState === 1) { // OPEN
           ws.send(JSON.stringify(response));
         }
         break;
@@ -999,7 +933,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
             error: `Worker ${workerId} is not your child`,
           },
         };
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws.readyState === 1) { // OPEN
           ws.send(JSON.stringify(response));
         }
         break;
@@ -1022,7 +956,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
           error: result.error,
         },
       };
-      if (ws.readyState === WebSocket.OPEN) {
+      if (ws.readyState === 1) { // OPEN
         ws.send(JSON.stringify(response));
       }
       console.log(`[MCP] Cleaned up worktree for worker ${workerId}`);
@@ -1044,7 +978,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
             error: 'Only orchestrators can terminate workers',
           },
         };
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws.readyState === 1) { // OPEN
           ws.send(JSON.stringify(response));
         }
         break;
@@ -1061,7 +995,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
             error: `Worker not found: ${workerId}`,
           },
         };
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws.readyState === 1) { // OPEN
           ws.send(JSON.stringify(response));
         }
         break;
@@ -1076,7 +1010,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
             error: `Worker ${workerId} is not your child`,
           },
         };
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws.readyState === 1) { // OPEN
           ws.send(JSON.stringify(response));
         }
         break;
@@ -1113,7 +1047,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
           error: terminated ? undefined : `Failed to terminate worker ${workerId}`,
         },
       };
-      if (ws.readyState === WebSocket.OPEN) {
+      if (ws.readyState === 1) { // OPEN
         ws.send(JSON.stringify(response));
       }
       break;
@@ -1134,7 +1068,144 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
   }
 }
 
-console.log(`Terminal WebSocket server listening on ws://localhost:${PORT}`);
+// ============================================================================
+// MIME type helper
+// ============================================================================
+
+const MIME_TYPES: Record<string, string> = {
+  '.html': 'text/html',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+};
+
+function getMimeType(pathname: string): string {
+  const ext = pathname.substring(pathname.lastIndexOf('.'));
+  return MIME_TYPES[ext] ?? 'application/octet-stream';
+}
+
+// ============================================================================
+// Bun.serve - HTTP + WebSocket on a single port
+// ============================================================================
+
+const server = Bun.serve<WsData>({
+  port: PORT,
+
+  fetch(req, server) {
+    const url = new URL(req.url);
+
+    // WebSocket upgrade
+    if (req.headers.get("upgrade") === "websocket") {
+      const upgraded = server.upgrade(req, {
+        data: { type: 'browser' as const },
+      });
+      if (upgraded) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 500 });
+    }
+
+    // In dev mode, Vite serves frontend on port 5173
+    if (!IS_PROD) {
+      return new Response("Dev mode: use Vite on port 5173", { status: 404 });
+    }
+
+    // Serve static files from dist/
+    const pathname = url.pathname === "/" ? "/index.html" : url.pathname;
+    const filePath = join(DIST_DIR, pathname);
+    const file = Bun.file(filePath);
+    return new Response(file, {
+      headers: { "Content-Type": getMimeType(pathname) },
+    });
+  },
+
+  websocket: {
+    idleTimeout: 0, // Disable idle timeout for long-running terminal sessions
+
+    open(ws) {
+      // Assume browser client until mcp.register received
+      browserClients.add(ws);
+      console.log("Client connected");
+    },
+
+    message(ws, raw) {
+      try {
+        const text = typeof raw === 'string' ? raw : Buffer.from(raw).toString();
+        const msg = JSON.parse(text);
+
+        // Handle MCP messages
+        if (isMcpMessage(msg)) {
+          handleMcpMessage(ws, msg);
+          return;
+        }
+
+        // Handle terminal messages
+        if (!isClientMessage(msg)) {
+          send(ws, {
+            type: "terminal.error",
+            payload: { message: "Invalid message format" },
+          });
+          return;
+        }
+        handleMessage(ws, msg);
+      } catch (err) {
+        send(ws, {
+          type: "terminal.error",
+          payload: {
+            message: `Failed to parse message: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        });
+      }
+    },
+
+    close(ws) {
+      // Clean up browser client
+      browserClients.delete(ws);
+
+      // Clean up MCP client
+      for (const [agentId, mcpWs] of mcpClients.entries()) {
+        if (mcpWs === ws) {
+          mcpClients.delete(agentId);
+          console.log(`[MCP] Agent ${agentId} disconnected`);
+          break;
+        }
+      }
+
+      // Clean up pending MCP requests from this client
+      for (const [requestId, pending] of pendingMcpRequests.entries()) {
+        if (pending.mcpWs === ws) {
+          pendingMcpRequests.delete(requestId);
+        }
+      }
+
+      // Detach client from sessions (tmux-like: sessions survive disconnect)
+      // PTYs keep running; client can reconnect and re-attach
+      const sessions = clientSessions.get(ws);
+      if (sessions && sessions.size > 0) {
+        console.log(`[Session] Detached ${sessions.size} session(s) - PTYs survive disconnect`);
+      }
+      clientSessions.delete(ws);
+      console.log("Client disconnected");
+    },
+  },
+
+  error(error) {
+    if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
+      console.error(`Port ${PORT} is already in use. Kill the existing process:`);
+      console.error(`  lsof -ti:${PORT} | xargs kill`);
+      console.error(`  # or: just kill`);
+      process.exit(1);
+    }
+    console.error("Server error:", error.message);
+    return new Response("Internal Server Error", { status: 500 });
+  },
+});
+
+console.log(`Terminal server listening on http://localhost:${server.port}`);
 
 // ============================================================================
 // Activity Check Interval (idle detection)
@@ -1164,22 +1235,9 @@ function shutdown(signal: string): void {
   console.log(`\n${signal} received, shutting down...`);
   clearInterval(activityCheckInterval);
   manager.disposeAll();
-
-  // Forcibly close all WebSocket connections so the server can close immediately
-  // This is necessary for hot-reload to work - tsx --watch won't wait
-  for (const client of wss.clients) {
-    client.terminate();
-  }
-
-  wss.close(() => {
-    console.log("Server closed");
-    process.exit(0);
-  });
-  // Force exit if graceful shutdown takes too long
-  setTimeout(() => {
-    console.log("Forcing exit");
-    process.exit(1);
-  }, 1000);
+  server.stop(true);
+  console.log("Server closed");
+  process.exit(0);
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));

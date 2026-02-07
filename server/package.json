@@ -4,20 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx --watch index.ts",
-    "build": "tsc --noEmit",
-    "start": "tsx index.ts"
+    "dev": "bun --watch index.ts",
+    "build": "bun run --bun tsc --noEmit",
+    "start": "bun index.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.3",
-    "node-pty": "^0.10.1",
-    "ws": "^8.18.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/ws": "^8.5.10",
-    "tsx": "^4.0.0",
+    "@types/bun": "^1.2.0",
     "typescript": "^5.0.0"
   }
 }
