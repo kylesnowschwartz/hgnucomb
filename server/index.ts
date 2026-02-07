@@ -346,8 +346,13 @@ Work autonomously. Do not ask questions.`;
         ? join(mainRepoRoot, "server", "plugins", agentSnapshot.cellType)
         : undefined;
 
+      // Wrap Claude CLI with claude-chill for smoother terminal rendering
+      let finalShell = shell;
       const args: string[] | undefined = isClaudeAgent
         ? [
+            "-a", "0",  // Disable auto-lookback (prevents 15s history dumps)
+            "--",       // Separator: everything after is the wrapped command
+            "claude",   // The actual command to wrap
             ...(effectivePrompt ? [effectivePrompt] : []),
             "--model", modelFlag,
             "--allowedTools", "mcp__hgnucomb__*",
@@ -357,7 +362,11 @@ Work autonomously. Do not ask questions.`;
           ]
         : undefined;
 
-      const { session, sessionId } = manager.create({ cols, rows, shell, args, cwd: workingDir, env: finalEnv });
+      if (isClaudeAgent) {
+        finalShell = "claude-chill";
+      }
+
+      const { session, sessionId } = manager.create({ cols, rows, shell: finalShell, args, cwd: workingDir, env: finalEnv });
 
       // Track session -> full agent metadata for persistence and cleanup
       if (agentSnapshot) {
