@@ -206,17 +206,31 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
         action = { type: 'confirm_kill' };
       }
 
-      // Prevent browser keybinds when app has focus (Cmd+D, Cmd+L, Cmd+K, etc.)
-      // Always preventDefault for Cmd/Ctrl combos to avoid browser behavior
-      if (e.metaKey || e.ctrlKey) {
+      // If we have an action binding, handle it and prevent browser behavior
+      if (action) {
         e.preventDefault();
+        e.stopPropagation();
+        executeAction(action);
+        return;
       }
 
-      if (!action) return;
+      // No action bound - decide if we should prevent default browser behavior
+      // Allow essential editing shortcuts to pass through (copy/paste/undo/find)
+      const isEditingShortcut =
+        (e.metaKey || e.ctrlKey) &&
+        (e.key === 'c' || // copy
+          e.key === 'v' || // paste
+          e.key === 'x' || // cut
+          e.key === 'a' || // select all
+          e.key === 'z' || // undo/redo
+          e.key === 'f' || // find
+          e.key === 'r'); // reload (dev convenience)
 
-      e.preventDefault();
-      e.stopPropagation();
-      executeAction(action);
+      // Block problematic browser shortcuts (bookmark, address bar, search, new tab, etc.)
+      // while allowing essential editing to work
+      if ((e.metaKey || e.ctrlKey) && !isEditingShortcut) {
+        e.preventDefault();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
