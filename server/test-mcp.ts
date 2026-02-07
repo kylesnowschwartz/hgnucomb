@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env tsx
 /**
  * Integration test for MCP server tools.
  *
@@ -11,7 +11,7 @@
  *   HGNUCOMB_AGENT_ID=<orchestrator-agent-id> pnpm exec tsx test-mcp.ts
  */
 
-// Uses Bun's built-in global WebSocket (browser-style API)
+import WebSocket from "ws";
 import type {
   McpSpawnResponse,
   McpGetGridResponse,
@@ -41,7 +41,7 @@ async function connect(): Promise<void> {
   return new Promise((resolve, reject) => {
     ws = new WebSocket(WS_URL);
 
-    ws.onopen = () => {
+    ws.on("open", () => {
       // Register as MCP client
       ws.send(
         JSON.stringify({
@@ -51,19 +51,18 @@ async function connect(): Promise<void> {
       );
       console.log(`Connected as agent: ${AGENT_ID}`);
       resolve();
-    };
+    });
 
-    ws.onmessage = (event) => {
-      const raw = event.data;
-      const msg = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw as ArrayBuffer));
+    ws.on("message", (data) => {
+      const msg = JSON.parse(data.toString());
       if (msg.requestId && pendingRequests.has(msg.requestId)) {
         const pending = pendingRequests.get(msg.requestId)!;
         pendingRequests.delete(msg.requestId);
         pending.resolve(msg.payload);
       }
-    };
+    });
 
-    ws.onerror = (event) => reject(new Error(String(event)));
+    ws.on("error", reject);
   });
 }
 

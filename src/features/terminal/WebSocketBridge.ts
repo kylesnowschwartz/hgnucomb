@@ -24,13 +24,7 @@ import type {
   SessionInfo,
 } from '@shared/protocol';
 
-// Dev: explicit localhost:3001 (Vite on 5173, server on 3001)
-// Prod: derives from page URL (same port serves both HTTP and WS)
-// Override: VITE_WS_URL still works for custom setups
-const DEFAULT_URL = import.meta.env.VITE_WS_URL
-  ?? (import.meta.env.DEV
-    ? 'ws://localhost:3001'
-    : `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`);
+const DEFAULT_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:3001';
 const REQUEST_TIMEOUT_MS = 10000;
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30000;

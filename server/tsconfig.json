@@ -12,7 +12,6 @@
     "sourceMap": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": ["bun-types"],
     "baseUrl": "..",
     "paths": {
       "@shared/*": ["shared/*"]

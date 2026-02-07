@@ -1,46 +1,58 @@
 # Development recipes for hgnucomb
 
-# Start frontend and server in parallel (Vite HMR + bun --watch)
+# Start frontend and server in parallel
 dev:
     pnpm dev:all
 
 # Install all dependencies
 install:
     pnpm install
-    cd server && bun install
+    cd server && pnpm install
 
-# Pre-commit gate: lint, typecheck, test, verify builds
-check:
+# Run typecheck, lint, and tests
+test:
     pnpm typecheck
     pnpm lint
     pnpm test
-    pnpm build
-    cd server && bun run build
 
-# Compile standalone binaries and run
-# Produces build/ directory with everything needed to distribute:
-#   build/hgnucomb      - server binary
-#   build/hgnucomb-mcp  - agent MCP bridge binary
-#   build/dist/         - frontend assets
-run:
-    pnpm build
-    mkdir -p build
-    cp -r dist build/dist
-    NODE_ENV=production bun build --compile bin/hgnucomb.ts --outfile build/hgnucomb
-    bun build --compile server/mcp.ts --outfile build/hgnucomb-mcp
-    @echo "Starting hgnucomb on port 3002..."
-    PORT=3002 ./build/hgnucomb
+# Pre-commit check: lint, typecheck, tests, then build
+check:
+    just test
+    just build
 
-# Kill all hgnucomb processes (dev + binary)
+# Build for production
+build:
+    pnpm build
+    cd server && pnpm build
+
+# Kill orphaned dev processes
 kill:
     -lsof -ti:3001 | xargs kill 2>/dev/null
-    -lsof -ti:3002 | xargs kill 2>/dev/null
     -lsof -ti:5173 | xargs kill 2>/dev/null
-    -pkill -f "bun --watch" 2>/dev/null
-    @echo "Cleaned up hgnucomb processes"
+    -pkill -f "tsx --watch" 2>/dev/null
+    @echo "Cleaned up dev processes"
+
+# Kill prod processes
+kill-prod:
+    -lsof -ti:3002 | xargs kill 2>/dev/null
+    -lsof -ti:5174 | xargs kill 2>/dev/null
+    @echo "Cleaned up prod processes"
 
 # Remove all agent worktrees
 clean-worktrees:
     rm -rf .worktrees/*
     git worktree prune
     @echo "Cleaned up agent worktrees"
+
+# Build prod bundle (with prod server URL baked in)
+build-prod:
+    VITE_WS_URL=ws://localhost:3002 pnpm build
+    cd server && pnpm build
+
+# Run frozen prod instance on alternate ports (3002/5174)
+# Code changes won't affect this instance - must rebuild to update
+prod: build-prod
+    @echo "Starting frozen prod on ports 3002 (server) / 5174 (UI)..."
+    @echo "Code changes will NOT hot reload. Run 'just build-prod' to update."
+    (export PORT=3002; cd server && pnpm start) &
+    pnpm preview --port 5174

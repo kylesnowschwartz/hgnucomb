@@ -6,7 +6,7 @@
   "scripts": {
     "theme": "tsx scripts/generate-theme-css.ts",
     "dev": "pnpm theme && vite",
-    "dev:server": "cd server && bun --watch index.ts",
+    "dev:server": "cd server && pnpm dev",
     "dev:all": "concurrently -n ui,pty -c blue,green \"pnpm dev\" \"pnpm dev:server\"",
     "build": "pnpm theme && tsc -b && vite build",
     "lint": "eslint .",
