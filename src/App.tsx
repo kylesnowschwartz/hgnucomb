@@ -345,19 +345,25 @@ function App() {
       }
 
       // Handle inferred status updates (from PTY activity detection)
+      // Inferred status must NOT override sticky states that were explicitly reported
       if (msg.type === 'mcp.statusUpdate') {
         const { agentId, state } = msg.payload as {
           agentId: string;
           state: DetailedStatus;
           message?: string;
         };
+        const agent = getAgent(agentId);
+        const stickyStates: DetailedStatus[] = ['done', 'error', 'cancelled', 'waiting_input', 'waiting_permission', 'stuck'];
+        if (agent && stickyStates.includes(agent.detailedStatus)) {
+          return; // Don't override explicit status with inferred activity
+        }
         updateDetailedStatus(agentId, state);
         return;
       }
     };
 
     return bridge.onNotification(handleNotification);
-  }, [bridge, removeAgent, removeSession, getSessionForAgent, addRemoval, selectAgent, updateDetailedStatus]);
+  }, [bridge, removeAgent, removeSession, getSessionForAgent, addRemoval, selectAgent, updateDetailedStatus, getAgent]);
 
   // Create terminal session for an agent (without activating it)
   const createSessionForAgent = useCallback(

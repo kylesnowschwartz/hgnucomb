@@ -33,6 +33,7 @@ import type {
   InboxUpdatedMessage,
   AgentRemovedNotification,
   StoredAgentMetadata,
+  DetailedStatus,
 } from "@shared/protocol.ts";
 import { isClientMessage, isMcpMessage } from "@shared/protocol.ts";
 import {
@@ -354,11 +355,15 @@ Work autonomously. Do not ask questions.`;
           detailedStatus: 'pending',
         });
 
-        // Initialize activity tracking for agents
-        sessionActivity.set(sessionId, {
-          lastOutputTime: Date.now(),
-          inferredStatus: 'idle',  // Start idle until first output
-        });
+        // Initialize activity tracking only for Claude agents (not plain terminals)
+        // Terminals produce constant PTY output from normal shell use, which would
+        // flood the HUD with false "working" status transitions.
+        if (isClaudeAgent) {
+          sessionActivity.set(sessionId, {
+            lastOutputTime: Date.now(),
+            inferredStatus: 'idle',  // Start idle until first output
+          });
+        }
       }
 
       // Track session for this client
@@ -933,6 +938,17 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       pendingMcpRequests.set(msg.requestId, { mcpWs: ws, agentId });
       routeMcpToBrowser(msg);
       console.log(`[MCP] Routing ${msg.type} from ${agentId} to browser`);
+
+      // Keep server-side metadata in sync with reported status so that
+      // shouldInferStatus() respects sticky states (done, error, etc.)
+      if (msg.type === "mcp.reportStatus") {
+        for (const [, metadata] of sessionMetadata.entries()) {
+          if (metadata.agentId === agentId) {
+            metadata.detailedStatus = msg.payload.state as DetailedStatus;
+            break;
+          }
+        }
+      }
       break;
     }
 

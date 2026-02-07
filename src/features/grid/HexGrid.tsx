@@ -231,24 +231,51 @@ function LabelBadge({ x, y, color, label, textColor, flash }: {
   );
 }
 
+/** Dark backing circle for contrast against colored hex fills */
+function BadgeBackground({ x, y }: { x: number; y: number }) {
+  return (
+    <Circle
+      x={x}
+      y={y}
+      radius={BADGE_RADIUS + 3}
+      fill={palette.crust}
+      opacity={0.7}
+      listening={false}
+    />
+  );
+}
+
 /** Routes DetailedStatus to the appropriate badge component */
 function StatusBadge({ status, x, y }: { status: DetailedStatus; x: number; y: number }) {
   const config = STATUS_BADGE_CONFIG[status];
 
   switch (config.type) {
     case 'ring':
-      return <RingBadge x={x} y={y} color={config.color} pulse={config.pulse} />;
+      return (
+        <Group listening={false}>
+          <BadgeBackground x={x} y={y} />
+          <RingBadge x={x} y={y} color={config.color} pulse={config.pulse} />
+        </Group>
+      );
     case 'dots':
-      return <DotsBadge x={x} y={y} color={config.color} />;
+      return (
+        <Group listening={false}>
+          <BadgeBackground x={x} y={y} />
+          <DotsBadge x={x} y={y} color={config.color} />
+        </Group>
+      );
     case 'label':
       return (
-        <LabelBadge
-          x={x} y={y}
-          color={config.color}
-          label={config.label!}
-          textColor={config.textColor!}
-          flash={config.flash}
-        />
+        <Group listening={false}>
+          <BadgeBackground x={x} y={y} />
+          <LabelBadge
+            x={x} y={y}
+            color={config.color}
+            label={config.label!}
+            textColor={config.textColor!}
+            flash={config.flash}
+          />
+        </Group>
       );
   }
 }
@@ -574,19 +601,23 @@ export function HexGrid({
           );
         })}
 
-        {/* Origin marker */}
-        <Line
-          points={[-10, 0, 10, 0]}
-          stroke={STYLE.originMarkerStroke}
-          strokeWidth={1}
-          listening={false}
-        />
-        <Line
-          points={[0, -10, 0, 10]}
-          stroke={STYLE.originMarkerStroke}
-          strokeWidth={1}
-          listening={false}
-        />
+        {/* Origin marker - hidden when agent occupies origin cell */}
+        {!agentByHex.has('0,0') && (
+          <>
+            <Line
+              points={[-10, 0, 10, 0]}
+              stroke={STYLE.originMarkerStroke}
+              strokeWidth={1}
+              listening={false}
+            />
+            <Line
+              points={[0, -10, 0, 10]}
+              stroke={STYLE.originMarkerStroke}
+              strokeWidth={1}
+              listening={false}
+            />
+          </>
+        )}
       </Layer>
     </Stage>
   );
