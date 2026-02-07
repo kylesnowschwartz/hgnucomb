@@ -596,7 +596,7 @@ Work autonomously. Do not ask questions.`;
     }
 
     case "terminal.uploadImage": {
-      const { sessionId, filename, data, mimeType } = msg.payload;
+      const { sessionId, filename, data } = msg.payload;
       const session = manager.get(sessionId);
 
       if (!session) {
@@ -610,7 +610,8 @@ Work autonomously. Do not ask questions.`;
 
       try {
         // Save image to agent's worktree or scratchpad
-        const imagePath = saveImageForSession(session, filename, data);
+        const agentId = sessionMetadata.get(sessionId)?.agentId;
+        const imagePath = saveImageForSession(agentId, sessionId, filename, data);
 
         // Inject path into terminal stdin so agent can read it
         session.write(imagePath + '\n');
