@@ -42,25 +42,11 @@ export class TerminalSession {
     this.rows = options.rows ?? 24;
     const shell = options.shell ?? process.env.SHELL ?? "bash";
 
-    // Verify required CLIs exist before attempting to spawn
+    // Verify Claude CLI exists before attempting to spawn
     if (shell === "claude") {
       if (!Bun.which("claude")) {
         throw new Error(
           "Claude CLI not found. Install: npm i -g @anthropic-ai/claude-code"
-        );
-      }
-    }
-
-    if (shell === "claude-chill") {
-      if (!Bun.which("claude-chill")) {
-        throw new Error(
-          "claude-chill not found. Install: cargo install --git https://github.com/davidbeesley/claude-chill"
-        );
-      }
-      // claude-chill wraps claude, so verify claude exists too
-      if (!Bun.which("claude")) {
-        throw new Error(
-          "Claude CLI not found (required by claude-chill). Install: npm i -g @anthropic-ai/claude-code"
         );
       }
     }
