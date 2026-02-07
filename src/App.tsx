@@ -587,8 +587,8 @@ function App() {
     <>
       <HexGrid width={dimensions.width} height={dimensions.height} />
       <ActionBar />
-      <ControlPanel />
-      <EventLog />
+      {import.meta.env.DEV && <ControlPanel />}
+      {import.meta.env.DEV && <EventLog />}
       {panelShouldRender && cachedSessionId && (
         <TerminalPanel
           sessionId={cachedSessionId}
