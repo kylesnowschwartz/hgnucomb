@@ -12,6 +12,7 @@ import { createBilateralCommunicationTest, createTaskAssignmentTest } from './sc
 import { createMultiCycleDemoTest } from './scripts/multiCycleDemo';
 import { createStagingWorkflowTest, createSimpleMergeTest } from './scripts/stagingWorkflow';
 import { createCleanupCoordinationTest, createKillWorkerTest } from './scripts/cleanupCoordination';
+import { createBadgeShowcaseTest } from './scripts/badgeShowcase';
 
 export interface TestEntry {
   /** Unique identifier for the test */
@@ -82,6 +83,12 @@ export const TEST_REGISTRY: TestEntry[] = [
     name: 'Kill Worker',
     description: 'Orchestrator spawns worker, forcibly kills it, verifies UI removal',
     factory: createKillWorkerTest,
+  },
+  {
+    id: 'badge-showcase',
+    name: 'Badge Showcase',
+    description: 'Visual test: cycles worker through all 3 attention badge states (?, !, X)',
+    factory: createBadgeShowcaseTest,
   },
 ];
 

@@ -10,7 +10,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Stage, Layer, Line, RegularPolygon, Circle, Group } from 'react-konva';
+import { Stage, Layer, Line, RegularPolygon, Circle, Group, Text } from 'react-konva';
 import Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { hexToPixel, hexesInRect } from '@shared/types';
@@ -65,33 +65,92 @@ const STATUS_OPACITY: Record<AgentStatus, number> = {
   offline: 0.3,
 };
 
-// Status visual categories - map DetailedStatus to display bucket
-type StatusBucket = 'busy' | 'needs_attention' | 'done' | 'failed' | 'idle';
+// ============================================================================
+// Status Badge System - Visual indicators at center of hex cells
+//
+// Motion encodes urgency:
+//   Flash  = needs human attention (waiting_input, waiting_permission, stuck)
+//   Pulse  = booting up (pending)
+//   Bounce = actively working (working)
+//   Static = terminal or inactive (idle, done, error, cancelled)
+//
+// Color follows universal semaphore:
+//   Grey   = inactive (pending, idle, cancelled)
+//   Blue   = in progress (working)
+//   Yellow = needs input (waiting_input)
+//   Orange = needs approval (waiting_permission)
+//   Red    = error or stuck (stuck, error)
+//   Green  = success (done)
+// ============================================================================
 
-const STATUS_BUCKETS: Record<DetailedStatus, StatusBucket> = {
-  pending: 'idle',
-  working: 'busy',
-  idle: 'idle',
-  waiting_input: 'needs_attention',
-  waiting_permission: 'needs_attention',
-  stuck: 'needs_attention',
-  done: 'done',
-  error: 'failed',
-  cancelled: 'failed',
+const BADGE_RADIUS = 10;
+
+interface StatusBadgeConfig {
+  /** 'ring' = hollow stroke, 'dots' = bouncing dot trio, 'label' = filled circle with text */
+  type: 'ring' | 'dots' | 'label';
+  color: string;
+  label?: string;
+  textColor?: string;
+  /** Opacity oscillation (0.5-1.0) for attention states */
+  flash?: boolean;
+  /** Scale oscillation (0.8-1.2) for pending/booting */
+  pulse?: boolean;
+}
+
+const STATUS_BADGE_CONFIG: Record<DetailedStatus, StatusBadgeConfig> = {
+  pending:            { type: 'ring',  color: palette.overlay0, pulse: true },
+  idle:               { type: 'ring',  color: palette.overlay0 },
+  working:            { type: 'dots',  color: palette.blue },
+  waiting_input:      { type: 'label', color: palette.yellow, label: '?', textColor: palette.crust, flash: true },
+  waiting_permission: { type: 'label', color: palette.peach,  label: '!', textColor: palette.crust, flash: true },
+  stuck:              { type: 'label', color: palette.red,    label: 'X', textColor: palette.crust, flash: true },
+  done:               { type: 'label', color: palette.green,  label: '\u2713', textColor: palette.crust },
+  error:              { type: 'label', color: palette.red,    label: '\u2715', textColor: palette.crust },
+  cancelled:          { type: 'label', color: palette.overlay0, label: '\u2014', textColor: palette.crust },
 };
 
 // ============================================================================
-// Status Badge Components (Native Konva with animations)
+// Badge Components
 // ============================================================================
 
-interface KonvaStatusBadgeProps {
-  status: DetailedStatus;
-  x: number;
-  y: number;
+/** Hollow ring - static for idle, pulsing for pending */
+function RingBadge({ x, y, color, pulse }: { x: number; y: number; color: string; pulse?: boolean }) {
+  const circleRef = useRef<Konva.Circle>(null);
+
+  useEffect(() => {
+    if (!pulse) return;
+    const circle = circleRef.current;
+    const layer = circle?.getLayer();
+    if (!layer || !circle) return;
+
+    const anim = new Konva.Animation((frame) => {
+      if (!frame || !circleRef.current) return;
+      const t = frame.time / 1000;
+      // Slow pulse: scale between 0.8 and 1.2 at 0.5Hz
+      const s = 1 + Math.sin(t * Math.PI) * 0.2;
+      circleRef.current.scaleX(s);
+      circleRef.current.scaleY(s);
+    }, layer);
+
+    anim.start();
+    return () => { anim.stop(); };
+  }, [pulse]);
+
+  return (
+    <Circle
+      ref={circleRef}
+      x={x}
+      y={y}
+      radius={BADGE_RADIUS * 0.6}
+      stroke={color}
+      strokeWidth={2}
+      listening={false}
+    />
+  );
 }
 
-/** 3-dot bouncing loader for busy states */
-function BusyBadge({ x, y }: { x: number; y: number }) {
+/** Three bouncing dots - working state */
+function DotsBadge({ x, y, color }: { x: number; y: number; color: string }) {
   const groupRef = useRef<Konva.Group>(null);
   const dot1Ref = useRef<Konva.Circle>(null);
   const dot2Ref = useRef<Konva.Circle>(null);
@@ -104,9 +163,8 @@ function BusyBadge({ x, y }: { x: number; y: number }) {
 
     const anim = new Konva.Animation((frame) => {
       if (!frame || !dot1Ref.current || !dot2Ref.current || !dot3Ref.current) return;
-
-      const t = frame.time / 1000; // seconds
-      const bounce = (offset: number) => Math.sin((t + offset) * Math.PI * 2) * 2;
+      const t = frame.time / 1000;
+      const bounce = (offset: number) => Math.sin((t + offset) * Math.PI * 2) * 3;
 
       dot1Ref.current.y(bounce(0));
       dot2Ref.current.y(bounce(0.15));
@@ -117,94 +175,81 @@ function BusyBadge({ x, y }: { x: number; y: number }) {
     return () => { anim.stop(); };
   }, []);
 
-  const dotRadius = 2;
-  const spacing = 5;
-  const dotColor = palette.crust;  // Dark dots for contrast on any background
+  const dotRadius = 2.5;
+  const spacing = 6;
 
   return (
     <Group ref={groupRef} x={x} y={y} listening={false}>
-      <Circle ref={dot1Ref} x={-spacing} y={0} radius={dotRadius} fill={dotColor} />
-      <Circle ref={dot2Ref} x={0} y={0} radius={dotRadius} fill={dotColor} />
-      <Circle ref={dot3Ref} x={spacing} y={0} radius={dotRadius} fill={dotColor} />
+      <Circle ref={dot1Ref} x={-spacing} y={0} radius={dotRadius} fill={color} />
+      <Circle ref={dot2Ref} x={0} y={0} radius={dotRadius} fill={color} />
+      <Circle ref={dot3Ref} x={spacing} y={0} radius={dotRadius} fill={color} />
     </Group>
   );
 }
 
-/** Flashing indicator for attention-needed states */
-function AttentionBadge({ x, y }: { x: number; y: number }) {
-  const circleRef = useRef<Konva.Circle>(null);
+/** Filled circle with text label - attention and terminal states */
+function LabelBadge({ x, y, color, label, textColor, flash }: {
+  x: number; y: number; color: string; label: string; textColor: string; flash?: boolean;
+}) {
+  const groupRef = useRef<Konva.Group>(null);
 
   useEffect(() => {
-    const circle = circleRef.current;
-    const layer = circle?.getLayer();
-    if (!layer || !circle) return;
+    if (!flash) return;
+    const group = groupRef.current;
+    const layer = group?.getLayer();
+    if (!layer || !group) return;
 
     const anim = new Konva.Animation((frame) => {
-      if (!frame || !circleRef.current) return;
-
+      if (!frame || !groupRef.current) return;
       const t = frame.time / 1000;
-      // Flash: oscillate opacity between 0.5 and 1.0
+      // Flash: oscillate opacity 0.5-1.0 at 1Hz
       const opacity = 0.75 + Math.sin(t * Math.PI * 2) * 0.25;
-      circleRef.current.opacity(opacity);
+      groupRef.current.opacity(opacity);
     }, layer);
 
     anim.start();
     return () => { anim.stop(); };
-  }, []);
+  }, [flash]);
 
   return (
-    <Circle
-      x={x}
-      y={y}
-      ref={circleRef}
-      radius={4}
-      fill={palette.crust}
-      listening={false}
-    />
+    <Group ref={groupRef} x={x} y={y} listening={false}>
+      <Circle radius={BADGE_RADIUS} fill={color} />
+      <Text
+        text={label}
+        fontSize={12}
+        fontStyle="bold"
+        fontFamily="monospace"
+        fill={textColor}
+        align="center"
+        verticalAlign="middle"
+        width={BADGE_RADIUS * 2}
+        height={BADGE_RADIUS * 2}
+        offsetX={BADGE_RADIUS}
+        offsetY={BADGE_RADIUS}
+      />
+    </Group>
   );
 }
 
-/** Static circle for idle states (hollow ring) */
-function IdleBadge({ x, y }: { x: number; y: number }) {
-  return (
-    <Circle
-      x={x}
-      y={y}
-      radius={3}
-      stroke={palette.crust}
-      strokeWidth={1.5}
-      listening={false}
-    />
-  );
-}
+/** Routes DetailedStatus to the appropriate badge component */
+function StatusBadge({ status, x, y }: { status: DetailedStatus; x: number; y: number }) {
+  const config = STATUS_BADGE_CONFIG[status];
 
-/** Solid circle for terminal states (done, failed) */
-function TerminalBadge({ x, y }: { x: number; y: number }) {
-  return (
-    <Circle
-      x={x}
-      y={y}
-      radius={4}
-      fill={palette.crust}
-      listening={false}
-    />
-  );
-}
-
-function KonvaStatusBadge({ status, x, y }: KonvaStatusBadgeProps) {
-  const bucket = STATUS_BUCKETS[status];
-
-  switch (bucket) {
-    case 'busy':
-      return <BusyBadge x={x} y={y} />;
-    case 'needs_attention':
-      return <AttentionBadge x={x} y={y} />;
-    case 'idle':
-      return <IdleBadge x={x} y={y} />;
-    case 'done':
-    case 'failed':
-    default:
-      return <TerminalBadge x={x} y={y} />;
+  switch (config.type) {
+    case 'ring':
+      return <RingBadge x={x} y={y} color={config.color} pulse={config.pulse} />;
+    case 'dots':
+      return <DotsBadge x={x} y={y} color={config.color} />;
+    case 'label':
+      return (
+        <LabelBadge
+          x={x} y={y}
+          color={config.color}
+          label={config.label!}
+          textColor={config.textColor!}
+          flash={config.flash}
+        />
+      );
   }
 }
 
@@ -487,11 +532,11 @@ export function HexGrid({
                   // Double-click occupied = open panel
                   selectAgent(agent.id);
                 } else {
-                  // Double-click empty = spawn + select (don't open panel)
+                  // Double-click empty = spawn + auto-open terminal
                   const cellType = getCellType(e.evt.shiftKey);
                   const newAgentId = spawnAgent(hex, cellType);
                   addSpawn(newAgentId, cellType, hex);
-                  selectHex(hex);
+                  selectAgent(newAgentId);
                 }
               }}
               onDblTap={() => {
@@ -500,7 +545,7 @@ export function HexGrid({
                 } else {
                   const newAgentId = spawnAgent(hex, 'terminal');
                   addSpawn(newAgentId, 'terminal', hex);
-                  selectHex(hex);
+                  selectAgent(newAgentId);
                 }
               }}
               onContextMenu={(e) => {
@@ -515,19 +560,16 @@ export function HexGrid({
 
 
 
-        {/* Render status badges for agents (native Konva) */}
+        {/* Render status badges at center of agent hex cells */}
         {agents.map((agent) => {
           const { x, y } = hexToPixel(agent.hex, hexSize);
-          // Position badge at top-right of hex
-          const badgeX = x + hexSize * 0.5;
-          const badgeY = y - hexSize * 0.5;
 
           return (
-            <KonvaStatusBadge
+            <StatusBadge
               key={`badge-${agent.id}`}
               status={agent.detailedStatus}
-              x={badgeX}
-              y={badgeY}
+              x={x}
+              y={y}
             />
           );
         })}

@@ -74,9 +74,9 @@ const sessionClient = new Map<string, WebSocket>();
 // PTY Activity Detection (Inferred Status)
 // ============================================================================
 
-const IDLE_THRESHOLD_MS = 3000;  // 3 seconds of silence = idle
+const IDLE_THRESHOLD_MS = 5000;  // 5 seconds of silence = idle
 const ACTIVITY_CHECK_INTERVAL_MS = 1000;  // Check every second
-const WORKING_DEBOUNCE_MS = 500;  // Require 500ms of sustained output to trigger 'working'
+const WORKING_DEBOUNCE_MS = 1500;  // Require 1.5s of sustained output to trigger 'working'
 
 interface SessionActivityState {
   lastOutputTime: number;  // Date.now() of last PTY output

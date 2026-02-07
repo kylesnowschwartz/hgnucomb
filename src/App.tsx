@@ -522,13 +522,15 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Keyboard spawn handler
+  // Keyboard spawn handler - spawns agent and auto-opens terminal panel
   const handleKeyboardSpawn = useCallback(
     (cellType: CellType, hex: HexCoordinate) => {
       const newAgentId = spawnAgent(hex, cellType);
       addSpawn(newAgentId, cellType, hex);
+      // Agent is registered synchronously, safe to select immediately
+      selectAgent(newAgentId);
     },
-    [spawnAgent, addSpawn]
+    [spawnAgent, addSpawn, selectAgent]
   );
 
   // Keyboard kill handler
