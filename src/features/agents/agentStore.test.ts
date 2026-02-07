@@ -95,8 +95,15 @@ describe('agentStore', () => {
       expect(agent?.taskDetails).toBe('Check auth module');
     });
 
-    it('initializes with pending status', () => {
+    it('initializes terminals with idle status', () => {
       const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 });
+      const agent = useAgentStore.getState().getAgent(id);
+      expect(agent?.status).toBe('idle');
+      expect(agent?.detailedStatus).toBe('idle');
+    });
+
+    it('initializes orchestrators with pending status', () => {
+      const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
       const agent = useAgentStore.getState().getAgent(id);
       expect(agent?.status).toBe('idle');
       expect(agent?.detailedStatus).toBe('pending');
@@ -139,7 +146,7 @@ describe('agentStore', () => {
 
   describe('updateDetailedStatus', () => {
     it('returns previous status', () => {
-      const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 });
+      const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
       const previous = useAgentStore.getState().updateDetailedStatus(id, 'working');
       expect(previous).toBe('pending');
     });
@@ -159,7 +166,7 @@ describe('agentStore', () => {
     });
 
     it('tracks status transitions correctly', () => {
-      const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 });
+      const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
 
       // pending -> working -> waiting_input -> done
       expect(useAgentStore.getState().updateDetailedStatus(id, 'working')).toBe('pending');

@@ -82,7 +82,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         role,
         cellType,
         status: 'idle',
-        detailedStatus: 'pending',
+        detailedStatus: cellType === 'terminal' ? 'idle' : 'pending',
         systemPrompt: '',
         hex,
         connections: parentId ? [parentId] : [],

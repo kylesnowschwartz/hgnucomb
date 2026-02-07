@@ -245,29 +245,31 @@ function BadgeBackground({ x, y }: { x: number; y: number }) {
   );
 }
 
+/** Whether a badge color is bright enough to need a dark background for contrast */
+const DARK_COLORS: Set<string> = new Set([palette.overlay0, palette.crust, palette.surface0, palette.surface1]);
+function needsBackground(color: string): boolean {
+  return !DARK_COLORS.has(color);
+}
+
 /** Routes DetailedStatus to the appropriate badge component */
 function StatusBadge({ status, x, y }: { status: DetailedStatus; x: number; y: number }) {
   const config = STATUS_BADGE_CONFIG[status];
+  const showBg = needsBackground(config.color);
 
   switch (config.type) {
     case 'ring':
-      return (
-        <Group listening={false}>
-          <BadgeBackground x={x} y={y} />
-          <RingBadge x={x} y={y} color={config.color} pulse={config.pulse} />
-        </Group>
-      );
+      return <RingBadge x={x} y={y} color={config.color} pulse={config.pulse} />;
     case 'dots':
       return (
         <Group listening={false}>
-          <BadgeBackground x={x} y={y} />
+          {showBg && <BadgeBackground x={x} y={y} />}
           <DotsBadge x={x} y={y} color={config.color} />
         </Group>
       );
     case 'label':
       return (
         <Group listening={false}>
-          <BadgeBackground x={x} y={y} />
+          {showBg && <BadgeBackground x={x} y={y} />}
           <LabelBadge
             x={x} y={y}
             color={config.color}
