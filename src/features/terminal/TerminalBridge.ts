@@ -74,6 +74,21 @@ export interface TerminalBridge {
   resize(sessionId: string, cols: number, rows: number): void;
 
   /**
+   * Upload an image file to the server for a terminal session.
+   * The image is saved to the agent's worktree or scratchpad, and the path
+   * is automatically injected into the terminal stdin.
+   *
+   * @param sessionId - Target terminal session
+   * @param params - Image upload parameters (filename, data as base64, mimeType)
+   * @returns Promise resolving to the absolute path where the image was saved
+   */
+  uploadImage(sessionId: string, params: {
+    filename: string;
+    data: string;
+    mimeType: string;
+  }): Promise<string>;
+
+  /**
    * Subscribe to data events from a terminal session.
    * @returns Unsubscribe function
    */

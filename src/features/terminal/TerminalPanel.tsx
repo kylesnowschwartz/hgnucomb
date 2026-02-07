@@ -52,6 +52,7 @@ export function TerminalPanel({
   const bridge = useTerminalStore((s) => s.bridge);
   const getSession = useTerminalStore((s) => s.getSession);
   const [isFocused, setIsFocused] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Panel position (internal state - resets on remount)
   const [position, setPosition] = useState({ x: 20, y: 20 });
@@ -134,6 +135,63 @@ export function TerminalPanel({
   const focusTerminal = useCallback(() => {
     terminalRef.current?.focus();
   }, []);
+
+  // Handle image drag-and-drop
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only unset if leaving the panel entirely (not just entering a child element)
+    if (e.currentTarget === e.target) {
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    if (!bridge) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+
+    if (imageFiles.length === 0) {
+      console.log('[TerminalPanel] No image files in drop');
+      return;
+    }
+
+    for (const file of imageFiles) {
+      try {
+        // Read file as base64
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        console.log(`[TerminalPanel] Uploading image: ${file.name}`);
+
+        // Upload to server - path is automatically injected into stdin
+        await bridge.uploadImage(sessionId, {
+          filename: file.name,
+          data: base64,
+          mimeType: file.type,
+        });
+
+        console.log(`[TerminalPanel] Image uploaded: ${file.name}`);
+      } catch (err) {
+        console.error(`[TerminalPanel] Failed to upload ${file.name}:`, err);
+      }
+    }
+  }, [sessionId, bridge]);
 
   // Refit terminal when dimensions change
   useEffect(() => {
@@ -298,6 +356,7 @@ export function TerminalPanel({
     'terminal-panel',
     isFocused ? 'terminal-panel--focused' : '',
     isOpen ? 'terminal-panel--open' : 'terminal-panel--closed',
+    isDragOver ? 'terminal-panel--drag-over' : '',
   ].filter(Boolean).join(' ');
 
   const panelStyle: React.CSSProperties = {
@@ -323,7 +382,10 @@ export function TerminalPanel({
       <div
         className="terminal-panel__body"
         ref={containerRef}
-        onClick={focusTerminal} // Re-focus on click
+        onClick={focusTerminal}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       />
       <div
         className="terminal-panel__resize-handle"

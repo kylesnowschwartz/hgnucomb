@@ -57,6 +57,7 @@ import {
   mergeWorkerToStaging,
   mergeStagingToMain,
 } from "./git.js";
+import { saveImageForSession } from "./imageStorage.js";
 
 import type { ServerWebSocket } from "bun";
 
@@ -608,6 +609,51 @@ Work autonomously. Do not ask questions.`;
         payload: { cleared: count },
       });
       console.log(`[Sessions] Cleared ${count} session(s)`);
+      break;
+    }
+
+    case "terminal.uploadImage": {
+      const { sessionId, filename, data, mimeType } = msg.payload;
+      const session = manager.get(sessionId);
+
+      if (!session) {
+        send(ws, {
+          type: "terminal.error",
+          requestId: msg.requestId,
+          payload: { message: `Session not found: ${sessionId}`, sessionId },
+        });
+        return;
+      }
+
+      try {
+        // Save image to agent's worktree or scratchpad
+        const imagePath = saveImageForSession(session, filename, data);
+
+        // Inject path into terminal stdin so agent can read it
+        session.write(imagePath + '\n');
+
+        // Return success with the path
+        send(ws, {
+          type: "terminal.uploadImage.result",
+          requestId: msg.requestId,
+          payload: {
+            success: true,
+            path: imagePath,
+          },
+        });
+
+        console.log(`[${sessionId}] Image uploaded: ${filename} -> ${imagePath}`);
+      } catch (err) {
+        send(ws, {
+          type: "terminal.uploadImage.result",
+          requestId: msg.requestId,
+          payload: {
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+        });
+        console.error(`[${sessionId}] Image upload failed:`, err);
+      }
       break;
     }
 
