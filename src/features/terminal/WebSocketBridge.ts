@@ -341,42 +341,6 @@ export class WebSocketBridge implements TerminalBridge {
     this.send(message);
   }
 
-  /**
-   * Upload an image file to the server for a terminal session.
-   * The image is saved to the agent's worktree or scratchpad, and the path
-   * is automatically injected into the terminal stdin.
-   *
-   * @param sessionId - Target terminal session
-   * @param params - Image upload parameters (filename, data, mimeType)
-   * @returns Promise resolving to the absolute path where the image was saved
-   */
-  async uploadImage(sessionId: string, params: {
-    filename: string;
-    data: string;
-    mimeType: string;
-  }): Promise<string> {
-    const requestId = this.nextRequestId();
-    const message: ClientMessage = {
-      type: 'terminal.uploadImage',
-      requestId,
-      payload: {
-        sessionId,
-        ...params,
-      },
-    };
-
-    const result = await this.sendRequest<{ success: boolean; path?: string; error?: string }>(
-      requestId,
-      message
-    );
-
-    if (!result.success || !result.path) {
-      throw new Error(result.error ?? 'Image upload failed');
-    }
-
-    return result.path;
-  }
-
   onData(sessionId: string, handler: DataHandler): () => void {
     const listeners = this.sessionListeners.get(sessionId);
     if (!listeners) {
@@ -570,8 +534,7 @@ export class WebSocketBridge implements TerminalBridge {
       }
 
       case 'sessions.list.result':
-      case 'sessions.clear.result':
-      case 'terminal.uploadImage.result': {
+      case 'sessions.clear.result': {
         const pending = this.pendingRequests.get(msg.requestId);
         if (pending) {
           clearTimeout(pending.timeout);
