@@ -351,7 +351,6 @@ Work autonomously. Do not ask questions.`;
       let finalShell = shell;
       const args: string[] | undefined = isClaudeAgent
         ? [
-            "-a", "0",  // Disable auto-lookback (prevents 15s history dumps)
             "--",       // Separator: everything after is the wrapped command
             "claude",   // The actual command to wrap
             ...(effectivePrompt ? [effectivePrompt] : []),
