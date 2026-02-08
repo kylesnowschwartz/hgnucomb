@@ -1,10 +1,26 @@
 {
   "name": "hgnucomb",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Spatial terminal multiplexer with AI agent orchestration on a hex grid",
   "type": "module",
+  "license": "MIT",
   "bin": {
     "hgnucomb": "./bin/hgnucomb.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "server",
+    "shared",
+    "!server/node_modules",
+    "!server/pnpm-lock.yaml",
+    "!server/pnpm-workspace.yaml",
+    "!server/*.test.ts",
+    "!server/test-mcp.ts",
+    "!shared/*.test.ts"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
   },
   "scripts": {
     "theme": "tsx scripts/generate-theme-css.ts",
@@ -16,34 +32,46 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build"
   },
   "dependencies": {
-    "@xterm/addon-fit": "0.12.0-beta.109",
-    "@xterm/addon-webgl": "0.20.0-beta.108",
-    "@xterm/xterm": "6.1.0-beta.109",
-    "konva": "^10.2.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "react-konva": "^19.2.1",
-    "zustand": "^5.0.10"
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "node-pty": "^0.10.1",
+    "tsx": "^4.21.0",
+    "ws": "^8.18.0",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.5.10",
     "@vitejs/plugin-react": "^5.1.1",
+    "@xterm/addon-fit": "0.12.0-beta.109",
+    "@xterm/addon-webgl": "0.20.0-beta.108",
+    "@xterm/xterm": "6.1.0-beta.109",
     "concurrently": "^9.2.1",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
-    "tsx": "^4.21.0",
+    "konva": "^10.2.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-konva": "^19.2.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "zustand": "^5.0.10"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "node-pty"
+    ]
   },
   "packageManager": "pnpm@10.28.1+sha512.7d7dbbca9e99447b7c3bf7a73286afaaf6be99251eb9498baefa7d406892f67b879adb3a1d7e687fc4ccc1a388c7175fbaae567a26ab44d1067b54fcb0d6a316"
 }
