@@ -126,15 +126,15 @@ The User has fully TTY access to communicate with you when collaboration is need
 - Create tests if none exist.
 </rules>
 `.trim();
-import type { AgentSnapshot, HexCoordinate } from "@shared/types.ts";
-import { hexDistance } from "@shared/types.ts";
+import type { AgentSnapshot, HexCoordinate } from "../shared/types.ts";
+import { hexDistance } from "../shared/types.ts";
 import type {
   ContextAgent,
   ContextConnection,
   ContextTask,
   ContextParent,
   HgnucombContext,
-} from "@shared/context.ts";
+} from "../shared/context.ts";
 
 // ============================================================================
 // Context generation

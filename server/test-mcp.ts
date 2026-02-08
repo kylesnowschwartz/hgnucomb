@@ -15,7 +15,7 @@ import WebSocket from "ws";
 import type {
   McpSpawnResponse,
   McpGetGridResponse,
-} from "@shared/protocol.ts";
+} from "../shared/protocol.ts";
 
 const WS_URL = process.env.HGNUCOMB_WS_URL ?? "ws://localhost:3001";
 const AGENT_ID = process.env.HGNUCOMB_AGENT_ID;

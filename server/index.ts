@@ -38,8 +38,8 @@ import type {
   AgentRemovedNotification,
   StoredAgentMetadata,
   DetailedStatus,
-} from "@shared/protocol.ts";
-import { isClientMessage, isMcpMessage } from "@shared/protocol.ts";
+} from "../shared/protocol.ts";
+import { isClientMessage, isMcpMessage } from "../shared/protocol.ts";
 import {
   generateContext,
   writeContextFile,

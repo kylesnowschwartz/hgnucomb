@@ -11,11 +11,7 @@
     "declaration": true,
     "sourceMap": true,
     "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "baseUrl": "..",
-    "paths": {
-      "@shared/*": ["shared/*"]
-    }
+    "noEmit": true
   },
   "include": ["*.ts", "../shared/*.ts"],
   "exclude": ["node_modules", "dist", "../shared/*.test.ts"]
