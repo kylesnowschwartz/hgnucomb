@@ -1,0 +1,92 @@
+/**
+ * MetaPanel styles - collapsible right-side panel (Catppuccin Mocha)
+ *
+ * Floats over HexGrid, slides in/out via transform.
+ * Semi-transparent background with backdrop blur.
+ * Z-index: panel at 140, tab at 150 (below StatusBar at 200).
+ */
+
+.meta-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  background: rgba(24, 24, 37, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-left: 1px solid var(--ctp-surface1);
+  z-index: 140;
+  transform: translateX(100%);
+  transition: transform 200ms ease;
+  display: flex;
+  flex-direction: column;
+  font-family: 'JetBrainsMono Nerd Font', 'SF Mono', Consolas, monospace;
+}
+
+.meta-panel--open {
+  transform: translateX(0);
+}
+
+.meta-panel__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.meta-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meta-panel__section-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ctp-overlay1);
+  padding: 0 4px;
+}
+
+/* Edge toggle tab - always visible */
+
+.meta-panel__tab {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 64px;
+  background: rgba(24, 24, 37, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--ctp-surface1);
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  cursor: pointer;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ctp-overlay1);
+  font-size: 16px;
+  padding: 0;
+  transition: right 200ms ease, background 150ms ease, color 150ms ease;
+}
+
+.meta-panel__tab--open {
+  right: 300px;
+}
+
+.meta-panel__tab:hover {
+  background: rgba(30, 30, 46, 0.95);
+  color: var(--ctp-lavender);
+}
+
+.meta-panel__tab-icon {
+  line-height: 1;
+}

@@ -92,6 +92,15 @@ describe('isClientMessage', () => {
     expect(isClientMessage(msg)).toBe(false);
   });
 
+  it('accepts valid project.validate message', () => {
+    const msg = {
+      type: 'project.validate',
+      requestId: 'req-pv',
+      payload: { path: '/home/user/my-project' },
+    };
+    expect(isClientMessage(msg)).toBe(true);
+  });
+
   it('rejects mcp.* messages (wrong guard)', () => {
     const msg = {
       type: 'mcp.spawn',
@@ -266,6 +275,15 @@ describe('isMcpMessage', () => {
       type: 'sessions.list',
       requestId: 'req-1',
       payload: {},
+    };
+    expect(isMcpMessage(msg)).toBe(false);
+  });
+
+  it('rejects project.* messages (wrong guard)', () => {
+    const msg = {
+      type: 'project.validate',
+      requestId: 'req-pv',
+      payload: { path: '/some/path' },
     };
     expect(isMcpMessage(msg)).toBe(false);
   });

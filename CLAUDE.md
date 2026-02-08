@@ -77,6 +77,9 @@ src/
     events/           # eventLogStore, EventLog
     controls/         # uiStore, ControlPanel
     grid/             # HexGrid, useDraggable
+    meta/             # MetaPanel (collapsible right-side panel, widget container)
+    project/          # projectStore, ProjectWidget (project directory selection)
+    keyboard/         # keyboardStore, useKeyboardNavigation, keymaps
   handlers/           # Request handlers extracted from App.tsx
     mcpHandler.ts     # MCP request handling (spawn, broadcast, status)
   protocol/           # Event types and script playback
@@ -200,6 +203,13 @@ Status is for UI observability - it shows humans what each agent is doing. It's 
 Reporting `done` prematurely (e.g., right after spawning workers) is semantically incorrect - your mission isn't complete yet.
 
 ## Key Patterns
+
+**toolDir vs projectDir:**
+- `TOOL_DIR` (server/index.ts) = where hgnucomb itself lives, computed once at startup via `getGitRoot(process.cwd())`
+- `projectDir` = where agents create worktrees and work, user-selectable via ProjectBar, defaults to TOOL_DIR
+- Plugin paths and hgnucomb's own config always use `TOOL_DIR` (they live in this repo)
+- Git operations (worktrees, diffs, merges) use `getProjectDirForAgent(agentId)` which looks up the stored `projectDir` from session metadata
+- The server sends `server.info` on WebSocket connect so the client knows the default
 
 **Terminal data flow:**
 - App.tsx subscribes to `bridge.onData()` → stores in buffer (persists when panel closed)
@@ -386,6 +396,8 @@ bl close <id>         # Complete task
 - Git worktree isolation per orchestrator
 - Event log panel for system events
 - Status badges on hex cells
+- Project context decoupling (toolDir/projectDir split, ProjectBar UI)
+- Keyboard navigation (vim-style hjkl, keymaps, input mode guards)
 
 **Remaining:**
 - Sparse checkout support for worktrees
@@ -415,6 +427,22 @@ bl close <id>         # Complete task
 - `research-protocol-comparison-*.md` - IPC/protocol options
 - `research-terminal-mcp-*.md` - xterm.js integration patterns
 - `research-index.md` - Index of all research
+
+## Development Footguns
+
+Things that have bitten us. Read these before touching the relevant code.
+
+**Keyboard handler steals input keystrokes:**
+`useKeyboardNavigation` (src/features/keyboard/) captures all keydown events for vim-style grid navigation. If you add any `<input>` or `<textarea>` to the UI, the handler already guards against `INPUT`/`TEXTAREA` focus. But if you add a non-standard editable element (contenteditable, custom widget), you must extend the guard in `useKeyboardNavigation.ts` or keystrokes like `h`, `j`, `k`, `l` will be swallowed as navigation instead of typed characters.
+
+**TerminalBridge is an interface, not just WebSocketBridge:**
+`WebSocketBridge` implements the `TerminalBridge` interface (`src/features/terminal/TerminalBridge.ts`). If you add a new method to WebSocketBridge (like `validateProject`), you must also add it to the interface or anything that types against `TerminalBridge` will fail to compile.
+
+**Silent validation failures:**
+Any user-facing action that can fail (path validation, WebSocket requests, etc.) must show feedback. The ProjectBar had a bug where invalid paths were validated but the user saw nothing. Always wire error states into the UI - red borders, error text, something visible.
+
+**process.cwd() in server/index.ts:**
+Never use `process.cwd()` directly for agent-scoped operations. Use `TOOL_DIR` for hgnucomb's own paths (plugin dirs, config) and `getProjectDirForAgent(agentId)` for agent work (worktrees, git ops). The whole point of the toolDir/projectDir split is that agents work in a different repo than hgnucomb itself.
 
 ## Development Process
 

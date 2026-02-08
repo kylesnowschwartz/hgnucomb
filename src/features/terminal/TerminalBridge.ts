@@ -127,6 +127,17 @@ export interface TerminalBridge {
    */
   onNotification(handler: (notification: unknown) => void): () => void;
 
+  /**
+   * Validate a project path on the server.
+   * Returns whether the path exists and is a git repo.
+   */
+  validateProject(path: string): Promise<{
+    path: string;
+    resolvedPath: string;
+    exists: boolean;
+    isGitRepo: boolean;
+  }>;
+
   // ============================================================================
   // Session Persistence (tmux-like attach/detach)
   // ============================================================================

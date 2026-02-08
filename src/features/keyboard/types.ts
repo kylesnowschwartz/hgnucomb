@@ -38,6 +38,7 @@ export type KeyAction =
   | { type: 'confirm_kill' }      // Confirm pending kill (Enter when kill pending)
 
   // UI
+  | { type: 'toggle_meta_panel' }
   | { type: 'show_help' };
 
 /**

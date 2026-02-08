@@ -36,6 +36,7 @@ export const arrowsKeymap: Keymap = {
       'Meta+Escape': { type: 'close_panel' },
 
       g: { type: 'select_center' },
+      m: { type: 'toggle_meta_panel' },
       '?': { type: 'show_help' },
     },
 
@@ -67,6 +68,7 @@ export const arrowsKeymap: Keymap = {
       Escape: { type: 'clear_selection' },
       'Meta+Escape': { type: 'close_panel' },
       g: { type: 'select_center' },
+      m: { type: 'toggle_meta_panel' },
       '?': { type: 'show_help' },
     },
 

@@ -40,6 +40,7 @@ import type {
   AgentMessage,
   StoredAgentMetadata,
   DetailedStatus,
+  ProjectValidateRequest,
 } from "../shared/protocol.ts";
 import { isClientMessage, isMcpMessage } from "../shared/protocol.ts";
 import { hexDistance } from "../shared/types.ts";
@@ -72,6 +73,12 @@ runPreflight();
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const manager = new TerminalSessionManager();
+
+/**
+ * TOOL_DIR: where hgnucomb itself lives. Computed once at startup.
+ * Used for plugin paths, fallback working directory, and server.info.
+ */
+const TOOL_DIR = getGitRoot(process.cwd()) ?? process.cwd();
 
 // ============================================================================
 // Static File Serving (production mode)
@@ -149,6 +156,19 @@ const sessionMetadata = new Map<string, StoredAgentMetadata>();
 // Track sessionId -> currently attached browser client
 // Updated on session create and on reconnect (sessions.list)
 const sessionClient = new Map<string, WebSocket>();
+
+/**
+ * Look up the stored projectDir for an agent from sessionMetadata.
+ * Falls back to TOOL_DIR if the agent isn't found or has no projectDir.
+ */
+function getProjectDirForAgent(agentId: string): string {
+  for (const [, metadata] of sessionMetadata) {
+    if (metadata.agentId === agentId && metadata.projectDir) {
+      return metadata.projectDir;
+    }
+  }
+  return TOOL_DIR;
+}
 
 // ============================================================================
 // Server-Side Agent Inboxes
@@ -377,10 +397,10 @@ function send(ws: WebSocket, msg: ServerMessage): void {
 function handleMessage(ws: WebSocket, msg: ClientMessage): void {
   switch (msg.type) {
     case "terminal.create": {
-      const { cols, rows, shell, cwd, env, agentSnapshot, allAgents, initialPrompt, instructions, task, taskDetails, parentId, parentHex, model } = msg.payload;
+      const { cols, rows, shell, cwd, env, agentSnapshot, allAgents, initialPrompt, instructions, task, taskDetails, parentId, parentHex, model, projectDir } = msg.payload;
 
-      // Determine working directory
-      let workingDir = cwd ?? process.cwd();
+      // Determine working directory: explicit projectDir > cwd > TOOL_DIR
+      let workingDir = projectDir ?? cwd ?? TOOL_DIR;
       let finalEnv = env;
 
       // For orchestrators and workers: create worktree and set up context
@@ -464,10 +484,9 @@ Work autonomously. Do not ask questions.`;
           : undefined;
 
       // Compute plugin path for agent hooks (e.g., worker Stop hook enforcement)
-      // Plugins are at server/plugins/<cellType>/ in the main repo (not worktree)
-      const mainRepoRoot = getGitRoot(cwd ?? process.cwd());
-      const pluginDir = isClaudeAgent && mainRepoRoot
-        ? join(mainRepoRoot, "server", "plugins", agentSnapshot.cellType)
+      // Plugins are at server/plugins/<cellType>/ in the TOOL repo (not the project worktree)
+      const pluginDir = isClaudeAgent
+        ? join(TOOL_DIR, "server", "plugins", agentSnapshot.cellType)
         : undefined;
 
       const args: string[] | undefined = isClaudeAgent
@@ -494,6 +513,7 @@ Work autonomously. Do not ask questions.`;
           initialPrompt,
           instructions,
           detailedStatus: 'pending',
+          projectDir: projectDir ?? TOOL_DIR,
         });
 
         // Initialize activity tracking only for Claude agents (not plain terminals)
@@ -576,7 +596,7 @@ Work autonomously. Do not ask questions.`;
 
             // Clean up agent-specific state
             cleanupContextFile(metadata.agentId);
-            removeWorktree(process.cwd(), metadata.agentId);
+            removeWorktree(getProjectDirForAgent(metadata.agentId), metadata.agentId);
             cleanupActivityTracking(sessionId);
 
             // Notify ALL clients that the cell has been converted to terminal.
@@ -626,7 +646,7 @@ Work autonomously. Do not ask questions.`;
         // Clean up context file, worktree, and inbox if this was an agent
         if (metadata) {
           cleanupContextFile(metadata.agentId);
-          removeWorktree(process.cwd(), metadata.agentId);
+          removeWorktree(metadata.projectDir ?? TOOL_DIR, metadata.agentId);
           agentInboxes.delete(metadata.agentId);
           broadcastAgentRemoval(metadata.agentId, 'cleanup', sessionId);
           sessionMetadata.delete(sessionId);
@@ -706,7 +726,7 @@ Work autonomously. Do not ask questions.`;
         const metadata = sessionMetadata.get(sessionId);
         if (metadata) {
           cleanupContextFile(metadata.agentId);
-          removeWorktree(process.cwd(), metadata.agentId);
+          removeWorktree(metadata.projectDir ?? TOOL_DIR, metadata.agentId);
           agentInboxes.delete(metadata.agentId);
           sessionMetadata.delete(sessionId);
         }
@@ -772,7 +792,7 @@ Work autonomously. Do not ask questions.`;
       // Clean up context files, worktrees, and inboxes for all agents
       for (const [, metadata] of sessionMetadata.entries()) {
         cleanupContextFile(metadata.agentId);
-        removeWorktree(process.cwd(), metadata.agentId);
+        removeWorktree(metadata.projectDir ?? TOOL_DIR, metadata.agentId);
       }
       sessionMetadata.clear();
       agentInboxes.clear();
@@ -840,6 +860,24 @@ Work autonomously. Do not ask questions.`;
       break;
     }
 
+    case "project.validate": {
+      const req = msg as ProjectValidateRequest;
+      const rawPath = req.payload.path;
+      const resolvedPath = resolve(rawPath.startsWith('~')
+        ? rawPath.replace('~', process.env.HOME ?? '')
+        : rawPath);
+      const exists = existsSync(resolvedPath);
+      const isGitRepo = exists ? getGitRoot(resolvedPath) !== null : false;
+
+      send(ws, {
+        type: "project.validate.result",
+        requestId: req.requestId,
+        payload: { path: rawPath, resolvedPath, exists, isGitRepo },
+      });
+      console.log(`[Project] Validated: ${rawPath} -> ${resolvedPath} (exists=${exists}, git=${isGitRepo})`);
+      break;
+    }
+
     default: {
       const exhaustive: never = msg;
       send(ws, {
@@ -870,6 +908,12 @@ wss.on("connection", (ws) => {
 
   // Assume browser client until mcp.register received
   browserClients.add(ws);
+
+  // Send server info so browser knows the default project directory
+  ws.send(JSON.stringify({
+    type: 'server.info',
+    payload: { toolDir: TOOL_DIR, defaultProjectDir: TOOL_DIR },
+  }));
 
   ws.on("message", (raw) => {
     try {
@@ -959,7 +1003,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       // Server-side handling: get diff between main and worker branch
       const req = msg as McpGetWorkerDiffRequest;
       const workerId = req.payload.workerId;
-      const gitRoot = getGitRoot(process.cwd());
+      const gitRoot = getGitRoot(getProjectDirForAgent(workerId));
 
       if (!gitRoot) {
         ws.send(JSON.stringify({
@@ -1004,7 +1048,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       // Server-side handling: list files changed by worker
       const req = msg as McpListWorkerFilesRequest;
       const workerId = req.payload.workerId;
-      const gitRoot = getGitRoot(process.cwd());
+      const gitRoot = getGitRoot(getProjectDirForAgent(workerId));
 
       if (!gitRoot) {
         ws.send(JSON.stringify({
@@ -1038,7 +1082,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       // Server-side handling: list commits made by worker
       const req = msg as McpListWorkerCommitsRequest;
       const workerId = req.payload.workerId;
-      const gitRoot = getGitRoot(process.cwd());
+      const gitRoot = getGitRoot(getProjectDirForAgent(workerId));
 
       if (!gitRoot) {
         ws.send(JSON.stringify({
@@ -1072,7 +1116,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       // Server-side handling: check if merge would have conflicts
       const req = msg as McpCheckMergeConflictsRequest;
       const { callerId: orchestratorId, workerId } = req.payload;
-      const gitRoot = getGitRoot(process.cwd());
+      const gitRoot = getGitRoot(getProjectDirForAgent(orchestratorId));
 
       if (!gitRoot) {
         ws.send(JSON.stringify({
@@ -1106,7 +1150,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       // Server-side handling: merge worker into orchestrator's staging worktree
       const req = msg as McpMergeWorkerToStagingRequest;
       const { callerId: orchestratorId, workerId } = req.payload;
-      const gitRoot = getGitRoot(process.cwd());
+      const gitRoot = getGitRoot(getProjectDirForAgent(orchestratorId));
 
       if (!gitRoot) {
         ws.send(JSON.stringify({
@@ -1142,7 +1186,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       // Server-side handling: merge orchestrator's staging branch into main
       const req = msg as McpMergeStagingToMainRequest;
       const { callerId: orchestratorId } = req.payload;
-      const gitRoot = getGitRoot(process.cwd());
+      const gitRoot = getGitRoot(getProjectDirForAgent(orchestratorId));
 
       if (!gitRoot) {
         ws.send(JSON.stringify({
@@ -1441,7 +1485,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       }
 
       // Clean up the worktree and inbox
-      const result = removeWorktree(process.cwd(), workerId);
+      const result = removeWorktree(getProjectDirForAgent(workerId), workerId);
       agentInboxes.delete(workerId);
 
       // Dispose PTY session and remove from all tracking maps
@@ -1536,7 +1580,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
           sessionClient.delete(sessionId);
           // Clean up context file, worktree, and inbox
           cleanupContextFile(workerId);
-          removeWorktree(process.cwd(), workerId);
+          removeWorktree(getProjectDirForAgent(workerId), workerId);
           agentInboxes.delete(workerId);
           sessionMetadata.delete(sessionId);
 

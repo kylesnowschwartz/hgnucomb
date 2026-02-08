@@ -14,6 +14,8 @@ import { agentToSnapshot } from '@features/agents/snapshot';
 import { useEventLogStore } from '@features/events/eventLogStore';
 import { useKeyboardNavigation, HelpModal } from '@features/keyboard';
 import { useViewportStore } from '@features/grid/viewportStore';
+import { useProjectStore } from '@features/project/projectStore';
+import { MetaPanel } from '@features/meta/MetaPanel';
 import { useShallow } from 'zustand/shallow';
 import { createMcpHandler, type McpHandlerDeps } from './handlers/mcpHandler';
 import type { CellType, HexCoordinate, DetailedStatus } from '@shared/types';
@@ -255,9 +257,22 @@ function App() {
   }, [addSession, appendData, markExited]);
 
   // Initialize bridge on mount
+  // Subscribe to server.info BEFORE connect() to avoid the race where the
+  // server sends it immediately on WebSocket open but the notification
+  // effect hasn't subscribed yet (React batches effects).
   useEffect(() => {
     const ws = new WebSocketBridge();
     setBridge(ws);
+
+    // Must be registered before connect() - server sends server.info on open
+    const unsubNotifications = ws.onNotification((notification: unknown) => {
+      if (typeof notification !== 'object' || notification === null) return;
+      const msg = notification as { type: string; payload?: Record<string, unknown> };
+      if (msg.type === 'server.info' && msg.payload) {
+        const { defaultProjectDir } = msg.payload as { toolDir: string; defaultProjectDir: string };
+        useProjectStore.getState().setServerDefault(defaultProjectDir);
+      }
+    });
 
     const unsubConnection = ws.onConnectionChange((state) => {
       setConnectionState(state);
@@ -274,6 +289,7 @@ function App() {
     });
 
     return () => {
+      unsubNotifications();
       unsubConnection();
       ws.disconnect();
       setBridge(null);
@@ -308,6 +324,8 @@ function App() {
       if (typeof notification !== 'object' || notification === null) return;
       const msg = notification as { type: string; payload?: Record<string, unknown> };
       if (!msg.payload) return;
+
+      // server.info is handled in the bridge init effect (before connect)
 
       // Handle cell type conversion (orchestrator/worker -> terminal)
       if (msg.type === 'cell.converted') {
@@ -442,6 +460,9 @@ function App() {
         panelDimensions.height
       );
 
+      // Use the effective project directory from the project store
+      const projectDir = useProjectStore.getState().effectiveProject() ?? undefined;
+
       try {
         const session = await bridge.createSession({
           cols,
@@ -457,6 +478,7 @@ function App() {
           parentId: agent.parentId,
           parentHex: agent.parentHex,
           model: agent.model,
+          projectDir,
         });
 
         addSession(session, agent.id);
@@ -636,6 +658,7 @@ function App() {
   return (
     <>
       <HexGrid width={dimensions.width} height={dimensions.height} />
+      <MetaPanel />
       <ActionBar />
       {import.meta.env.DEV && <ControlPanel />}
       {import.meta.env.DEV && <EventLog />}

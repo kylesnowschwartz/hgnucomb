@@ -61,6 +61,8 @@ export interface TerminalSessionConfig {
   parentId?: string;
   parentHex?: HexCoordinate;
   model?: AgentModel;
+  /** Target project directory (where agents create worktrees and work) */
+  projectDir?: string;
 }
 
 /**
@@ -105,6 +107,8 @@ export interface CreateRequest {
     parentId?: string;
     parentHex?: HexCoordinate;
     model?: AgentModel;
+    /** Target project directory (where agents create worktrees and work) */
+    projectDir?: string;
   };
 }
 
@@ -158,6 +162,41 @@ export interface UploadImageRequest {
   };
 }
 
+// ============================================================================
+// Project Validation (Client -> Server -> Client)
+// ============================================================================
+
+export interface ProjectValidateRequest {
+  type: 'project.validate';
+  requestId: string;
+  payload: {
+    path: string;
+  };
+}
+
+export interface ProjectValidateResponse {
+  type: 'project.validate.result';
+  requestId: string;
+  payload: {
+    path: string;
+    resolvedPath: string;
+    exists: boolean;
+    isGitRepo: boolean;
+  };
+}
+
+/**
+ * Server -> Client on initial connection.
+ * Tells the browser where hgnucomb lives (toolDir) and the default project.
+ */
+export interface ServerInfoMessage {
+  type: 'server.info';
+  payload: {
+    toolDir: string;
+    defaultProjectDir: string;
+  };
+}
+
 export type ClientMessage =
   | CreateRequest
   | WriteRequest
@@ -165,7 +204,8 @@ export type ClientMessage =
   | DisposeRequest
   | SessionsListRequest
   | SessionsClearRequest
-  | UploadImageRequest;
+  | UploadImageRequest
+  | ProjectValidateRequest;
 
 // ============================================================================
 // Response Types (Server -> Client)
@@ -259,7 +299,9 @@ export type ServerMessage =
   | SessionsListResponse
   | SessionsClearResponse
   | UploadImageResponse
-  | CellConvertedMessage;
+  | CellConvertedMessage
+  | ProjectValidateResponse
+  | ServerInfoMessage;
 
 // ============================================================================
 // Type Guards
@@ -270,7 +312,7 @@ export function isClientMessage(msg: unknown): msg is ClientMessage {
   const m = msg as Record<string, unknown>;
   return (
     typeof m.type === 'string' &&
-    (m.type.startsWith('terminal.') || m.type.startsWith('sessions.')) &&
+    (m.type.startsWith('terminal.') || m.type.startsWith('sessions.') || m.type.startsWith('project.')) &&
     typeof m.payload === 'object'
   );
 }

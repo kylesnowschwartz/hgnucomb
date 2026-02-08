@@ -231,6 +231,7 @@ export class WebSocketBridge implements TerminalBridge {
         parentId: config?.parentId,
         parentHex: config?.parentHex,
         model: config?.model,
+        projectDir: config?.projectDir,
       },
     };
 
@@ -371,6 +372,26 @@ export class WebSocketBridge implements TerminalBridge {
     }
 
     return result.path;
+  }
+
+  /**
+   * Validate a project path on the server.
+   * Returns whether the path exists and is a git repo.
+   */
+  async validateProject(path: string): Promise<{
+    path: string;
+    resolvedPath: string;
+    exists: boolean;
+    isGitRepo: boolean;
+  }> {
+    const requestId = this.nextRequestId();
+    const message = {
+      type: 'project.validate' as const,
+      requestId,
+      payload: { path },
+    };
+
+    return this.sendRequest(requestId, message as ClientMessage);
   }
 
   onData(sessionId: string, handler: DataHandler): () => void {
@@ -571,7 +592,8 @@ export class WebSocketBridge implements TerminalBridge {
 
       case 'sessions.list.result':
       case 'sessions.clear.result':
-      case 'terminal.uploadImage.result': {
+      case 'terminal.uploadImage.result':
+      case 'project.validate.result': {
         const pending = this.pendingRequests.get(msg.requestId);
         if (pending) {
           clearTimeout(pending.timeout);
@@ -588,7 +610,8 @@ export class WebSocketBridge implements TerminalBridge {
           msgAny.type === 'agent.removed' ||
           msgAny.type === 'mcp.statusUpdate' ||
           msgAny.type === 'inbox.sync' ||
-          msgAny.type === 'mcp.broadcast.event'
+          msgAny.type === 'mcp.broadcast.event' ||
+          msgAny.type === 'server.info'
         ) {
           this.notificationListeners.forEach((handler) => handler(msg));
         }

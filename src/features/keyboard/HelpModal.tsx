@@ -39,6 +39,8 @@ function formatAction(action: KeyAction): string {
       return 'Kill agent (x again to confirm)';
     case 'confirm_kill':
       return 'Confirm kill';
+    case 'toggle_meta_panel':
+      return 'Toggle meta panel';
     case 'show_help':
       return 'Show this help';
   }

@@ -31,6 +31,10 @@ interface UIStore {
   killConfirmationActive: boolean;
   setKillConfirmationActive: (active: boolean) => void;
 
+  // MetaPanel (right-side collapsible panel)
+  metaPanelOpen: boolean;
+  toggleMetaPanel: () => void;
+
   // Derived input mode from state
   getMode: () => InputMode;
 }
@@ -40,6 +44,7 @@ export const useUIStore = create<UIStore>()((set) => ({
   hoveredHex: null,
   selectedHex: null,
   killConfirmationActive: false,
+  metaPanelOpen: true,
 
   selectAgent: (agentId) => {
     set({ selectedAgentId: agentId });
@@ -64,6 +69,10 @@ export const useUIStore = create<UIStore>()((set) => ({
 
   setKillConfirmationActive: (active) => {
     set({ killConfirmationActive: active });
+  },
+
+  toggleMetaPanel: () => {
+    set((s) => ({ metaPanelOpen: !s.metaPanelOpen }));
   },
 
   getMode: () => {

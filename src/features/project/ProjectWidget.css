@@ -1,0 +1,183 @@
+/**
+ * ProjectWidget styles - inline widget for MetaPanel (Catppuccin Mocha)
+ *
+ * No fixed positioning - lives inside MetaPanel's content flow.
+ * Solid backgrounds on interactive elements for readability.
+ */
+
+.project-widget {
+  background: var(--ctp-base);
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: 'JetBrainsMono Nerd Font', 'SF Mono', Consolas, monospace;
+  font-size: 11px;
+  user-select: none;
+}
+
+.project-widget__trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--ctp-subtext1);
+  text-align: left;
+}
+
+.project-widget__trigger:hover {
+  background: var(--ctp-surface0);
+}
+
+.project-widget__path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-widget__path--empty {
+  color: var(--ctp-overlay0);
+  font-style: italic;
+}
+
+.project-widget__indicator {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.project-widget__indicator--git {
+  background: var(--ctp-green);
+}
+
+.project-widget__indicator--exists {
+  background: var(--ctp-yellow);
+}
+
+.project-widget__indicator--unknown {
+  background: var(--ctp-overlay0);
+}
+
+.project-widget__chevron {
+  color: var(--ctp-overlay0);
+  font-size: 8px;
+  transition: transform 150ms ease;
+}
+
+.project-widget__chevron--open {
+  transform: rotate(180deg);
+}
+
+/* Expandable section (inline, not a fixed dropdown) */
+
+.project-widget__dropdown {
+  border-top: 1px solid var(--ctp-surface0);
+  max-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+.project-widget__input-wrap {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--ctp-surface0);
+}
+
+.project-widget__input {
+  width: 100%;
+  padding: 4px 8px;
+  background: var(--ctp-base);
+  border: 1px solid var(--ctp-surface1);
+  border-radius: 4px;
+  color: var(--ctp-text);
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.project-widget__input:focus {
+  border-color: var(--ctp-lavender);
+  box-shadow: 0 0 0 2px rgba(180, 190, 254, 0.15);
+}
+
+.project-widget__input--error {
+  border-color: var(--ctp-red);
+}
+
+.project-widget__input::placeholder {
+  color: var(--ctp-overlay0);
+}
+
+.project-widget__error {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--ctp-red);
+}
+
+.project-widget__recents {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.project-widget__recent-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+  color: var(--ctp-subtext0);
+  font-size: 11px;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+}
+
+.project-widget__recent-item:hover {
+  background: var(--ctp-surface0);
+  color: var(--ctp-text);
+}
+
+.project-widget__recent-item--active {
+  color: var(--ctp-lavender);
+}
+
+.project-widget__recent-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.project-widget__recent-remove {
+  opacity: 0;
+  color: var(--ctp-overlay0);
+  cursor: pointer;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 10px;
+}
+
+.project-widget__recent-item:hover .project-widget__recent-remove {
+  opacity: 1;
+}
+
+.project-widget__recent-remove:hover {
+  color: var(--ctp-red);
+}
+
+.project-widget__empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--ctp-overlay0);
+  font-size: 11px;
+}

@@ -55,6 +55,7 @@ export const vimKeymap: Keymap = {
 
       // Utilities
       g: { type: 'select_center' },
+      m: { type: 'toggle_meta_panel' },
       '?': { type: 'show_help' },
     },
 
@@ -103,6 +104,7 @@ export const vimKeymap: Keymap = {
 
       // Utilities
       g: { type: 'select_center' },
+      m: { type: 'toggle_meta_panel' },
       '?': { type: 'show_help' },
     },
 

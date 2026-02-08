@@ -155,6 +155,10 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
         break;
       }
 
+      case 'toggle_meta_panel':
+        useUIStore.getState().toggleMetaPanel();
+        break;
+
       case 'show_help':
         optionsRef.current.onShowHelp?.();
         break;
@@ -167,6 +171,10 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
       const terminalPanel = document.querySelector('.terminal-panel');
       const focusIsInTerminal = terminalPanel?.contains(document.activeElement);
 
+      // Check if focus is in a text input (e.g., ProjectBar path input)
+      const activeTag = document.activeElement?.tagName;
+      const focusIsInInput = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
+
       // Cmd+Esc is the global "escape hatch" - ALWAYS handled by app
       // This lets user unfocus/close terminal even when it has focus
       const isCmdEsc = e.metaKey && e.key === 'Escape';
@@ -174,6 +182,12 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
       // TERMINAL FOCUSED: Let terminal handle ALL keys (acts like real terminal)
       // EXCEPT Cmd+Esc which is the global escape hatch
       if (focusIsInTerminal && !isCmdEsc) {
+        return;
+      }
+
+      // INPUT FOCUSED: Let the input handle all keys so users can actually type.
+      // Escape still bubbles up to close dropdowns via their own handlers.
+      if (focusIsInInput) {
         return;
       }
 

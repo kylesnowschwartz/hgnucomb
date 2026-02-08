@@ -69,6 +69,8 @@ export interface StoredAgentMetadata extends AgentSnapshot {
   instructions?: string;
   detailedStatus?: DetailedStatus;
   statusMessage?: string;
+  /** Directory of the target project (where agents work). Falls back to server's TOOL_DIR. */
+  projectDir?: string;
 }
 
 // ============================================================================
