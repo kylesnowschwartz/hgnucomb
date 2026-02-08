@@ -159,6 +159,28 @@ export function createWorktree(targetDir: string, agentId: string, cellType: Cel
     }
   }
 
+  // Symlink node_modules so agents can run typecheck/lint/test/build without
+  // a separate install step. These are READ-ONLY - agents must not run
+  // pnpm install/add/remove in worktrees (it would mutate the parent's deps).
+  const depDirs = ["node_modules", join("server", "node_modules")];
+  for (const dir of depDirs) {
+    const sourceDir = join(gitRoot, dir);
+    if (existsSync(sourceDir)) {
+      const targetDir = join(worktreePath, dir);
+      // server/ subdir may not exist yet in the worktree
+      const parentDir = join(worktreePath, dir, "..");
+      if (!existsSync(parentDir)) {
+        mkdirSync(parentDir, { recursive: true });
+      }
+      try {
+        symlinkSync(sourceDir, targetDir);
+        console.log(`[Worktree] Symlinked ${dir}/`);
+      } catch (err) {
+        console.warn(`[Worktree] Failed to symlink ${dir}/: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
   console.log(`[Worktree] Created: ${worktreePath} on branch ${branchName}`);
   return { success: true, worktreePath, branchName };
 }
