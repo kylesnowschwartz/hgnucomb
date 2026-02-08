@@ -43,16 +43,16 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
   });
 
   const executeAction = useCallback((action: KeyAction) => {
-    const { selectedHex, selectHex, selectedAgentId, selectAgent, clearSelection, pendingKill, setPendingKill } =
+    const { selectedHex, selectHex, selectedAgentId, selectAgent, clearSelection, killConfirmationActive, setKillConfirmationActive } =
       useUIStore.getState();
     const { getAllAgents } = useAgentStore.getState();
 
     switch (action.type) {
       case 'navigate':
       case 'navigate_vertical': {
-        // Cancel any pending kill when navigating
-        if (pendingKill) {
-          setPendingKill(null);
+        // Cancel kill confirmation when navigating away
+        if (killConfirmationActive) {
+          setKillConfirmationActive(false);
         }
 
         // Get current position (selected hex or origin)
@@ -91,7 +91,7 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
         break;
 
       case 'clear_selection':
-        setPendingKill(null); // Also cancel any pending kill
+        setKillConfirmationActive(false);
         // If panel is open, close it first; otherwise clear hex selection
         if (selectedAgentId) {
           selectAgent(null);
@@ -138,21 +138,20 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
         );
         if (!agentAtHex) break; // No agent to kill
 
-        // If no pending kill, initiate confirmation. Otherwise, confirm.
-        if (!pendingKill) {
-          setPendingKill(selectedHex);
+        // Toggle: first press initiates confirmation, second press confirms
+        if (!killConfirmationActive) {
+          setKillConfirmationActive(true);
         } else {
-          // Confirm - execute kill
-          setPendingKill(null);
-          optionsRef.current.onKill?.(pendingKill);
+          setKillConfirmationActive(false);
+          optionsRef.current.onKill?.(selectedHex);
         }
         break;
       }
 
       case 'confirm_kill': {
-        if (!pendingKill) break;
-        setPendingKill(null);
-        optionsRef.current.onKill?.(pendingKill);
+        if (!killConfirmationActive || !selectedHex) break;
+        setKillConfirmationActive(false);
+        optionsRef.current.onKill?.(selectedHex);
         break;
       }
 
@@ -200,10 +199,10 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
       const bindings = keymap.bindings[mode];
       let action = bindings[combo];
 
-      // Handle kill confirmation: if pendingKill is set, Enter confirms
+      // Handle kill confirmation: if active, Enter confirms
       // (x already maps to 'kill' which handles both initiate and confirm)
-      const pendingKill = useUIStore.getState().pendingKill;
-      if (pendingKill && combo === 'Enter') {
+      const { killConfirmationActive: isKillPending } = useUIStore.getState();
+      if (isKillPending && combo === 'Enter') {
         action = { type: 'confirm_kill' };
       }
 

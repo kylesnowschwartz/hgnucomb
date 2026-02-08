@@ -28,13 +28,16 @@ const MODE_HINTS: Record<InputMode, string> = {
 
 export function StatusBar() {
   const mode = useUIStore((s) => s.getMode());
+  const hoveredHex = useUIStore((s) => s.hoveredHex);
   const selectedHex = useUIStore((s) => s.selectedHex);
   const keymap = useKeyboardStore((s) => s.getActiveKeymap());
 
+  // Show hovered hex coords (mouse tracking), fall back to selected hex (keyboard nav)
+  const displayHex = hoveredHex || selectedHex;
   const hexLabel = useMemo(() => {
-    if (!selectedHex) return null;
-    return `(${selectedHex.q}, ${selectedHex.r})`;
-  }, [selectedHex]);
+    if (!displayHex) return null;
+    return `(${displayHex.q}, ${displayHex.r})`;
+  }, [displayHex]);
 
   return (
     <div className="status-bar">

@@ -360,9 +360,11 @@ export function HexGrid({
   // Event logging
   const addSpawn = useEventLogStore((s) => s.addSpawn);
 
-  // UI state - selected agent for terminal, selected hex for focus (mouse or keyboard)
+  // UI state - selected agent for terminal, hovered/selected hex
   const selectedAgentId = useUIStore((s) => s.selectedAgentId);
   const selectAgent = useUIStore((s) => s.selectAgent);
+  const hoveredHex = useUIStore((s) => s.hoveredHex);
+  const setHoveredHex = useUIStore((s) => s.setHoveredHex);
   const selectedHex = useUIStore((s) => s.selectedHex);
   const selectHex = useUIStore((s) => s.selectHex);
 
@@ -409,12 +411,14 @@ export function HexGrid({
       const aAgent = agentByHex.get(`${a.q},${a.r}`);
       const bAgent = agentByHex.get(`${b.q},${b.r}`);
       const aActive = (aAgent && (aAgent.id === selectedAgentId || familyMembers.has(aAgent.id)))
-        || (selectedHex && selectedHex.q === a.q && selectedHex.r === a.r);
+        || (selectedHex && selectedHex.q === a.q && selectedHex.r === a.r)
+        || (hoveredHex && hoveredHex.q === a.q && hoveredHex.r === a.r);
       const bActive = (bAgent && (bAgent.id === selectedAgentId || familyMembers.has(bAgent.id)))
-        || (selectedHex && selectedHex.q === b.q && selectedHex.r === b.r);
+        || (selectedHex && selectedHex.q === b.q && selectedHex.r === b.r)
+        || (hoveredHex && hoveredHex.q === b.q && hoveredHex.r === b.r);
       return (aActive ? 1 : 0) - (bActive ? 1 : 0);
     });
-  }, [visibleHexes, agentByHex, selectedAgentId, selectedHex, familyMembers]);
+  }, [visibleHexes, agentByHex, selectedAgentId, selectedHex, hoveredHex, familyMembers]);
 
   /**
    * Handle wheel zoom - scales toward cursor position.
@@ -482,6 +486,7 @@ export function HexGrid({
           // Click on background (Stage itself) = clear selection
           if (e.target === e.target.getStage()) {
             selectHex(null);
+            setHoveredHex(null);
           }
         }}
         onContextMenu={(e) => e.evt.preventDefault()}
@@ -495,29 +500,35 @@ export function HexGrid({
           const isPanelOpen = agent && agent.id === selectedAgentId;
           const isSelected =
             selectedHex && selectedHex.q === hex.q && selectedHex.r === hex.r;
+          const isHovered =
+            hoveredHex && hoveredHex.q === hex.q && hoveredHex.r === hex.r;
           const isInFamily = agent && familyMembers.has(agent.id);
-          const isActive = isPanelOpen || isInFamily || isSelected;
+          const isActive = isPanelOpen || isInFamily || isSelected || isHovered;
 
-          // Fill: agent role color > selected highlight > default
+          // Fill: agent role color > selected highlight > hover highlight > default
           const fill = agent
             ? ROLE_COLORS[agent.role]
             : isSelected
               ? STYLE.hexFillHover
-              : STYLE.hexFill;
+              : isHovered
+                ? STYLE.hexFillHover
+                : STYLE.hexFill;
 
           // Stroke: darkened fill for active states, default gray otherwise
           const stroke = isActive
             ? darkenColor(fill, 0.3)
             : STYLE.hexStroke;
 
-          // Stroke width: panel-open = thick, family = thick, selected = medium, default = thin
+          // Stroke width: panel-open/family = thick, selected = medium, hovered = thin+, default = thin
           const strokeWidth = isPanelOpen
             ? 4
             : isInFamily
               ? 4
               : isSelected
                 ? 2
-                : STYLE.gridStrokeWidth;
+                : isHovered
+                  ? 1.5
+                  : STYLE.gridStrokeWidth;
           const opacity = agent ? STATUS_OPACITY[agent.status] : 1;
 
           /** Determine cell type from modifier keys */
@@ -581,7 +592,7 @@ export function HexGrid({
                 e.evt.preventDefault();
                 e.evt.stopPropagation();
               }}
-              onMouseEnter={() => selectHex(hex)}
+              onMouseEnter={() => setHoveredHex(hex)}
               style={{ cursor: 'pointer' }}
             />
           );

@@ -3,9 +3,11 @@
  *
  * Shows available actions based on cell state:
  * - Empty cell: spawn hints (T/O/W)
- * - Occupied cell: action hints (Enter/X) - only when terminal closed
+ * - Occupied cell: action hints (Enter/X)
+ * - Kill confirmation: confirm/cancel hints
  *
  * Positioned below the selected hex with a fade-in delay.
+ * selectedHex is now sticky (not affected by mouse hover), so no workarounds needed.
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -22,16 +24,13 @@ interface ActionHint {
 
 export function ActionBar() {
   const selectedHex = useUIStore((s) => s.selectedHex);
-  const selectedAgentId = useUIStore((s) => s.selectedAgentId);
-  const pendingKill = useUIStore((s) => s.pendingKill);
+  const killConfirmationActive = useUIStore((s) => s.killConfirmationActive);
   const getAllAgents = useAgentStore((s) => s.getAllAgents);
 
   // Get viewport state from store
   const scale = useViewportStore((s) => s.scale);
   const position = useViewportStore((s) => s.position);
   const hexSize = useViewportStore((s) => s.hexSize);
-
-  const isTerminalOpen = !!selectedAgentId;
 
   // Check if selected hex is occupied
   const agentAtHex = useMemo(() => {
@@ -42,20 +41,14 @@ export function ActionBar() {
     );
   }, [selectedHex, getAllAgents]);
 
-  // Show kill confirmation if pending
-  const showKillConfirmation = !!pendingKill;
+  // Show action bar whenever a hex is selected (empty or occupied), or during kill confirmation.
+  const shouldShow = killConfirmationActive || !!selectedHex;
 
-  // Kill confirmation always shows (it's anchored to pendingKill hex, not mouse position).
-  // Otherwise: show for selected hex when terminal is closed, or for empty cells.
-  const shouldShow = showKillConfirmation || (selectedHex && (!isTerminalOpen || !agentAtHex));
-
-  // Fade-in delay
+  // Fade-in delay - selectedHex is stable now, no workarounds needed
   const [delayedHexKey, setDelayedHexKey] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Use pendingKill for stability during kill confirmation (mouse hover changes selectedHex)
-  const stableHex = pendingKill || selectedHex;
-  const hexKey = stableHex ? `${stableHex.q},${stableHex.r}` : null;
+  const hexKey = selectedHex ? `${selectedHex.q},${selectedHex.r}` : null;
 
   useEffect(() => {
     if (timerRef.current) {
@@ -83,20 +76,16 @@ export function ActionBar() {
 
   const isVisible = hexKey !== null && delayedHexKey === hexKey;
 
-  if (!shouldShow || !isVisible) return null;
-
-  // Determine which hex to use for positioning (pending kill or selected)
-  const displayHex = pendingKill || selectedHex;
-  if (!displayHex) return null;
+  if (!shouldShow || !isVisible || !selectedHex) return null;
 
   // Calculate screen position
-  const worldPos = hexToPixel(displayHex, hexSize);
+  const worldPos = hexToPixel(selectedHex, hexSize);
   const screenX = worldPos.x * scale + position.x;
   const screenY = worldPos.y * scale + position.y + hexSize * scale + 10;
 
   // Hints based on state
   let hints: ActionHint[];
-  if (showKillConfirmation) {
+  if (killConfirmationActive) {
     hints = [
       { key: 'x', label: 'confirm' },
       { key: 'Enter', label: 'confirm' },
