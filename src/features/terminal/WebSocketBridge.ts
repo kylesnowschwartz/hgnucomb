@@ -550,6 +550,12 @@ export class WebSocketBridge implements TerminalBridge {
         break;
       }
 
+      case 'cell.converted': {
+        // Notify all listeners about cell type conversion (orchestrator/worker -> terminal)
+        this.notificationListeners.forEach((handler) => handler(msg));
+        break;
+      }
+
       case 'terminal.error': {
         if (msg.requestId) {
           const pending = this.pendingRequests.get(msg.requestId);

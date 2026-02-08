@@ -57,6 +57,8 @@ interface AgentStore {
   spawnAgent: (hex: HexCoordinate, cellType?: CellType, options?: SpawnOptions) => string;
   // Remove agent (for user-initiated kill)
   removeAgent: (id: string) => void;
+  // Update agent's cell type (e.g., converting orchestrator to terminal on /exit)
+  updateAgentType: (agentId: string, newCellType: CellType) => boolean;
   // Update detailed status (from report_status MCP tool)
   updateDetailedStatus: (agentId: string, status: DetailedStatus, message?: string) => DetailedStatus | undefined;
   // Inbox operations for bilateral communication
@@ -106,6 +108,24 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       return { agents: next };
     });
     console.log('[AgentStore] Removed agent:', id);
+  },
+
+  updateAgentType: (agentId, newCellType) => {
+    const existing = get().agents.get(agentId);
+    if (!existing) {
+      console.warn('[AgentStore] Cannot update type: agent not found:', agentId);
+      return false;
+    }
+    const oldCellType = existing.cellType;
+    set((s) => ({
+      agents: new Map(s.agents).set(agentId, {
+        ...existing,
+        cellType: newCellType,
+        role: newCellType === 'orchestrator' ? 'orchestrator' : 'worker',
+      }),
+    }));
+    console.log('[AgentStore] Cell type updated:', agentId, oldCellType, '->', newCellType);
+    return true;
   },
 
   updateDetailedStatus: (agentId, status, message) => {

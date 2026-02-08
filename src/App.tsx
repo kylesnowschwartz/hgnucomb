@@ -130,7 +130,7 @@ function App() {
   } = useTerminalStore();
 
   const { selectedAgentId, selectAgent } = useUIStore();
-  const { getAgent, getAllAgents, spawnAgent, removeAgent, updateDetailedStatus, addMessageToInbox, getMessages } = useAgentStore();
+  const { getAgent, getAllAgents, spawnAgent, removeAgent, updateAgentType, updateDetailedStatus, addMessageToInbox, getMessages } = useAgentStore();
   const { addBroadcast, addStatusChange, addSpawn, addRemoval } = useEventLogStore();
   const panToHex = useViewportStore((s) => s.panToHex);
   const centerOnHex = useViewportStore((s) => s.centerOnHex);
@@ -311,6 +311,21 @@ function App() {
       const msg = notification as { type: string; payload?: Record<string, unknown> };
       if (!msg.payload) return;
 
+      // Handle cell type conversion (orchestrator/worker -> terminal)
+      if (msg.type === 'cell.converted') {
+        const { agentId, oldCellType, newCellType } = msg.payload as {
+          agentId: string;
+          oldCellType: string;
+          newCellType: string;
+          sessionId: string;
+        };
+        console.log(`[App] Cell converted: ${agentId} (${oldCellType} -> ${newCellType})`);
+
+        // Update agent's cell type to terminal
+        updateAgentType(agentId, newCellType as CellType);
+        return;
+      }
+
       // Handle agent removal
       if (msg.type === 'agent.removed') {
         const { agentId, reason, sessionId } = msg.payload as {
@@ -363,7 +378,7 @@ function App() {
     };
 
     return bridge.onNotification(handleNotification);
-  }, [bridge, removeAgent, removeSession, getSessionForAgent, addRemoval, selectAgent, updateDetailedStatus, getAgent]);
+  }, [bridge, removeAgent, removeSession, getSessionForAgent, addRemoval, selectAgent, updateAgentType, updateDetailedStatus, getAgent]);
 
   // Create terminal session for an agent (without activating it)
   const createSessionForAgent = useCallback(

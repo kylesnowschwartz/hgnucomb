@@ -36,10 +36,12 @@ export class TerminalSession {
 
   readonly cols: number;
   readonly rows: number;
+  private cwd: string;
 
   constructor(options: TerminalSessionOptions = {}) {
     this.cols = options.cols ?? 80;
     this.rows = options.rows ?? 24;
+    this.cwd = options.cwd ?? DEFAULT_CWD;
     const shell = options.shell ?? process.env.SHELL ?? "bash";
 
     // Verify Claude CLI exists before attempting to spawn
@@ -57,7 +59,7 @@ export class TerminalSession {
       name: "xterm-256color",
       cols: this.cols,
       rows: this.rows,
-      cwd: options.cwd ?? DEFAULT_CWD,
+      cwd: this.cwd,
       // Set COLUMNS/LINES env vars - some programs read these instead of querying TTY
       env: {
         ...process.env,
@@ -128,6 +130,49 @@ export class TerminalSession {
    */
   clearBuffer(): void {
     this.outputBuffer = [];
+  }
+
+  /**
+   * Respawn the PTY with a different shell (used when converting agent to terminal).
+   * Kills the current process and starts a new shell as a regular terminal.
+   */
+  respawn(shell: string = process.env.SHELL ?? "bash"): void {
+    if (this.disposed) {
+      throw new Error("Cannot respawn disposed terminal session");
+    }
+
+    // Kill the current PTY process
+    this.ptyProcess.kill();
+
+    // Start a new PTY with the specified shell
+    this.ptyProcess = pty.spawn(shell, [], {
+      name: "xterm-256color",
+      cols: this.cols,
+      rows: this.rows,
+      cwd: this.cwd,
+      env: {
+        ...process.env,
+        COLUMNS: String(this.cols),
+        LINES: String(this.rows),
+      } as Record<string, string>,
+    });
+
+    // Re-attach data listeners to the new process
+    this.ptyProcess.onData((data) => {
+      if (!this.disposed) {
+        this.outputBuffer.push(data);
+        if (this.outputBuffer.length > MAX_BUFFER_CHUNKS) {
+          this.outputBuffer.shift();
+        }
+
+        for (const listener of this.dataListeners) {
+          listener(data);
+        }
+      }
+    });
+
+    // Note: Don't re-attach exit listeners here - they were already called
+    // The respawned session is independent
   }
 
   dispose(): void {
