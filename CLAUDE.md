@@ -444,6 +444,12 @@ Any user-facing action that can fail (path validation, WebSocket requests, etc.)
 **process.cwd() in server/index.ts:**
 Never use `process.cwd()` directly for agent-scoped operations. Use `TOOL_DIR` for hgnucomb's own paths (plugin dirs, config) and `getProjectDirForAgent(agentId)` for agent work (worktrees, git ops). The whole point of the toolDir/projectDir split is that agents work in a different repo than hgnucomb itself.
 
+**WebSocket connects to Vite in dev, not the backend:**
+`WebSocketBridge` defaults to `ws://${window.location.host}`, which works in prod (single port) but connects to Vite (5173) in dev instead of the backend (3001). The `.env.development` file sets `VITE_WS_URL=ws://localhost:3001` to fix this. If you delete that file or change the dev port, WebSocket connections will silently go to Vite and everything server-dependent (terminals, agents, project validation, server.info) will break with no obvious error.
+
+**localStorage is per-origin:**
+`localhost:5173` and `localhost:3001` have separate localStorage. State persisted on one port (projectStore recents, etc.) won't appear on the other. This is browser behavior, not a bug, but it's confusing when switching between dev and prod URLs.
+
 ## Development Process
 
 1. **Check tasks:** `bl ready` before starting work
