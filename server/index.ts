@@ -1444,10 +1444,17 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       const result = removeWorktree(process.cwd(), workerId);
       agentInboxes.delete(workerId);
 
-      // Broadcast removal to all browser clients (even if cleanup had issues - agent is gone)
-      if (result.success) {
-        broadcastAgentRemoval(workerId, 'cleanup');
+      // Dispose PTY session and remove from all tracking maps
+      const sessionId = findSessionByAgentId(workerId);
+      if (sessionId) {
+        manager.dispose(sessionId);
+        clientSessions.forEach(sessions => sessions.delete(sessionId));
+        sessionClient.delete(sessionId);
+        sessionMetadata.delete(sessionId);
       }
+
+      // Broadcast removal to all browser clients (even if worktree cleanup had issues - agent is gone)
+      broadcastAgentRemoval(workerId, 'cleanup', sessionId);
 
       const response: McpCleanupWorkerWorktreeResponse = {
         type: 'mcp.cleanupWorkerWorktree.result',

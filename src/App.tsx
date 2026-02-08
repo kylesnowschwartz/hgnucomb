@@ -124,6 +124,7 @@ function App() {
     appendData,
     markExited,
     removeSession,
+    removeSessionForAgent,
     activeSessionId,
     setActiveSession,
     getSessionForAgent,
@@ -585,7 +586,7 @@ function App() {
     [spawnAgent, addSpawn, selectAgent]
   );
 
-  // Keyboard kill handler
+  // Keyboard kill handler - disposes server session then removes client state
   const handleKeyboardKill = useCallback(
     (hex: HexCoordinate) => {
       const agents = getAllAgents();
@@ -593,10 +594,13 @@ function App() {
         (a) => a.hex.q === hex.q && a.hex.r === hex.r
       );
       if (agentAtHex) {
+        // Tell server to kill the PTY and clean up session/metadata/worktree
+        removeSessionForAgent(agentAtHex.id);
+        // Remove from client-side agent store
         useAgentStore.getState().removeAgent(agentAtHex.id);
       }
     },
-    [getAllAgents]
+    [getAllAgents, removeSessionForAgent]
   );
 
   // Show help handler
