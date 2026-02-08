@@ -171,10 +171,12 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
       // Cmd+Esc is the global "escape hatch" - ALWAYS handled by app
       // This lets user unfocus/close terminal even when it has focus
       const isCmdEsc = e.metaKey && e.key === 'Escape';
+      // Shift+X is the kill command - ALWAYS handled by app
+      const isKill = e.shiftKey && (e.key === 'x' || e.key === 'X');
 
       // TERMINAL FOCUSED: Let terminal handle ALL keys (acts like real terminal)
-      // EXCEPT Cmd+Esc which is the global toggle
-      if (focusIsInTerminal && !isCmdEsc) {
+      // EXCEPT Cmd+Esc and Shift+X which are global controls
+      if (focusIsInTerminal && !isCmdEsc && !isKill) {
         return;
       }
 
