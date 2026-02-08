@@ -130,8 +130,8 @@ function App() {
   } = useTerminalStore();
 
   const { selectedAgentId, selectAgent } = useUIStore();
-  const { getAgent, getAllAgents, spawnAgent, removeAgent, updateAgentType, updateDetailedStatus, addMessageToInbox, getMessages } = useAgentStore();
-  const { addBroadcast, addStatusChange, addSpawn, addRemoval } = useEventLogStore();
+  const { getAgent, getAllAgents, spawnAgent, removeAgent, updateAgentType, updateDetailedStatus } = useAgentStore();
+  const { addStatusChange, addSpawn, addRemoval } = useEventLogStore();
   const panToHex = useViewportStore((s) => s.panToHex);
   const centerOnHex = useViewportStore((s) => s.centerOnHex);
 
@@ -286,13 +286,10 @@ function App() {
       getAllAgents,
       spawnAgent,
       updateDetailedStatus,
-      addMessageToInbox,
-      getMessages,
-      addBroadcast,
       addStatusChange,
       addSpawn,
     }),
-    [getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addMessageToInbox, getMessages, addBroadcast, addStatusChange, addSpawn]
+    [getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addStatusChange, addSpawn]
   );
 
   // Handle MCP requests from orchestrator agents
@@ -356,6 +353,38 @@ function App() {
         if (useUIStore.getState().selectedAgentId === agentId) {
           selectAgent(null);
         }
+        return;
+      }
+
+      // Handle inbox sync from server (display only - server is source of truth)
+      if (msg.type === 'inbox.sync') {
+        const { agentId, messages } = msg.payload as {
+          agentId: string;
+          messages: import('@shared/protocol').AgentMessage[];
+        };
+        const agent = getAgent(agentId);
+        if (agent) {
+          useAgentStore.setState((s) => ({
+            agents: new Map(s.agents).set(agentId, {
+              ...agent,
+              inbox: messages,
+            }),
+          }));
+        }
+        return;
+      }
+
+      // Handle broadcast event from server (for EventLog display)
+      if (msg.type === 'mcp.broadcast.event') {
+        const { senderId, senderHex, broadcastType, radius, recipientCount } = msg.payload as {
+          senderId: string;
+          senderHex: import('@shared/protocol').HexCoordinate;
+          broadcastType: string;
+          radius: number;
+          recipientCount: number;
+          recipients: string[];
+        };
+        useEventLogStore.getState().addBroadcast(senderId, senderHex, broadcastType, radius, recipientCount, null);
         return;
       }
 

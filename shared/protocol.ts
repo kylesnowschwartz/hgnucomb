@@ -666,6 +666,7 @@ export interface McpGetMessagesRequest {
   payload: {
     callerId: string;
     since?: string;
+    fromAgent?: string;  // Filter messages by sender agent ID
   };
 }
 
@@ -698,6 +699,18 @@ export interface InboxUpdatedMessage {
     agentId: string;
     messageCount: number;
     latestTimestamp: string;
+  };
+}
+
+/**
+ * Server -> Browser: sync inbox state for UI display.
+ * The server is now the source of truth for inboxes.
+ */
+export interface InboxSyncMessage {
+  type: 'inbox.sync';
+  payload: {
+    agentId: string;
+    messages: AgentMessage[];
   };
 }
 
@@ -764,11 +777,11 @@ export type McpNotification =
 
 export function isMcpMessage(
   msg: unknown
-): msg is McpRequest | McpResponse | McpNotification | InboxUpdatedMessage | AgentRemovedNotification {
+): msg is McpRequest | McpResponse | McpNotification | InboxUpdatedMessage | InboxSyncMessage | AgentRemovedNotification {
   if (typeof msg !== 'object' || msg === null) return false;
   const m = msg as Record<string, unknown>;
   return (
     typeof m.type === 'string' &&
-    (m.type.startsWith('mcp.') || m.type === 'inbox.updated' || m.type === 'agent.removed')
+    (m.type.startsWith('mcp.') || m.type.startsWith('inbox.') || m.type === 'agent.removed')
   );
 }

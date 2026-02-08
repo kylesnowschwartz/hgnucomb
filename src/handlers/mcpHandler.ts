@@ -12,12 +12,7 @@ import type {
   McpSpawnResponse,
   McpGetGridResponse,
   McpGridAgent,
-  McpBroadcastResponse,
   McpReportStatusResponse,
-  McpReportResultResponse,
-  McpGetMessagesResponse,
-  McpGetWorkerStatusResponse,
-  AgentMessage,
   HexCoordinate,
   CellType,
   DetailedStatus,
@@ -47,16 +42,6 @@ export interface McpHandlerDeps {
     status: DetailedStatus,
     message?: string
   ) => DetailedStatus | undefined;
-  addMessageToInbox: (agentId: string, message: AgentMessage) => boolean;
-  getMessages: (agentId: string, since?: string) => AgentMessage[];
-  addBroadcast: (
-    senderId: string,
-    senderHex: HexCoordinate,
-    broadcastType: string,
-    radius: number,
-    recipientCount: number,
-    payload: unknown
-  ) => void;
   addStatusChange: (
     agentId: string,
     newStatus: DetailedStatus,
@@ -117,9 +102,6 @@ export function createMcpHandler(
     getAllAgents,
     spawnAgent,
     updateDetailedStatus,
-    addMessageToInbox,
-    getMessages,
-    addBroadcast,
     addStatusChange,
     addSpawn,
   } = deps;
@@ -254,77 +236,6 @@ export function createMcpHandler(
         break;
       }
 
-      case 'mcp.broadcast': {
-        const { callerId, radius, broadcastType, broadcastPayload } =
-          request.payload;
-
-        const caller = getAgent(callerId);
-        if (!caller) {
-          const response: McpBroadcastResponse = {
-            type: 'mcp.broadcast.result',
-            requestId: request.requestId,
-            payload: {
-              success: false,
-              delivered: 0,
-              recipients: [],
-              error: `Caller agent not found: ${callerId}`,
-            },
-          };
-          bridge.sendMcpResponse(response);
-          return;
-        }
-
-        const agents = getAllAgents();
-        const recipients = agents
-          .filter((a) => a.id !== callerId)
-          .filter((a) => hexDistance(caller.hex, a.hex) <= radius)
-          .map((a) => a.id);
-
-        addBroadcast(
-          callerId,
-          caller.hex,
-          broadcastType,
-          radius,
-          recipients.length,
-          broadcastPayload
-        );
-
-        for (const recipientId of recipients) {
-          const broadcastMessage: AgentMessage = {
-            id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            from: callerId,
-            type: 'broadcast',
-            payload: { broadcastType, broadcastPayload },
-            timestamp: new Date().toISOString(),
-          };
-          const wasAdded = addMessageToInbox(recipientId, broadcastMessage);
-          if (wasAdded) {
-            const recipient = getAgent(recipientId);
-            bridge.sendInboxNotification({
-              agentId: recipientId,
-              messageCount: recipient?.inbox.length ?? 1,
-              latestTimestamp: broadcastMessage.timestamp,
-            });
-          }
-        }
-
-        const response: McpBroadcastResponse = {
-          type: 'mcp.broadcast.result',
-          requestId: request.requestId,
-          payload: { success: true, delivered: recipients.length, recipients },
-        };
-        bridge.sendMcpResponse(response);
-        console.log(
-          '[McpHandler] Broadcast from',
-          callerId,
-          'type:',
-          broadcastType,
-          'delivered:',
-          recipients.length
-        );
-        break;
-      }
-
       case 'mcp.reportStatus': {
         const { callerId, state, message } = request.payload;
 
@@ -358,156 +269,8 @@ export function createMcpHandler(
         break;
       }
 
-      case 'mcp.reportResult': {
-        const { callerId, parentId, result, success, message } = request.payload;
-
-        const parent = getAgent(parentId);
-        if (!parent) {
-          const response: McpReportResultResponse = {
-            type: 'mcp.reportResult.result',
-            requestId: request.requestId,
-            payload: {
-              success: false,
-              error: `Parent agent not found: ${parentId}`,
-            },
-          };
-          bridge.sendMcpResponse(response);
-          return;
-        }
-
-        const agentMessage: AgentMessage = {
-          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          from: callerId,
-          type: 'result',
-          payload: { result, success, message },
-          timestamp: new Date().toISOString(),
-        };
-
-        const added = addMessageToInbox(parentId, agentMessage);
-        if (!added) {
-          const response: McpReportResultResponse = {
-            type: 'mcp.reportResult.result',
-            requestId: request.requestId,
-            payload: {
-              success: false,
-              error: `Failed to add message to parent inbox`,
-            },
-          };
-          bridge.sendMcpResponse(response);
-          return;
-        }
-
-        const updatedParent = getAgent(parentId);
-        bridge.sendInboxNotification({
-          agentId: parentId,
-          messageCount: updatedParent?.inbox.length ?? 1,
-          latestTimestamp: agentMessage.timestamp,
-        });
-
-        const response: McpReportResultResponse = {
-          type: 'mcp.reportResult.result',
-          requestId: request.requestId,
-          payload: { success: true },
-        };
-        bridge.sendMcpResponse(response);
-        console.log(
-          '[McpHandler] Result reported from',
-          callerId,
-          'to parent',
-          parentId,
-          'success:',
-          success
-        );
-        break;
-      }
-
-      case 'mcp.getMessages': {
-        const { callerId, since } = request.payload;
-
-        const messages = getMessages(callerId, since);
-
-        const response: McpGetMessagesResponse = {
-          type: 'mcp.getMessages.result',
-          requestId: request.requestId,
-          payload: { success: true, messages },
-        };
-        bridge.sendMcpResponse(response);
-        console.log(
-          '[McpHandler] Get messages for',
-          callerId,
-          'count:',
-          messages.length
-        );
-        break;
-      }
-
-      case 'mcp.getWorkerStatus': {
-        const { callerId, workerId } = request.payload;
-
-        const caller = getAgent(callerId);
-        if (!caller) {
-          const response: McpGetWorkerStatusResponse = {
-            type: 'mcp.getWorkerStatus.result',
-            requestId: request.requestId,
-            payload: {
-              success: false,
-              error: `Caller agent not found: ${callerId}`,
-            },
-          };
-          bridge.sendMcpResponse(response);
-          return;
-        }
-
-        if (caller.cellType !== 'orchestrator') {
-          const response: McpGetWorkerStatusResponse = {
-            type: 'mcp.getWorkerStatus.result',
-            requestId: request.requestId,
-            payload: {
-              success: false,
-              error: 'Only orchestrators can check worker status',
-            },
-          };
-          bridge.sendMcpResponse(response);
-          return;
-        }
-
-        const worker = getAgent(workerId);
-        if (!worker) {
-          const response: McpGetWorkerStatusResponse = {
-            type: 'mcp.getWorkerStatus.result',
-            requestId: request.requestId,
-            payload: { success: false, error: `Worker not found: ${workerId}` },
-          };
-          bridge.sendMcpResponse(response);
-          return;
-        }
-
-        if (worker.parentId !== callerId) {
-          const response: McpGetWorkerStatusResponse = {
-            type: 'mcp.getWorkerStatus.result',
-            requestId: request.requestId,
-            payload: {
-              success: false,
-              error: `Worker ${workerId} is not your child`,
-            },
-          };
-          bridge.sendMcpResponse(response);
-          return;
-        }
-
-        const response: McpGetWorkerStatusResponse = {
-          type: 'mcp.getWorkerStatus.result',
-          requestId: request.requestId,
-          payload: {
-            success: true,
-            status: worker.detailedStatus,
-            message: worker.statusMessage,
-          },
-        };
-        bridge.sendMcpResponse(response);
-        console.log('[McpHandler] Worker status:', workerId, worker.detailedStatus);
-        break;
-      }
+      // mcp.broadcast, mcp.reportResult, mcp.getMessages, mcp.getWorkerStatus
+      // are now handled server-side (server/index.ts) and no longer routed through the browser.
     }
   };
 }
