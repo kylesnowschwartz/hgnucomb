@@ -265,6 +265,7 @@ export function TerminalPanel({
       fontSize: TERMINAL_FONT.size,
       theme: TERMINAL_THEME,
       cursorBlink: true,
+      rightClickSelectsWord: true,
       overviewRuler: {}, // Disable overview ruler
       vtExtensions: {
         kittyKeyboard: true,
@@ -305,6 +306,16 @@ export function TerminalPanel({
       webglAddon.dispose();
     });
     terminal.loadAddon(webglAddon);
+
+    // Auto-copy selected text to clipboard (highlight-to-copy)
+    terminal.onSelectionChange(() => {
+      const selection = terminal.getSelection();
+      if (selection) {
+        navigator.clipboard.writeText(selection).catch(() => {
+          // Clipboard API may not be available in all contexts
+        });
+      }
+    });
 
     // Snapshot the buffer BEFORE setting up data handlers to avoid duplicates
     // Any data that arrives after this will be handled by the live data handler
