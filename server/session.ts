@@ -137,12 +137,10 @@ export class TerminalSession {
    * Kills the current process and starts a new shell as a regular terminal.
    */
   respawn(shell: string = process.env.SHELL ?? "bash"): void {
-    if (this.disposed) {
-      throw new Error("Cannot respawn disposed terminal session");
+    // Kill the current PTY process (no-op if already exited)
+    if (!this.disposed) {
+      this.ptyProcess.kill();
     }
-
-    // Kill the current PTY process
-    this.ptyProcess.kill();
 
     // Start a new PTY with the specified shell
     this.ptyProcess = pty.spawn(shell, [], {
