@@ -17,22 +17,20 @@ check:
     pnpm build
     cd server && pnpm build
 
-# Build and run production on alternate ports (3002/5174)
+# Build and run production on port 3002 (single process)
 # Frozen instance - code changes won't hot reload
 run:
-    VITE_WS_URL=ws://localhost:3002 pnpm build
+    pnpm build
     cd server && pnpm build
-    @echo "Starting frozen prod on ports 3002 (server) / 5174 (UI)..."
+    @echo "Starting frozen prod on port 3002 (server + UI)..."
     @echo "Code changes will NOT hot reload. Run 'just run' to rebuild."
-    (export PORT=3002; cd server && pnpm start) &
-    pnpm preview --port 5174
+    cd server && PORT=3002 pnpm start
 
 # Kill all hgnucomb processes (dev + prod)
 kill:
     -lsof -ti:3001 | xargs kill 2>/dev/null
     -lsof -ti:3002 | xargs kill 2>/dev/null
     -lsof -ti:5173 | xargs kill 2>/dev/null
-    -lsof -ti:5174 | xargs kill 2>/dev/null
     -pkill -f "tsx --watch" 2>/dev/null
     @echo "Cleaned up hgnucomb processes"
 

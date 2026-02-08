@@ -6,7 +6,7 @@ Spatial terminal multiplexer: a 2D navigable canvas where terminals and Claude a
 
 - **Frontend:** React 19 + Vite, Konva.js (hex grid), xterm.js + WebGL (terminals), Zustand (state)
 - **Server:** Node.js + node-pty + WebSocket (terminal management), MCP SDK (agent coordination)
-- **Runtime:** Browser (localhost:5173) + local server (localhost:3001) - no Electron/Tauri
+- **Runtime:** Browser + local server (single port in prod, Vite HMR + server in dev) - no Electron/Tauri
 
 ## Quick Start
 
@@ -20,22 +20,21 @@ just check      # Lint, test, and build
 
 Run two instances simultaneously for dogfooding (using hgnucomb to develop hgnucomb):
 
-| Instance | UI Port | Server Port | Command | Hot Reload |
-|----------|---------|-------------|---------|------------|
-| Dev | 5173 | 3001 | `just dev` | Yes |
-| Prod | 5174 | 3002 | `just prod` | No (frozen) |
+| Instance | Port(s) | Command | Hot Reload |
+|----------|---------|---------|------------|
+| Dev | 5173 (Vite) + 3001 (server) | `just dev` | Yes |
+| Prod | 3002 (single process) | `just run` | No (frozen) |
 
 ```bash
-just dev        # Start the dev servers, mcp and vitest
-just kill-dev   # Clean up prod processes
-
-just prod       # Build and start frozen prod instance (3002/5174)
-just kill-prod  # Clean up prod processes
+just dev        # Start Vite dev server + WebSocket server
+just run        # Build and start frozen prod instance on :3002
+just kill       # Clean up all hgnucomb processes
 ```
 
 **How it works:**
-- Dev runs Vite dev server with HMR - code changes reload instantly
-- Prod runs built/compiled bundles - frozen until you rebuild
+- Dev runs two processes: Vite dev server with HMR on :5173, WebSocket server on :3001
+- Prod builds frontend to `dist/`, then serves it from the WebSocket server on a single port
+- The server auto-detects `dist/` at startup -- if present, serves static files; if absent, WebSocket-only (dev mode)
 - Agents work in isolated worktrees (`.worktrees/<id>/`)
 
 **Workflow:** Spawn agents in prod, they make changes, dev hot-reloads to show progress. Prod stays stable.

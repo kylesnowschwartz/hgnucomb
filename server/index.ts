@@ -3,8 +3,12 @@
  *
  * Listens on PORT env var (default 3001), manages PTY sessions, and routes
  * messages between browser clients and terminal processes.
+ *
+ * When a built frontend exists in dist/, serves it as static files on the
+ * same port. Otherwise runs as WebSocket-only (dev mode with Vite on :5173).
  */
 
+import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { TerminalSessionManager } from "./manager.js";
 import type {
@@ -56,11 +60,82 @@ import {
   mergeWorkerToStaging,
   mergeStagingToMain,
 } from "./git.js";
-import { join } from "path";
+import { join, resolve, extname } from "path";
+import { existsSync, readFileSync } from "fs";
 import { saveImageForSession } from "./imageStorage.js";
+import { runPreflight } from "./preflight.js";
+
+runPreflight();
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const manager = new TerminalSessionManager();
+
+// ============================================================================
+// Static File Serving (production mode)
+// ============================================================================
+
+const DIST_DIR = resolve(import.meta.dirname, "..", "dist");
+const SERVE_STATIC = existsSync(DIST_DIR);
+
+const MIME_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
+};
+
+/**
+ * Handle HTTP requests: serve static files from dist/ in production,
+ * or return 404 in dev mode (WebSocket upgrades still work).
+ */
+function handleHttpRequest(req: IncomingMessage, res: ServerResponse): void {
+  if (!SERVE_STATIC) {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("Not found (dev mode - use Vite on :5173)");
+    return;
+  }
+
+  const pathname = new URL(req.url ?? "/", `http://${req.headers.host}`).pathname;
+
+  // Root path serves index.html
+  const relativePath = pathname === "/" ? "index.html" : pathname.slice(1);
+  const filePath = resolve(DIST_DIR, relativePath);
+
+  // Path traversal guard: resolved path must stay within dist/
+  if (!filePath.startsWith(DIST_DIR)) {
+    res.writeHead(403, { "Content-Type": "text/plain" });
+    res.end("Forbidden");
+    return;
+  }
+
+  if (!existsSync(filePath)) {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("Not found");
+    return;
+  }
+
+  const ext = extname(filePath);
+  const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
+
+  // Vite hashes asset filenames - safe to cache forever.
+  // index.html references them, so it must revalidate.
+  const isHashedAsset = pathname.startsWith("/assets/");
+  const cacheControl = isHashedAsset
+    ? "public, max-age=31536000, immutable"
+    : "no-cache";
+
+  res.writeHead(200, {
+    "Content-Type": contentType,
+    "Cache-Control": cacheControl,
+  });
+  res.end(readFileSync(filePath));
+}
+
+const httpServer = createServer(handleHttpRequest);
 
 // Track which sessions belong to which client for cleanup
 const clientSessions = new Map<WebSocket, Set<string>>();
@@ -651,9 +726,9 @@ Work autonomously. Do not ask questions.`;
   }
 }
 
-const wss = new WebSocketServer({ port: PORT });
+const wss = new WebSocketServer({ server: httpServer });
 
-wss.on("error", (err: NodeJS.ErrnoException) => {
+httpServer.on("error", (err: NodeJS.ErrnoException) => {
   if (err.code === "EADDRINUSE") {
     console.error(`Port ${PORT} is already in use. Kill the existing process:`);
     console.error(`  lsof -ti:${PORT} | xargs kill`);
@@ -663,6 +738,8 @@ wss.on("error", (err: NodeJS.ErrnoException) => {
   console.error("Server error:", err.message);
   process.exit(1);
 });
+
+httpServer.listen(PORT);
 
 wss.on("connection", (ws) => {
   console.log("Client connected");
@@ -1181,7 +1258,12 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
   }
 }
 
-console.log(`Terminal WebSocket server listening on ws://localhost:${PORT}`);
+if (SERVE_STATIC) {
+  console.log(`[Server] Serving frontend from dist/ on http://localhost:${PORT}`);
+} else {
+  console.log(`[Server] No dist/ found, skipping static file serving (dev mode)`);
+}
+console.log(`[Server] WebSocket listening on ws://localhost:${PORT}`);
 
 // ============================================================================
 // Activity Check Interval (idle detection)
@@ -1218,7 +1300,8 @@ function shutdown(signal: string): void {
     client.terminate();
   }
 
-  wss.close(() => {
+  wss.close();
+  httpServer.close(() => {
     console.log("Server closed");
     process.exit(0);
   });
