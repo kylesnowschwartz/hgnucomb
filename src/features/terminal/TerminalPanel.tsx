@@ -282,10 +282,15 @@ export function TerminalPanel({
 
     // Terminal captures ALL keys when focused - acts like a real terminal
     // EXCEPT Cmd+Esc which is a global toggle to unfocus/close panel
+    // AND clipboard shortcuts which the browser needs to handle natively
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       // Cmd+Esc is the global "escape hatch" - always passes through to app
       if (e.metaKey && e.key === 'Escape') {
         return false; // Don't handle in xterm, let it bubble to window
+      }
+      // Let browser handle clipboard shortcuts natively (copy/paste/cut/select-all)
+      if (e.metaKey && (e.key === 'c' || e.key === 'v' || e.key === 'x' || e.key === 'a')) {
+        return false; // Don't intercept in xterm
       }
       // Everything else stays in the terminal
       return true;
