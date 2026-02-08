@@ -209,8 +209,12 @@ mcpServer.tool(
       "Include 'report_result' and 'report_status done' in instructions for results."
     ),
     taskDetails: z.string().optional().describe("Additional context or details for the task"),
+    model: z.enum(["opus", "sonnet", "haiku"]).optional().describe(
+      "Claude model to use. Defaults: orchestrator=opus, worker=sonnet. " +
+      "Use haiku for simple/fast tasks, sonnet for standard work, opus for complex reasoning."
+    ),
   },
-  async ({ q, r, cellType, task, instructions, taskDetails }) => {
+  async ({ q, r, cellType, task, instructions, taskDetails, model }) => {
     // Permission check: only orchestrators can spawn
     if (!canSpawn()) {
       return {
@@ -232,6 +236,7 @@ mcpServer.tool(
         task,
         instructions,
         taskDetails,
+        model,
       });
 
       if (!result.success) {

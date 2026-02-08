@@ -44,6 +44,8 @@ export interface TerminalSessionInfo {
   rows: number;
 }
 
+export type AgentModel = 'opus' | 'sonnet' | 'haiku';
+
 export interface TerminalSessionConfig {
   cols?: number;
   rows?: number;
@@ -58,6 +60,7 @@ export interface TerminalSessionConfig {
   taskDetails?: string;
   parentId?: string;
   parentHex?: HexCoordinate;
+  model?: AgentModel;
 }
 
 /**
@@ -101,6 +104,7 @@ export interface CreateRequest {
     taskDetails?: string;
     parentId?: string;
     parentHex?: HexCoordinate;
+    model?: AgentModel;
   };
 }
 
@@ -297,6 +301,7 @@ export interface McpSpawnRequest {
     task?: string;
     instructions?: string;
     taskDetails?: string;
+    model?: 'opus' | 'sonnet' | 'haiku';
   };
 }
 
