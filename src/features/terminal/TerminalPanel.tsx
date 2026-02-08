@@ -281,7 +281,7 @@ export function TerminalPanel({
     terminal.open(container);
 
     // Terminal captures ALL keys when focused - acts like a real terminal
-    // EXCEPT Cmd+Esc and Shift+X which are global controls
+    // EXCEPT global controls (Cmd+Esc, Shift+X) and clipboard shortcuts
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       // Cmd+Esc is the global "escape hatch" - always passes through to app
       if (e.metaKey && e.key === 'Escape') {
@@ -290,6 +290,10 @@ export function TerminalPanel({
       // Shift+X is the kill command - passes through to app
       if (e.shiftKey && (e.key === 'x' || e.key === 'X')) {
         return false; // Let app handle kill
+      }
+      // Let browser handle clipboard shortcuts natively (copy/paste/cut/select-all)
+      if (e.metaKey && (e.key === 'c' || e.key === 'v' || e.key === 'x' || e.key === 'a')) {
+        return false; // Don't intercept in xterm
       }
       // Everything else stays in the terminal
       return true;
