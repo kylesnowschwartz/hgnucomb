@@ -4,6 +4,7 @@
  */
 
 import { execFileSync } from "child_process";
+import { existsSync, readFileSync, writeFileSync, unlinkSync, openSync, closeSync, constants } from "fs";
 import { join } from "path";
 
 // ============================================================================
@@ -250,38 +251,131 @@ export function mergeWorkerToStaging(gitRoot: string, orchestratorId: string, wo
   return `Merge successful:\n${log}`;
 }
 
+// ============================================================================
+// Merge Lock - prevents concurrent merge_staging_to_main operations
+// ============================================================================
+
+const MERGE_LOCK_FILE = "hgnucomb-merge.lock";
+const STALE_LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+interface MergeLock {
+  agentId: string;
+  branch: string;
+  startedAt: string;
+}
+
+function getLockPath(gitRoot: string): string {
+  return join(gitRoot, ".git", MERGE_LOCK_FILE);
+}
+
+function readMergeLock(gitRoot: string): MergeLock | null {
+  const lockPath = getLockPath(gitRoot);
+  if (!existsSync(lockPath)) return null;
+  try {
+    return JSON.parse(readFileSync(lockPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Acquire exclusive merge lock. Returns error message if lock is held by another agent.
+ * Uses O_EXCL for atomic creation (fails if file already exists).
+ */
+function acquireMergeLock(gitRoot: string, agentId: string): string | null {
+  const lockPath = getLockPath(gitRoot);
+  const existing = readMergeLock(gitRoot);
+
+  if (existing) {
+    const age = Date.now() - new Date(existing.startedAt).getTime();
+    if (age < STALE_LOCK_TIMEOUT_MS) {
+      const ageSec = Math.round(age / 1000);
+      return `Merge locked by ${existing.agentId} (branch: ${existing.branch}, started ${ageSec}s ago). Wait for their merge to complete or abort.`;
+    }
+    // Stale lock - force remove and proceed
+    console.warn(`[Git] Removing stale merge lock from ${existing.agentId} (age: ${Math.round(age / 1000)}s)`);
+    try { unlinkSync(lockPath); } catch { /* ignore */ }
+  }
+
+  const lock: MergeLock = {
+    agentId,
+    branch: getBranchName(agentId),
+    startedAt: new Date().toISOString(),
+  };
+
+  try {
+    // O_EXCL ensures atomic creation - fails if another process created it between our check and write
+    const fd = openSync(lockPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
+    writeFileSync(fd, JSON.stringify(lock, null, 2));
+    closeSync(fd);
+    console.log(`[Git] Acquired merge lock for ${agentId}`);
+    return null;
+  } catch {
+    // Race condition: another agent acquired the lock between our check and create
+    const winner = readMergeLock(gitRoot);
+    if (winner) {
+      return `Merge locked by ${winner.agentId} (acquired just now). Retry in a few seconds.`;
+    }
+    return "Failed to acquire merge lock (unknown error)";
+  }
+}
+
+function releaseMergeLock(gitRoot: string, agentId: string): void {
+  const lockPath = getLockPath(gitRoot);
+  const lock = readMergeLock(gitRoot);
+  // Only release if we own it
+  if (lock && lock.agentId === agentId) {
+    try {
+      unlinkSync(lockPath);
+      console.log(`[Git] Released merge lock for ${agentId}`);
+    } catch {
+      console.warn(`[Git] Failed to release merge lock for ${agentId}`);
+    }
+  }
+}
+
 /**
  * Merge orchestrator's staging branch into main.
- * Regular merge (preserves history from staging).
+ * Acquires exclusive lock to prevent concurrent merges.
  */
 export function mergeStagingToMain(gitRoot: string, orchestratorId: string): string | null {
   const stagingBranch = getBranchName(orchestratorId);
 
-  // Ensure we're on main branch
-  const currentBranch = gitExec(["rev-parse", "--abbrev-ref", "HEAD"], gitRoot);
-  if (currentBranch !== "main") {
-    console.warn(`[Git] Not on main branch, switching...`);
-    const switchResult = gitExec(["checkout", "main"], gitRoot);
-    if (switchResult === null) {
-      return "Failed to switch to main branch";
+  // Acquire exclusive merge lock
+  const lockError = acquireMergeLock(gitRoot, orchestratorId);
+  if (lockError) {
+    return lockError;
+  }
+
+  try {
+    // Ensure we're on main branch
+    const currentBranch = gitExec(["rev-parse", "--abbrev-ref", "HEAD"], gitRoot);
+    if (currentBranch !== "main") {
+      console.warn(`[Git] Not on main branch, switching...`);
+      const switchResult = gitExec(["checkout", "main"], gitRoot);
+      if (switchResult === null) {
+        return "Failed to switch to main branch";
+      }
     }
-  }
 
-  // Check for uncommitted changes in main
-  const status = gitExec(["status", "--porcelain"], gitRoot);
-  if (status && status.trim()) {
-    return `Cannot merge: main has uncommitted changes:\n${status}`;
-  }
+    // Check for uncommitted changes in main
+    const status = gitExec(["status", "--porcelain"], gitRoot);
+    if (status && status.trim()) {
+      return `Cannot merge: main has uncommitted changes:\n${status}`;
+    }
 
-  // Regular merge (preserves staging history)
-  const mergeResult = gitExecWithError(["merge", stagingBranch, "-m", `Merge staging from ${orchestratorId}`], gitRoot);
-  if (!mergeResult.ok) {
-    const mergeStatus = gitExec(["status"], gitRoot) ?? "";
-    console.warn(`[Git] Merge failed: ${stagingBranch} into main`);
-    return `Merge failed (${mergeResult.error}):\n${mergeStatus}`;
-  }
+    // Regular merge (preserves staging history)
+    const mergeResult = gitExecWithError(["merge", stagingBranch, "-m", `Merge staging from ${orchestratorId}`], gitRoot);
+    if (!mergeResult.ok) {
+      const mergeStatus = gitExec(["status"], gitRoot) ?? "";
+      console.warn(`[Git] Merge failed: ${stagingBranch} into main`);
+      return `Merge failed (${mergeResult.error}):\n${mergeStatus}`;
+    }
 
-  const log = gitExec(["log", "--oneline", "-5"], gitRoot) ?? "";
-  console.log(`[Git] Merged staging (${orchestratorId}) into main`);
-  return `Merge successful:\n${log}`;
+    const log = gitExec(["log", "--oneline", "-5"], gitRoot) ?? "";
+    console.log(`[Git] Merged staging (${orchestratorId}) into main`);
+    return `Merge successful:\n${log}`;
+  } finally {
+    releaseMergeLock(gitRoot, orchestratorId);
+  }
 }
