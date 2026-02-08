@@ -6,7 +6,7 @@ import type {
   CellType,
   DetailedStatus,
 } from '@shared/types';
-import type { AgentMessage } from '@shared/protocol';
+import type { AgentMessage, AgentModel } from '@shared/protocol';
 import { useEventLogStore } from '@features/events/eventLogStore';
 
 // localStorage key for persisting agent state
@@ -35,6 +35,8 @@ export interface AgentState {
   /** Instructions for worker (prompt sent to Claude) */
   instructions?: string;
   taskDetails?: string;
+  /** Claude model override (opus/sonnet/haiku). Defaults: orchestrator=opus, worker=sonnet */
+  model?: AgentModel;
   /** Message inbox for receiving results and broadcasts */
   inbox: AgentMessage[];
 }
@@ -46,6 +48,7 @@ export interface SpawnOptions {
   task?: string;
   instructions?: string;
   taskDetails?: string;
+  model?: AgentModel;
 }
 
 interface AgentStore {
@@ -74,7 +77,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
   getAllAgents: () => Array.from(get().agents.values()),
 
   spawnAgent: (hex, cellType = 'terminal', options = {}) => {
-    const { initialPrompt, parentId, parentHex, task, instructions, taskDetails } = options;
+    const { initialPrompt, parentId, parentHex, task, instructions, taskDetails, model } = options;
     const id = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     // Role maps from cellType: orchestrator cells are orchestrators, terminal cells are workers
     const role: AgentRole = cellType === 'orchestrator' ? 'orchestrator' : 'worker';
@@ -94,6 +97,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         task,
         instructions,
         taskDetails,
+        model,
         inbox: [],
       }),
     }));

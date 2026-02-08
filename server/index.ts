@@ -386,7 +386,7 @@ function send(ws: WebSocket, msg: ServerMessage): void {
 function handleMessage(ws: WebSocket, msg: ClientMessage): void {
   switch (msg.type) {
     case "terminal.create": {
-      const { cols, rows, shell, cwd, env, agentSnapshot, allAgents, initialPrompt, instructions, task, taskDetails, parentId, parentHex } = msg.payload;
+      const { cols, rows, shell, cwd, env, agentSnapshot, allAgents, initialPrompt, instructions, task, taskDetails, parentId, parentHex, model } = msg.payload;
 
       // Determine working directory
       let workingDir = cwd ?? process.cwd();
@@ -453,8 +453,10 @@ Work autonomously. Do not ask questions.`;
         }
       }
 
-      // Determine model based on cell type: orchestrators use sonnet, workers use haiku
-      const modelFlag = agentSnapshot?.cellType === "worker" ? "haiku" : "sonnet";
+      // Model precedence: explicit request > cell type default
+      // Defaults: orchestrators=opus (deep reasoning), workers=sonnet (standard work)
+      const defaultModel = agentSnapshot?.cellType === "orchestrator" ? "opus" : "sonnet";
+      const modelFlag = model ?? defaultModel;
 
       // Build Claude CLI args for spawned agents
       // Permission strategy: full bypass since agents run in isolated worktrees.

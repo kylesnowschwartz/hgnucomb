@@ -6,7 +6,7 @@
  */
 
 import type { TerminalBridge } from '@features/terminal/TerminalBridge';
-import type { AgentState } from '@features/agents/agentStore';
+import type { AgentState, SpawnOptions } from '@features/agents/agentStore';
 import type {
   McpRequest,
   McpSpawnResponse,
@@ -29,13 +29,7 @@ export interface McpHandlerDeps {
   spawnAgent: (
     hex: HexCoordinate,
     cellType: CellType,
-    options: {
-      parentId?: string;
-      parentHex?: HexCoordinate;
-      task?: string;
-      instructions?: string;
-      taskDetails?: string;
-    }
+    options: SpawnOptions,
   ) => string;
   updateDetailedStatus: (
     agentId: string,
@@ -116,7 +110,7 @@ export function createMcpHandler(
       }
 
       case 'mcp.spawn': {
-        const { callerId, q, r, cellType, task, instructions, taskDetails } =
+        const { callerId, q, r, cellType, task, instructions, taskDetails, model } =
           request.payload;
 
         // Validate caller exists and is orchestrator
@@ -178,6 +172,7 @@ export function createMcpHandler(
           task,
           instructions,
           taskDetails,
+          model,
         });
         addSpawn(newAgentId, cellType, targetHex);
 

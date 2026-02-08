@@ -230,6 +230,7 @@ export class WebSocketBridge implements TerminalBridge {
         taskDetails: config?.taskDetails,
         parentId: config?.parentId,
         parentHex: config?.parentHex,
+        model: config?.model,
       },
     };
 

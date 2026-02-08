@@ -454,6 +454,7 @@ function App() {
           taskDetails: agent.taskDetails,
           parentId: agent.parentId,
           parentHex: agent.parentHex,
+          model: agent.model,
         });
 
         addSession(session, agent.id);
