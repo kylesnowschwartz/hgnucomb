@@ -390,6 +390,7 @@ function App() {
 
       // Handle inferred status updates (from PTY activity detection)
       // Inferred status must NOT override sticky states that were explicitly reported
+      // Exception: 'done' agents can transition back to 'working' via PTY activity
       if (msg.type === 'mcp.statusUpdate') {
         const { agentId, state } = msg.payload as {
           agentId: string;
@@ -397,7 +398,7 @@ function App() {
           message?: string;
         };
         const agent = getAgent(agentId);
-        const stickyStates: DetailedStatus[] = ['done', 'error', 'cancelled', 'waiting_input', 'waiting_permission', 'stuck'];
+        const stickyStates: DetailedStatus[] = ['error', 'cancelled', 'waiting_input', 'waiting_permission', 'stuck'];
         if (agent && stickyStates.includes(agent.detailedStatus)) {
           return; // Don't override explicit status with inferred activity
         }
