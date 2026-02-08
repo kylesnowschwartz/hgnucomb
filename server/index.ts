@@ -248,15 +248,6 @@ function cleanupActivityTracking(sessionId: string): void {
 }
 
 /**
- * Check if we should use inferred status (PTY activity) for this agent.
- * Returns false for terminal/sticky states that should not be overridden.
- */
-function shouldInferStatus(currentStatus: string): boolean {
-  const stickyStates = ['done', 'error', 'cancelled', 'waiting_input', 'waiting_permission', 'stuck'];
-  return !stickyStates.includes(currentStatus);
-}
-
-/**
  * Broadcast inferred status update to all browser clients.
  */
 function broadcastInferredStatus(agentId: string, status: 'working' | 'idle'): void {
@@ -547,7 +538,7 @@ Work autonomously. Do not ask questions.`;
               if (elapsed < WORKING_DEBOUNCE_MS) {
                 activity.inferredStatus = 'working';
                 const metadata = sessionMetadata.get(sessionId);
-                if (metadata?.detailedStatus && shouldInferStatus(metadata.detailedStatus)) {
+                if (metadata?.agentId) {
                   broadcastInferredStatus(metadata.agentId, 'working');
                 }
               }
@@ -1598,7 +1589,7 @@ const activityCheckInterval = setInterval(() => {
       if (elapsed > IDLE_THRESHOLD_MS) {
         activity.inferredStatus = 'idle';
         const metadata = sessionMetadata.get(sessionId);
-        if (metadata?.detailedStatus && shouldInferStatus(metadata.detailedStatus)) {
+        if (metadata?.agentId) {
           broadcastInferredStatus(metadata.agentId, 'idle');
         }
       }
