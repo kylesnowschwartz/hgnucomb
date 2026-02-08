@@ -491,6 +491,61 @@ Work autonomously. Do not ask questions.`;
       });
 
       session.onExit((exitCode) => {
+        const metadata = sessionMetadata.get(sessionId);
+        const isClaudeAgent = metadata && (metadata.cellType === 'orchestrator' || metadata.cellType === 'worker');
+
+        // If this is a Claude agent (orchestrator or worker), convert it to a terminal shell
+        // instead of removing it. This allows users to "drop into" a shell after /exit.
+        if (isClaudeAgent && metadata) {
+          try {
+            // Respawn the session as a regular shell
+            session.respawn();
+
+            // Update metadata to convert from agent to terminal
+            const oldCellType = metadata.cellType;
+            metadata.cellType = 'terminal';
+            // Clear agent-specific fields (don't use delete to avoid any type)
+            (metadata as Partial<StoredAgentMetadata>).parentId = undefined;
+            (metadata as Partial<StoredAgentMetadata>).task = undefined;
+            (metadata as Partial<StoredAgentMetadata>).instructions = undefined;
+
+            // Clean up agent-specific state
+            cleanupContextFile(metadata.agentId);
+            removeWorktree(process.cwd(), metadata.agentId);
+            cleanupActivityTracking(sessionId);
+
+            // Notify ALL clients that the cell has been converted to terminal.
+            // Don't send agent.removed here - that would delete the agent from the
+            // store before cell.converted can update its type. The cell.converted
+            // handler updates the cellType in-place instead.
+            const convertedMsg = JSON.stringify({
+              type: 'cell.converted',
+              payload: {
+                sessionId,
+                oldCellType,
+                newCellType: 'terminal',
+                agentId: metadata.agentId,
+              },
+            });
+            for (const client of browserClients) {
+              if (client.readyState === WebSocket.OPEN) {
+                client.send(convertedMsg);
+              }
+            }
+
+            console.log(
+              `[${sessionId}] Agent ${metadata.agentId} (${oldCellType}) converted to terminal shell`
+            );
+            return; // Don't proceed with normal cleanup
+          } catch (err) {
+            console.error(
+              `[${sessionId}] Failed to respawn agent as terminal: ${err instanceof Error ? err.message : String(err)}`
+            );
+            // Fall through to normal cleanup if respawn fails
+          }
+        }
+
+        // Normal cleanup for terminals that exit naturally
         const client = sessionClient.get(sessionId);
         if (client && client.readyState === WebSocket.OPEN) {
           send(client, {
@@ -498,15 +553,17 @@ Work autonomously. Do not ask questions.`;
             payload: { sessionId, exitCode },
           });
         }
+
         // Clean up tracking
         sessions?.delete(sessionId);
         sessionClient.delete(sessionId);
         cleanupActivityTracking(sessionId);
+
         // Clean up context file and worktree if this was an agent
-        const metadata = sessionMetadata.get(sessionId);
         if (metadata) {
           cleanupContextFile(metadata.agentId);
           removeWorktree(process.cwd(), metadata.agentId);
+          broadcastAgentRemoval(metadata.agentId, 'cleanup', sessionId);
           sessionMetadata.delete(sessionId);
         }
       });

@@ -236,6 +236,16 @@ export interface UploadImageResponse {
   };
 }
 
+export interface CellConvertedMessage {
+  type: 'cell.converted';
+  payload: {
+    sessionId: string;
+    agentId: string;
+    oldCellType: CellType;
+    newCellType: CellType;
+  };
+}
+
 export type ServerMessage =
   | CreatedMessage
   | DataMessage
@@ -244,7 +254,8 @@ export type ServerMessage =
   | ErrorMessage
   | SessionsListResponse
   | SessionsClearResponse
-  | UploadImageResponse;
+  | UploadImageResponse
+  | CellConvertedMessage;
 
 // ============================================================================
 // Type Guards
