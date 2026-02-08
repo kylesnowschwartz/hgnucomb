@@ -91,8 +91,8 @@ export const vimKeymap: Keymap = {
       o: { type: 'spawn', cellType: 'orchestrator' },
       w: { type: 'spawn', cellType: 'worker' },
 
-      // Shift+X to initiate/confirm kill
-      'Shift+X': { type: 'kill' },
+      // x to initiate/confirm kill (lowercase, no modifier — won't steal from terminal)
+      x: { type: 'kill' },
 
       // Escape clears selection (also cancels pending kill)
       // When panel is open, this closes the panel first

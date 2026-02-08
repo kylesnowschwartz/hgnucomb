@@ -96,7 +96,7 @@ export function ActionBar() {
   let hints: ActionHint[];
   if (showKillConfirmation) {
     hints = [
-      { key: 'X', label: 'confirm' },
+      { key: 'x', label: 'confirm' },
       { key: 'Enter', label: 'confirm' },
       { key: 'Esc', label: 'cancel' },
     ];
@@ -104,7 +104,7 @@ export function ActionBar() {
     hints = agentAtHex
       ? [
           { key: 'Enter', label: 'open' },
-          { key: 'X', label: 'kill' },
+          { key: 'x', label: 'kill' },
         ]
       : [
           { key: 't', label: 'terminal' },

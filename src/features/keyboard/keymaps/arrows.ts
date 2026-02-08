@@ -62,7 +62,7 @@ export const arrowsKeymap: Keymap = {
       t: { type: 'spawn', cellType: 'terminal' },
       o: { type: 'spawn', cellType: 'orchestrator' },
       w: { type: 'spawn', cellType: 'worker' },
-      'Shift+X': { type: 'kill' },
+      x: { type: 'kill' },
 
       Escape: { type: 'clear_selection' },
       'Meta+Escape': { type: 'close_panel' },

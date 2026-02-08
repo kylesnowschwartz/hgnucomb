@@ -312,7 +312,7 @@ describe('KEYMAPS', () => {
     });
 
     it('selected mode has kill action', () => {
-      expect(vim.bindings.selected['Shift+X']).toEqual({ type: 'kill' });
+      expect(vim.bindings.selected['x']).toEqual({ type: 'kill' });
     });
 
     it('has g for go to origin', () => {

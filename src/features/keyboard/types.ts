@@ -34,8 +34,8 @@ export type KeyAction =
   | { type: 'open_panel' }        // Enter: open terminal panel
   | { type: 'close_panel' }       // Cmd+Escape: close panel
   | { type: 'spawn'; cellType: 'terminal' | 'orchestrator' | 'worker' }
-  | { type: 'kill' }              // Kill agent at selected cell (Shift+X twice to confirm)
-  | { type: 'confirm_kill' }      // Confirm pending kill (Shift+X again when kill pending)
+  | { type: 'kill' }              // Kill agent at selected cell (x to initiate, x again to confirm)
+  | { type: 'confirm_kill' }      // Confirm pending kill (Enter when kill pending)
 
   // UI
   | { type: 'show_help' };
