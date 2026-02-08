@@ -74,10 +74,11 @@ PHASE 4 - MERGE TO STAGING: Integrate changes into your worktree
     - Or abort: git merge --abort
     - Or discard worker: mcp__hgnucomb__cleanup_worker_worktree(workerId)
 
-PHASE 5 - HUMAN APPROVAL: Present summary to User
+PHASE 5 - HUMAN APPROVAL: Get explicit approval before merging
   Output a clear summary of all changes in staging.
-  Ask: "Ready to merge to main. Review above and approve."
-  WAIT for User response in terminal before proceeding.
+  Call AskUserQuestion to ask: "Merge these N commits to main?" with commit list.
+  You MUST call AskUserQuestion BEFORE merge_staging_to_main - the merge will be
+  blocked by a PreToolUse hook if you skip this step.
 
 PHASE 6 - MERGE TO MAIN: After human approval
   mcp__hgnucomb__merge_staging_to_main() -> promotes staging to main
