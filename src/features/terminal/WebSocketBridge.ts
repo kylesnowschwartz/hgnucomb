@@ -502,15 +502,13 @@ export class WebSocketBridge implements TerminalBridge {
       return;
     }
 
-    // Route MCP requests to handlers
+    // Route MCP requests to handlers (only browser-routed operations)
+    // mcp.broadcast, mcp.reportResult, mcp.getMessages, mcp.getWorkerStatus
+    // are now handled server-side and never sent to the browser.
     if (
       msg.type === 'mcp.spawn' ||
       msg.type === 'mcp.getGrid' ||
-      msg.type === 'mcp.broadcast' ||
-      msg.type === 'mcp.reportStatus' ||
-      msg.type === 'mcp.reportResult' ||
-      msg.type === 'mcp.getMessages' ||
-      msg.type === 'mcp.getWorkerStatus'
+      msg.type === 'mcp.reportStatus'
     ) {
       this.mcpRequestHandlers.forEach((handler) => handler(msg as McpRequest));
       return;
@@ -579,7 +577,12 @@ export class WebSocketBridge implements TerminalBridge {
       default: {
         // Handle server notifications (e.g., agent.removed, mcp.statusUpdate)
         const msgAny = msg as { type: string };
-        if (msgAny.type === 'agent.removed' || msgAny.type === 'mcp.statusUpdate') {
+        if (
+          msgAny.type === 'agent.removed' ||
+          msgAny.type === 'mcp.statusUpdate' ||
+          msgAny.type === 'inbox.sync' ||
+          msgAny.type === 'mcp.broadcast.event'
+        ) {
           this.notificationListeners.forEach((handler) => handler(msg));
         }
         break;

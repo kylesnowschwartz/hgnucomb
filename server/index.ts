@@ -35,11 +35,14 @@ import type {
   McpKillWorkerRequest,
   McpKillWorkerResponse,
   InboxUpdatedMessage,
+  InboxSyncMessage,
   AgentRemovedNotification,
+  AgentMessage,
   StoredAgentMetadata,
   DetailedStatus,
 } from "@shared/protocol.ts";
 import { isClientMessage, isMcpMessage } from "@shared/protocol.ts";
+import { hexDistance } from "@shared/types.ts";
 import {
   generateContext,
   writeContextFile,
@@ -148,6 +151,75 @@ const sessionMetadata = new Map<string, StoredAgentMetadata>();
 const sessionClient = new Map<string, WebSocket>();
 
 // ============================================================================
+// Server-Side Agent Inboxes
+// ============================================================================
+
+// Agent inboxes: agentId -> messages. Server is source of truth for message delivery.
+const agentInboxes = new Map<string, AgentMessage[]>();
+
+/**
+ * Add a message to an agent's inbox. Returns true if the agent exists in sessionMetadata.
+ */
+function addToInbox(recipientId: string, message: AgentMessage): boolean {
+  // Verify recipient exists
+  const recipientExists = Array.from(sessionMetadata.values()).some(m => m.agentId === recipientId);
+  if (!recipientExists) return false;
+
+  const inbox = agentInboxes.get(recipientId) ?? [];
+  inbox.push(message);
+  agentInboxes.set(recipientId, inbox);
+  return true;
+}
+
+/**
+ * Read and consume messages from an agent's inbox.
+ * Returned messages are removed from the inbox (auto-consume).
+ */
+function getFromInbox(agentId: string, opts?: { since?: string; fromAgent?: string }): AgentMessage[] {
+  const inbox = agentInboxes.get(agentId) ?? [];
+  if (inbox.length === 0) return [];
+
+  let toReturn: AgentMessage[];
+  let toKeep: AgentMessage[];
+
+  if (opts?.since || opts?.fromAgent) {
+    const sinceTime = opts.since ? new Date(opts.since).getTime() : 0;
+    toReturn = inbox.filter(m => {
+      const afterSince = !opts.since || new Date(m.timestamp).getTime() > sinceTime;
+      const fromMatch = !opts.fromAgent || m.from === opts.fromAgent;
+      return afterSince && fromMatch;
+    });
+    toKeep = inbox.filter(m => !toReturn.includes(m));
+  } else {
+    toReturn = [...inbox];
+    toKeep = [];
+  }
+
+  if (toReturn.length > 0) {
+    agentInboxes.set(agentId, toKeep);
+  }
+  return toReturn;
+}
+
+/**
+ * Broadcast inbox state to all browser clients for UI display.
+ * The browser is no longer source of truth - this is a sync notification.
+ */
+function broadcastInboxSync(agentId: string): void {
+  const messages = agentInboxes.get(agentId) ?? [];
+  const syncMsg: InboxSyncMessage = {
+    type: 'inbox.sync',
+    payload: { agentId, messages },
+  };
+  const json = JSON.stringify(syncMsg);
+  for (const browser of browserClients) {
+    if (browser.readyState === WebSocket.OPEN) {
+      browser.send(json);
+    }
+  }
+}
+
+// ============================================================================
 // PTY Activity Detection (Inferred Status)
 // ============================================================================
 
@@ -227,7 +299,7 @@ const pendingMcpRequests = new Map<string, PendingMcpRequest>();
 /**
  * Route an MCP request from MCP server to browser clients.
  */
-function routeMcpToBrowser(msg: McpSpawnRequest | McpGetGridRequest | McpBroadcastRequest | McpReportStatusRequest | McpReportResultRequest | McpGetMessagesRequest | McpGetWorkerStatusRequest): void {
+function routeMcpToBrowser(msg: McpSpawnRequest | McpGetGridRequest | McpReportStatusRequest): void {
   const json = JSON.stringify(msg);
   for (const browser of browserClients) {
     if (browser.readyState === WebSocket.OPEN) {
@@ -502,11 +574,12 @@ Work autonomously. Do not ask questions.`;
         sessions?.delete(sessionId);
         sessionClient.delete(sessionId);
         cleanupActivityTracking(sessionId);
-        // Clean up context file and worktree if this was an agent
+        // Clean up context file, worktree, and inbox if this was an agent
         const metadata = sessionMetadata.get(sessionId);
         if (metadata) {
           cleanupContextFile(metadata.agentId);
           removeWorktree(process.cwd(), metadata.agentId);
+          agentInboxes.delete(metadata.agentId);
           sessionMetadata.delete(sessionId);
         }
       });
@@ -580,11 +653,12 @@ Work autonomously. Do not ask questions.`;
         clientSessions.get(ws)?.delete(sessionId);
         sessionClient.delete(sessionId);
         cleanupActivityTracking(sessionId);
-        // Clean up context file and worktree if this was an agent
+        // Clean up context file, worktree, and inbox if this was an agent
         const metadata = sessionMetadata.get(sessionId);
         if (metadata) {
           cleanupContextFile(metadata.agentId);
           removeWorktree(process.cwd(), metadata.agentId);
+          agentInboxes.delete(metadata.agentId);
           sessionMetadata.delete(sessionId);
         }
         send(ws, {
@@ -646,12 +720,13 @@ Work autonomously. Do not ask questions.`;
       // Kill all sessions and clear metadata (user-initiated reset)
       const count = manager.size();
 
-      // Clean up context files and worktrees for all agents
+      // Clean up context files, worktrees, and inboxes for all agents
       for (const [, metadata] of sessionMetadata.entries()) {
         cleanupContextFile(metadata.agentId);
         removeWorktree(process.cwd(), metadata.agentId);
       }
       sessionMetadata.clear();
+      agentInboxes.clear();
       sessionClient.clear();
       // Clear all activity timers before clearing the map
       for (const sessionId of sessionActivity.keys()) {
@@ -814,7 +889,7 @@ wss.on("connection", (ws) => {
 /**
  * Handle MCP protocol messages.
  */
-function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNotification | InboxUpdatedMessage | AgentRemovedNotification): void {
+function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNotification | InboxUpdatedMessage | InboxSyncMessage | AgentRemovedNotification): void {
   switch (msg.type) {
     case "mcp.register": {
       // This client is an MCP server, not a browser
@@ -1052,27 +1127,214 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
 
     case "mcp.spawn":
     case "mcp.getGrid":
-    case "mcp.broadcast":
-    case "mcp.reportStatus":
-    case "mcp.reportResult":
-    case "mcp.getMessages":
-    case "mcp.getWorkerStatus": {
-      // MCP server requesting action from browser
+    case "mcp.reportStatus": {
+      // These still route through the browser (need UI state/grid placement)
       const agentId = msg.payload.callerId;
       pendingMcpRequests.set(msg.requestId, { mcpWs: ws, agentId });
       routeMcpToBrowser(msg);
       console.log(`[MCP] Routing ${msg.type} from ${agentId} to browser`);
 
-      // Keep server-side metadata in sync with reported status so that
-      // shouldInferStatus() respects sticky states (done, error, etc.)
+      // Keep server-side metadata in sync with reported status
       if (msg.type === "mcp.reportStatus") {
         for (const [, metadata] of sessionMetadata.entries()) {
           if (metadata.agentId === agentId) {
             metadata.detailedStatus = msg.payload.state as DetailedStatus;
+            metadata.statusMessage = msg.payload.message;
             break;
           }
         }
       }
+      break;
+    }
+
+    case "mcp.reportResult": {
+      // Server-side: store result in parent's inbox, notify MCP client
+      const req = msg as McpReportResultRequest;
+      const { callerId, parentId, result, success, message: resultMessage } = req.payload;
+
+      // Validate parent exists
+      const parentExists = Array.from(sessionMetadata.values()).some(m => m.agentId === parentId);
+      if (!parentExists) {
+        ws.send(JSON.stringify({
+          type: "mcp.reportResult.result",
+          requestId: req.requestId,
+          payload: { success: false, error: `Parent agent not found: ${parentId}` },
+        }));
+        break;
+      }
+
+      const resultMsg: AgentMessage = {
+        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        from: callerId,
+        type: 'result',
+        payload: { result, success, message: resultMessage },
+        timestamp: new Date().toISOString(),
+      };
+
+      const added = addToInbox(parentId, resultMsg);
+      if (!added) {
+        ws.send(JSON.stringify({
+          type: "mcp.reportResult.result",
+          requestId: req.requestId,
+          payload: { success: false, error: "Failed to add message to parent inbox" },
+        }));
+        break;
+      }
+
+      // Wake any pending get_messages(wait=true) on the parent's MCP client
+      const parentInbox = agentInboxes.get(parentId) ?? [];
+      notifyAgentInbox(parentId, parentInbox.length, resultMsg.timestamp);
+
+      // Sync browser UI
+      broadcastInboxSync(parentId);
+
+      ws.send(JSON.stringify({
+        type: "mcp.reportResult.result",
+        requestId: req.requestId,
+        payload: { success: true },
+      }));
+      console.log(`[MCP] Result reported from ${callerId} to parent ${parentId}, success: ${success}`);
+      break;
+    }
+
+    case "mcp.getMessages": {
+      // Server-side: read and consume from server inbox
+      const req = msg as McpGetMessagesRequest;
+      const { callerId, since, fromAgent } = req.payload;
+
+      const messages = getFromInbox(callerId, { since, fromAgent });
+
+      // Sync browser UI (inbox was consumed)
+      if (messages.length > 0) {
+        broadcastInboxSync(callerId);
+      }
+
+      ws.send(JSON.stringify({
+        type: "mcp.getMessages.result",
+        requestId: req.requestId,
+        payload: { success: true, messages },
+      }));
+      console.log(`[MCP] Get messages for ${callerId}: ${messages.length} message(s)${fromAgent ? ` (from: ${fromAgent})` : ''}`);
+      break;
+    }
+
+    case "mcp.getWorkerStatus": {
+      // Server-side: read status directly from sessionMetadata
+      const req = msg as McpGetWorkerStatusRequest;
+      const { callerId, workerId } = req.payload;
+
+      // Validate caller is orchestrator
+      const caller = Array.from(sessionMetadata.values()).find(m => m.agentId === callerId);
+      if (!caller || caller.cellType !== 'orchestrator') {
+        ws.send(JSON.stringify({
+          type: "mcp.getWorkerStatus.result",
+          requestId: req.requestId,
+          payload: { success: false, error: 'Only orchestrators can check worker status' },
+        }));
+        break;
+      }
+
+      // Find worker
+      const worker = Array.from(sessionMetadata.values()).find(m => m.agentId === workerId);
+      if (!worker) {
+        ws.send(JSON.stringify({
+          type: "mcp.getWorkerStatus.result",
+          requestId: req.requestId,
+          payload: { success: false, error: `Worker not found: ${workerId}` },
+        }));
+        break;
+      }
+
+      if (worker.parentId !== callerId) {
+        ws.send(JSON.stringify({
+          type: "mcp.getWorkerStatus.result",
+          requestId: req.requestId,
+          payload: { success: false, error: `Worker ${workerId} is not your child` },
+        }));
+        break;
+      }
+
+      ws.send(JSON.stringify({
+        type: "mcp.getWorkerStatus.result",
+        requestId: req.requestId,
+        payload: {
+          success: true,
+          status: worker.detailedStatus ?? 'pending',
+          message: worker.statusMessage,
+        },
+      }));
+      console.log(`[MCP] Worker status: ${workerId} = ${worker.detailedStatus ?? 'pending'}`);
+      break;
+    }
+
+    case "mcp.broadcast": {
+      // Server-side: spatial query + inbox delivery
+      const req = msg as McpBroadcastRequest;
+      const { callerId, radius, broadcastType, broadcastPayload } = req.payload;
+
+      // Find caller's hex coords from sessionMetadata
+      const callerMeta = Array.from(sessionMetadata.values()).find(m => m.agentId === callerId);
+      if (!callerMeta) {
+        ws.send(JSON.stringify({
+          type: "mcp.broadcast.result",
+          requestId: req.requestId,
+          payload: { success: false, delivered: 0, recipients: [], error: `Caller agent not found: ${callerId}` },
+        }));
+        break;
+      }
+
+      const callerHex = callerMeta.hex;
+
+      // Find recipients within radius (exclude caller)
+      const recipients: string[] = [];
+      for (const [, meta] of sessionMetadata.entries()) {
+        if (meta.agentId === callerId) continue;
+        if (hexDistance(callerHex, meta.hex) <= radius) {
+          recipients.push(meta.agentId);
+        }
+      }
+
+      // Deliver to each recipient's inbox
+      for (const recipientId of recipients) {
+        const broadcastMsg: AgentMessage = {
+          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          from: callerId,
+          type: 'broadcast',
+          payload: { broadcastType, broadcastPayload },
+          timestamp: new Date().toISOString(),
+        };
+        addToInbox(recipientId, broadcastMsg);
+
+        const recipientInbox = agentInboxes.get(recipientId) ?? [];
+        notifyAgentInbox(recipientId, recipientInbox.length, broadcastMsg.timestamp);
+        broadcastInboxSync(recipientId);
+      }
+
+      // Broadcast event to browsers for EventLog display
+      const broadcastEvent = {
+        type: 'mcp.broadcast.event',
+        payload: {
+          senderId: callerId,
+          senderHex: callerHex,
+          broadcastType,
+          radius,
+          recipientCount: recipients.length,
+          recipients,
+        },
+      };
+      const eventJson = JSON.stringify(broadcastEvent);
+      for (const browser of browserClients) {
+        if (browser.readyState === WebSocket.OPEN) {
+          browser.send(eventJson);
+        }
+      }
+
+      ws.send(JSON.stringify({
+        type: "mcp.broadcast.result",
+        requestId: req.requestId,
+        payload: { success: true, delivered: recipients.length, recipients },
+      }));
+      console.log(`[MCP] Broadcast from ${callerId} type: ${broadcastType} delivered: ${recipients.length}`);
       break;
     }
 
@@ -1129,8 +1391,9 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
         break;
       }
 
-      // Clean up the worktree
+      // Clean up the worktree and inbox
       const result = removeWorktree(process.cwd(), workerId);
+      agentInboxes.delete(workerId);
 
       // Broadcast removal to all browser clients (even if cleanup had issues - agent is gone)
       if (result.success) {
@@ -1215,9 +1478,10 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
           // Clean up tracking
           clientSessions.forEach(sessions => sessions.delete(sessionId));
           sessionClient.delete(sessionId);
-          // Clean up context file and worktree
+          // Clean up context file, worktree, and inbox
           cleanupContextFile(workerId);
           removeWorktree(process.cwd(), workerId);
+          agentInboxes.delete(workerId);
           sessionMetadata.delete(sessionId);
 
           // Broadcast removal to all browser clients
@@ -1245,12 +1509,8 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
 
     case "mcp.spawn.result":
     case "mcp.getGrid.result":
-    case "mcp.broadcast.result":
-    case "mcp.reportStatus.result":
-    case "mcp.reportResult.result":
-    case "mcp.getMessages.result":
-    case "mcp.getWorkerStatus.result": {
-      // Browser responding to MCP request
+    case "mcp.reportStatus.result": {
+      // Browser responding to MCP request (only for browser-routed operations)
       routeMcpResponse(msg);
       console.log(`[MCP] Routing ${msg.type} back to MCP server`);
       break;

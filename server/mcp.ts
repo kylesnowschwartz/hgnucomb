@@ -501,10 +501,11 @@ mcpServer.tool(
   "Get and consume messages from your inbox. Messages are deleted after reading (auto-consume). Use wait=true to block until a message arrives (IMAP IDLE style). Returns immediately if messages exist.",
   {
     since: z.string().optional().describe("ISO timestamp - only return messages after this time"),
+    fromAgent: z.string().optional().describe("Only return messages from this specific agent ID"),
     wait: z.boolean().optional().describe("Block until a message arrives (default: false)"),
     timeout: z.number().optional().describe("Wait timeout in milliseconds (default: 30000, max: 60000)"),
   },
-  async ({ since, wait, timeout }) => {
+  async ({ since, fromAgent, wait, timeout }) => {
     const waitTimeout = Math.min(timeout ?? 30000, 60000);
     // Accept any truthy value for wait (handles string "true" if MCP passes it wrong)
     const shouldWait = Boolean(wait);
@@ -535,6 +536,7 @@ mcpServer.tool(
       // Check current inbox first
       const result = await sendRequest<McpGetMessagesResponse["payload"]>("mcp.getMessages", {
         since,
+        fromAgent,
       });
 
       if (!result.success) {
@@ -570,7 +572,7 @@ mcpServer.tool(
             pendingInboxWait = null;
             // Re-fetch messages after notification
             try {
-              const newResult = await sendRequest<McpGetMessagesResponse["payload"]>("mcp.getMessages", { since });
+              const newResult = await sendRequest<McpGetMessagesResponse["payload"]>("mcp.getMessages", { since, fromAgent });
               console.error(`[MCP] get_messages: re-fetch got ${newResult.messages?.length ?? 0} messages`);
               resolve(formatMessages(newResult.messages ?? []));
             } catch (err) {
@@ -733,8 +735,10 @@ mcpServer.tool(
         if (isTerminal) {
           console.error(`[MCP] await_worker: worker ${workerId} completed with status=${statusResult.status}`);
 
-          // Fetch messages from inbox
-          const messagesResult = await sendRequest<McpGetMessagesResponse["payload"]>("mcp.getMessages", {});
+          // Fetch messages from this specific worker only
+          const messagesResult = await sendRequest<McpGetMessagesResponse["payload"]>("mcp.getMessages", {
+            fromAgent: workerId,
+          });
 
           return {
             content: [
