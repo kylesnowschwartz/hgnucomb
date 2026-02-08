@@ -45,15 +45,17 @@ export function ActionBar() {
   // Show kill confirmation if pending
   const showKillConfirmation = !!pendingKill;
 
-  // When terminal is open, only show for empty cells (spawn hints)
-  // When terminal is closed, show for any selected hex (or kill confirmation)
-  const shouldShow = (selectedHex || showKillConfirmation) && (!isTerminalOpen || !agentAtHex);
+  // Kill confirmation always shows (it's anchored to pendingKill hex, not mouse position).
+  // Otherwise: show for selected hex when terminal is closed, or for empty cells.
+  const shouldShow = showKillConfirmation || (selectedHex && (!isTerminalOpen || !agentAtHex));
 
   // Fade-in delay
   const [delayedHexKey, setDelayedHexKey] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const hexKey = selectedHex ? `${selectedHex.q},${selectedHex.r}` : null;
+  // Use pendingKill for stability during kill confirmation (mouse hover changes selectedHex)
+  const stableHex = pendingKill || selectedHex;
+  const hexKey = stableHex ? `${stableHex.q},${stableHex.r}` : null;
 
   useEffect(() => {
     if (timerRef.current) {

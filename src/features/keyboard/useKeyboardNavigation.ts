@@ -144,7 +144,7 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
         } else {
           // Confirm - execute kill
           setPendingKill(null);
-          optionsRef.current.onKill?.(selectedHex);
+          optionsRef.current.onKill?.(pendingKill);
         }
         break;
       }
