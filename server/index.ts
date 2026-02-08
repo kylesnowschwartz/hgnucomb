@@ -514,21 +514,23 @@ Work autonomously. Do not ask questions.`;
             removeWorktree(process.cwd(), metadata.agentId);
             cleanupActivityTracking(sessionId);
 
-            // Broadcast agent removal - the agent process is gone, only the terminal remains
-            broadcastAgentRemoval(metadata.agentId, 'cleanup', sessionId);
-
-            // Notify client that the cell has been converted to terminal
-            const client = sessionClient.get(sessionId);
-            if (client && client.readyState === WebSocket.OPEN) {
-              send(client, {
-                type: 'cell.converted',
-                payload: {
-                  sessionId,
-                  oldCellType,
-                  newCellType: 'terminal',
-                  agentId: metadata.agentId,
-                },
-              });
+            // Notify ALL clients that the cell has been converted to terminal.
+            // Don't send agent.removed here - that would delete the agent from the
+            // store before cell.converted can update its type. The cell.converted
+            // handler updates the cellType in-place instead.
+            const convertedMsg = JSON.stringify({
+              type: 'cell.converted',
+              payload: {
+                sessionId,
+                oldCellType,
+                newCellType: 'terminal',
+                agentId: metadata.agentId,
+              },
+            });
+            for (const client of browserClients) {
+              if (client.readyState === WebSocket.OPEN) {
+                client.send(convertedMsg);
+              }
             }
 
             console.log(

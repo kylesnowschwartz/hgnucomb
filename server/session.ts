@@ -157,6 +157,10 @@ export class TerminalSession {
       } as Record<string, string>,
     });
 
+    // Fresh shell gets a fresh buffer
+    this.outputBuffer = [];
+    this.disposed = false;
+
     // Re-attach data listeners to the new process
     this.ptyProcess.onData((data) => {
       if (!this.disposed) {
@@ -171,8 +175,13 @@ export class TerminalSession {
       }
     });
 
-    // Note: Don't re-attach exit listeners here - they were already called
-    // The respawned session is independent
+    // Re-attach exit listeners so cleanup runs when the converted terminal exits
+    this.ptyProcess.onExit(({ exitCode }) => {
+      this.disposed = true;
+      for (const listener of this.exitListeners) {
+        listener(exitCode);
+      }
+    });
   }
 
   dispose(): void {
