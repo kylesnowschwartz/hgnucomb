@@ -75,16 +75,29 @@ const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const manager = new TerminalSessionManager();
 
 /**
- * TOOL_DIR: where hgnucomb itself lives. Computed once at startup.
- * Used for plugin paths, fallback working directory, and server.info.
+ * HGNUCOMB_ROOT: where the hgnucomb package is installed on disk.
+ *
+ * Derived from the running bundle location (server/dist/index.js -> ../..).
+ * Used for package-relative paths: built frontend, plugins, MCP server binary.
+ * This is correct regardless of CWD (dev, prod, npx from another project).
  */
-const TOOL_DIR = getGitRoot(process.cwd()) ?? process.cwd();
+const HGNUCOMB_ROOT = resolve(import.meta.dirname, "..", "..");
+
+/**
+ * TOOL_DIR: the project directory hgnucomb operates in.
+ *
+ * Defaults to HGNUCOMB_ROOT (self-hosting: developing hgnucomb with hgnucomb).
+ * When run via npx from another project, this resolves to that project's git root
+ * so agents create worktrees in the right repo. Overridable by the user via
+ * ProjectBar in the UI (stored per-agent in sessionMetadata.projectDir).
+ */
+const TOOL_DIR = getGitRoot(process.cwd()) ?? HGNUCOMB_ROOT;
 
 // ============================================================================
 // Static File Serving (production mode)
 // ============================================================================
 
-const DIST_DIR = resolve(import.meta.dirname, "..", "dist");
+const DIST_DIR = resolve(HGNUCOMB_ROOT, "dist");
 const SERVE_STATIC = existsSync(DIST_DIR);
 
 const MIME_TYPES: Record<string, string> = {
@@ -411,7 +424,7 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
         // Try to create a worktree for this agent
         // Pass wsUrl so MCP server connects back to THIS server instance
         const wsUrl = `ws://localhost:${PORT}`;
-        const worktreeResult = createWorktree(workingDir, agentSnapshot.agentId, agentSnapshot.cellType, wsUrl, TOOL_DIR);
+        const worktreeResult = createWorktree(workingDir, agentSnapshot.agentId, agentSnapshot.cellType, wsUrl, HGNUCOMB_ROOT);
         if (worktreeResult.success && worktreeResult.worktreePath) {
           workingDir = worktreeResult.worktreePath;
           console.log(`[Worktree] Agent ${agentSnapshot.agentId} (${agentSnapshot.cellType}) using: ${workingDir}`);
@@ -486,9 +499,9 @@ Work autonomously. Do not ask questions.`;
           : undefined;
 
       // Compute plugin path for agent hooks (e.g., worker Stop hook enforcement)
-      // Plugins are at server/plugins/<cellType>/ in the TOOL repo (not the project worktree)
+      // Plugins live in hgnucomb's install dir, not the user's project
       const pluginDir = isClaudeAgent
-        ? join(TOOL_DIR, "server", "plugins", agentSnapshot.cellType)
+        ? join(HGNUCOMB_ROOT, "server", "plugins", agentSnapshot.cellType)
         : undefined;
 
       const args: string[] | undefined = isClaudeAgent

@@ -16,19 +16,22 @@ import { get } from "http";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const DIST_DIR = resolve(ROOT, "dist");
-const SERVER_DIR = resolve(ROOT, "server");
+const SERVER_BUNDLE = resolve(ROOT, "server", "dist", "index.js");
 const PORT = process.env.PORT ?? "3001";
 
-// If no dist/, the server will still start but won't serve a frontend.
-// Warn the user so they know what to do.
+// Preflight: check that both bundles exist
+if (!existsSync(SERVER_BUNDLE)) {
+  console.error("[hgnucomb] Server bundle not found. Run 'pnpm build' first.");
+  process.exit(1);
+}
+
 if (!existsSync(DIST_DIR)) {
   console.warn("[hgnucomb] No dist/ found. Run 'pnpm build' first for the full UI.");
   console.warn("[hgnucomb] Starting server in WebSocket-only mode...\n");
 }
 
-// Start the server - it handles preflight, static serving, and WebSocket
-const server = spawn("npx", ["tsx", "index.ts"], {
-  cwd: SERVER_DIR,
+// Start the bundled server directly with node (no tsx at runtime)
+const server = spawn(process.execPath, [SERVER_BUNDLE], {
   env: { ...process.env, PORT },
   stdio: "inherit",
 });

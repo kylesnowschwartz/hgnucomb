@@ -10,14 +10,9 @@
   "files": [
     "bin",
     "dist",
-    "server",
-    "shared",
-    "!server/node_modules",
-    "!server/pnpm-lock.yaml",
-    "!server/pnpm-workspace.yaml",
-    "!server/*.test.ts",
-    "!server/test-mcp.ts",
-    "!shared/*.test.ts"
+    "server/dist",
+    "server/plugins",
+    "shared"
   ],
   "engines": {
     "node": ">=20.0.0"
@@ -27,7 +22,8 @@
     "dev": "pnpm theme && vite",
     "dev:server": "cd server && pnpm dev",
     "dev:all": "concurrently -n ui,pty -c blue,green \"pnpm dev\" \"pnpm dev:server\"",
-    "build": "pnpm theme && tsc -b && vite build",
+    "build": "pnpm theme && tsc -b && vite build && pnpm build:server",
+    "build:server": "node --import tsx server/esbuild.config.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
@@ -36,14 +32,11 @@
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.3",
-    "node-pty": "^0.10.1",
-    "tsx": "^4.21.0",
-    "ws": "^8.18.0",
-    "zod": "^3.25.0"
+    "node-pty": "^0.10.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@modelcontextprotocol/sdk": "^1.25.3",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
@@ -53,6 +46,7 @@
     "@xterm/addon-webgl": "0.20.0-beta.108",
     "@xterm/xterm": "6.1.0-beta.109",
     "concurrently": "^9.2.1",
+    "esbuild": "^0.25.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
@@ -61,11 +55,14 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-konva": "^19.2.1",
+    "tsx": "^4.21.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
     "vite-plugin-pwa": "^1.2.0",
     "vitest": "^4.0.18",
+    "ws": "^8.18.0",
+    "zod": "^3.25.0",
     "zustand": "^5.0.10"
   },
   "pnpm": {

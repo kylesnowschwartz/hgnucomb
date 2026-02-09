@@ -8,7 +8,10 @@ dev:
 # Install all dependencies
 install:
     pnpm install
-    cd server && pnpm install
+
+# Build everything (frontend + server bundles)
+build:
+    pnpm build
 
 # Pre-commit gate: lint, typecheck, test, verify builds
 check:
@@ -16,17 +19,15 @@ check:
     pnpm lint
     pnpm test
     pnpm build
-    cd server && pnpm build
 
 # Build and run production on port 3002 (single process)
-# Frozen instance - code changes won't hot reload
+# Uses the same CLI entry point as `npx hgnucomb`
 run:
-    pnpm build
-    cd server && pnpm build
+    just build
     @echo "Starting frozen prod on port 3002 (server + UI)..."
     @echo "Code changes will NOT hot reload. Run 'just run' to rebuild."
     (while ! curl -s http://localhost:3002 > /dev/null 2>&1; do sleep 0.3; done && open http://localhost:3002) &
-    cd server && PORT=3002 pnpm start
+    PORT=3002 node bin/hgnucomb.js
 
 # Kill all hgnucomb processes (dev + prod)
 kill:
