@@ -24,6 +24,18 @@ just dev        # frontend :5173 + server :3001
 
 Open http://localhost:5173.
 
+### Install from source
+
+```bash
+git clone git@github.com:kylesnowschwartz/hgnucomb.git
+cd hgnucomb
+pnpm install && cd server && pnpm install && cd ..
+pnpm build
+node bin/hgnucomb.js
+```
+
+This builds the frontend, starts the server, and opens the browser.
+
 ### Prerequisites
 
 - Node.js 20+
@@ -135,8 +147,9 @@ Working prototype.
 - Staged merge workflow with conflict detection
 - Live status badges with animations
 - Claude Code plugin hooks (enforce `report_result` before worker exit)
+- CLI entry point (`node bin/hgnucomb.js`)
+- Prerequisite checks on startup (node, git, claude)
 
 **What's next:**
-- CLI entry point (`npx hgnucomb`)
 - Session persistence across reloads
 - Audio notifications on completion
