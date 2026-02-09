@@ -45,6 +45,16 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
   });
 
   const executeAction = useCallback((action: KeyAction) => {
+    // When keyboard takes over from mouse, promote hovered hex to selection.
+    // This ensures actions target the visually highlighted hex, not stale state.
+    const hexActions = ['navigate', 'navigate_vertical', 'select_center', 'open_panel', 'spawn', 'kill', 'confirm_kill'];
+    if (hexActions.includes(action.type)) {
+      const pre = useUIStore.getState();
+      if (pre.hoveredHex && !pre.selectedHex) {
+        pre.selectHex(pre.hoveredHex);
+      }
+    }
+
     const { selectedHex, selectHex, selectedAgentId, selectAgent, clearSelection, killConfirmationActive, setKillConfirmationActive } =
       useUIStore.getState();
     const { getAllAgents } = useAgentStore.getState();

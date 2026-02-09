@@ -56,11 +56,13 @@ export const useUIStore = create<UIStore>()((set) => ({
   },
 
   setHoveredHex: (hex) => {
-    set({ hoveredHex: hex });
+    // Mouse takes over: clear keyboard selection so only one hex highlights
+    set(hex ? { hoveredHex: hex, selectedHex: null } : { hoveredHex: null });
   },
 
   selectHex: (hex) => {
-    set({ selectedHex: hex });
+    // Keyboard/click takes over: clear mouse hover so only one hex highlights
+    set(hex ? { selectedHex: hex, hoveredHex: null } : { selectedHex: null });
   },
 
   clearSelection: () => {
@@ -78,7 +80,7 @@ export const useUIStore = create<UIStore>()((set) => ({
   getMode: () => {
     const state = useUIStore.getState();
     if (state.selectedAgentId) return 'terminal';
-    if (state.selectedHex) return 'selected';
+    if (state.selectedHex || state.hoveredHex) return 'selected';
     return 'grid';
   },
 }));

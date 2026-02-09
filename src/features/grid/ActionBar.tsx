@@ -7,7 +7,8 @@
  * - Kill confirmation: confirm/cancel hints
  *
  * Positioned below the selected hex with a fade-in delay.
- * selectedHex is now sticky (not affected by mouse hover), so no workarounds needed.
+ * Mouse hover and keyboard selection are mutually exclusive (last input wins),
+ * so ActionBar only appears for intentional keyboard/click selection.
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react';
