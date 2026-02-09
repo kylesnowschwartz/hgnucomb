@@ -234,8 +234,8 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
       }
 
       // No action bound - decide if we should prevent default browser behavior
-      // Allow essential editing shortcuts to pass through (copy/paste/undo/find)
-      const isEditingShortcut =
+      // Allow essential editing and browser shortcuts to pass through
+      const isAllowedShortcut =
         (meta || e.ctrlKey) &&
         (e.key === 'c' || // copy
           e.key === 'v' || // paste
@@ -243,11 +243,15 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
           e.key === 'a' || // select all
           e.key === 'z' || // undo/redo
           e.key === 'f' || // find
-          e.key === 'r'); // reload (dev convenience)
+          e.key === 'r' || // reload (dev convenience)
+          e.key === '+' || // zoom in (Cmd+Plus)
+          e.key === '=' || // zoom in (Cmd+=, same key as +)
+          e.key === '-' || // zoom out (Cmd+Minus)
+          e.key === '0'); // reset zoom (Cmd+0)
 
       // Block problematic browser shortcuts (bookmark, address bar, search, new tab, etc.)
-      // while allowing essential editing to work
-      if ((meta || e.ctrlKey) && !isEditingShortcut) {
+      // while allowing essential editing and zoom controls to work
+      if ((meta || e.ctrlKey) && !isAllowedShortcut) {
         e.preventDefault();
       }
     };

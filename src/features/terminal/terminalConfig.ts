@@ -12,10 +12,10 @@
 /** Font configuration for xterm.js */
 export const TERMINAL_FONT = {
   family: '"JetBrainsMono Nerd Font", "SF Mono", Consolas, monospace',
-  size: 14,
+  size: 12,
   /** Cell dimensions at this font size - measured from xterm.js */
-  cellWidth: 8.0,
-  cellHeight: 18.0,
+  cellWidth: 7.0,
+  cellHeight: 15.0,
 } as const;
 
 /**
