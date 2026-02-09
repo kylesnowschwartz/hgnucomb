@@ -2,6 +2,7 @@
  * HelpModal - Keyboard shortcut reference.
  *
  * Shows all keybindings organized by mode.
+ * Replaces raw "Meta" prefix with "Cmd" for display.
  */
 
 import { useKeyboardStore } from './keyboardStore';
@@ -36,7 +37,7 @@ function formatAction(action: KeyAction): string {
     case 'spawn':
       return `Spawn ${action.cellType}`;
     case 'kill':
-      return 'Kill agent (x again to confirm)';
+      return 'Kill agent (press again to confirm)';
     case 'confirm_kill':
       return 'Confirm kill';
     case 'toggle_meta_panel':
@@ -44,6 +45,11 @@ function formatAction(action: KeyAction): string {
     case 'show_help':
       return 'Show this help';
   }
+}
+
+/** Replace canonical 'Meta' prefix with 'Cmd' for display. */
+function displayCombo(combo: string): string {
+  return combo.replace(/^Meta\+/, 'Cmd+');
 }
 
 export function HelpModal({ onClose }: HelpModalProps) {
@@ -89,7 +95,7 @@ export function HelpModal({ onClose }: HelpModalProps) {
                 <div className="help-modal__bindings">
                   {entries.map(([combo, action]) => (
                     <div key={combo} className="help-modal__binding">
-                      <kbd className="help-modal__key">{combo}</kbd>
+                      <kbd className="help-modal__key">{displayCombo(combo)}</kbd>
                       <span className="help-modal__action">{formatAction(action)}</span>
                     </div>
                   ))}

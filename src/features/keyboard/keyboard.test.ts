@@ -43,46 +43,39 @@ describe('serializeKey', () => {
     expect(serializeKey(mockKeyEvent('X', { shiftKey: true }))).toBe('Shift+X');
   });
 
-  it('includes Meta modifier (Cmd on Mac)', () => {
-    expect(serializeKey(mockKeyEvent('Escape', { metaKey: true }))).toBe('Meta+Escape');
-    expect(serializeKey(mockKeyEvent('h', { metaKey: true }))).toBe('Meta+h');
-  });
-
-  it('includes Ctrl modifier', () => {
-    expect(serializeKey(mockKeyEvent('c', { ctrlKey: true }))).toBe('Ctrl+c');
-  });
-
-  it('includes Alt modifier', () => {
-    expect(serializeKey(mockKeyEvent('x', { altKey: true }))).toBe('Alt+x');
-  });
-
-  it('orders multiple modifiers consistently: Meta+Ctrl+Alt+Shift', () => {
-    expect(serializeKey(mockKeyEvent('a', {
-      metaKey: true,
-      ctrlKey: true,
-      altKey: true,
-      shiftKey: true,
-    }))).toBe('Meta+Ctrl+Alt+Shift+a');
-
-    // Same result regardless of which order they'd be pressed
-    expect(serializeKey(mockKeyEvent('a', {
-      shiftKey: true,
-      altKey: true,
-      ctrlKey: true,
-      metaKey: true,
-    }))).toBe('Meta+Ctrl+Alt+Shift+a');
-  });
-
   it('returns empty string for pure modifier key presses', () => {
-    expect(serializeKey(mockKeyEvent('Meta', { metaKey: true }))).toBe('');
+    expect(serializeKey(mockKeyEvent('Meta', { metaKey: true }), true)).toBe('');
     expect(serializeKey(mockKeyEvent('Shift', { shiftKey: true }))).toBe('');
     expect(serializeKey(mockKeyEvent('Control', { ctrlKey: true }))).toBe('');
     expect(serializeKey(mockKeyEvent('Alt', { altKey: true }))).toBe('');
   });
 
+  it('serializes Meta modifier via tracked state', () => {
+    expect(serializeKey(mockKeyEvent('h', { metaKey: true }), true)).toBe('Meta+h');
+    expect(serializeKey(mockKeyEvent('Escape', { metaKey: true }), true)).toBe('Meta+Escape');
+  });
+
+  it('does not include Meta when tracked state says false', () => {
+    expect(serializeKey(mockKeyEvent('h'), false)).toBe('h');
+  });
+
+  it('preserves Shift alongside Meta', () => {
+    expect(serializeKey(
+      mockKeyEvent('K', { metaKey: true, shiftKey: true }), true
+    )).toBe('Meta+Shift+K');
+  });
+
   it('handles ? key', () => {
     expect(serializeKey(mockKeyEvent('?'))).toBe('?');
-    expect(serializeKey(mockKeyEvent('?', { metaKey: true }))).toBe('Meta+?');
+    expect(serializeKey(mockKeyEvent('?'), true)).toBe('Meta+?');
+  });
+
+  it('includes Ctrl modifier from event', () => {
+    expect(serializeKey(mockKeyEvent('c', { ctrlKey: true }))).toBe('Ctrl+c');
+  });
+
+  it('includes Alt modifier from event', () => {
+    expect(serializeKey(mockKeyEvent('x', { altKey: true }))).toBe('Alt+x');
   });
 });
 
@@ -325,6 +318,33 @@ describe('KEYMAPS', () => {
       expect(vim.bindings.selected['?']).toEqual({ type: 'show_help' });
       expect(vim.bindings.terminal['Meta+?']).toEqual({ type: 'show_help' });
     });
+
+    it('terminal mode has Meta+hjkl for navigation', () => {
+      expect(vim.bindings.terminal['Meta+h']).toEqual({ type: 'navigate', direction: 'w' });
+      expect(vim.bindings.terminal['Meta+l']).toEqual({ type: 'navigate', direction: 'e' });
+      expect(vim.bindings.terminal['Meta+k']).toEqual({ type: 'navigate_vertical', direction: 'up' });
+      expect(vim.bindings.terminal['Meta+j']).toEqual({ type: 'navigate_vertical', direction: 'down' });
+    });
+
+    it('terminal mode has Meta+Enter to open panel', () => {
+      expect(vim.bindings.terminal['Meta+Enter']).toEqual({ type: 'open_panel' });
+    });
+
+    it('terminal mode has Meta+x to kill', () => {
+      expect(vim.bindings.terminal['Meta+x']).toEqual({ type: 'kill' });
+    });
+
+    it('terminal mode has Meta+g for origin and Meta+m for meta panel', () => {
+      expect(vim.bindings.terminal['Meta+g']).toEqual({ type: 'select_center' });
+      expect(vim.bindings.terminal['Meta+m']).toEqual({ type: 'toggle_meta_panel' });
+    });
+
+    it('terminal mode has Meta+Shift diagonal navigation', () => {
+      expect(vim.bindings.terminal['Meta+Shift+K']).toEqual({ type: 'navigate', direction: 'ne' });
+      expect(vim.bindings.terminal['Meta+Shift+J']).toEqual({ type: 'navigate', direction: 'se' });
+      expect(vim.bindings.terminal['Meta+Shift+H']).toEqual({ type: 'navigate', direction: 'nw' });
+      expect(vim.bindings.terminal['Meta+Shift+L']).toEqual({ type: 'navigate', direction: 'sw' });
+    });
   });
 
   describe.each(['vim', 'arrows'])('%s keymap navigation parity', (keymapId) => {
@@ -341,6 +361,49 @@ describe('KEYMAPS', () => {
       for (const [combo, action] of gridNavBindings) {
         expect(keymap.bindings.selected[combo]).toEqual(action);
       }
+    });
+  });
+
+  describe.each(['vim', 'arrows'])('%s keymap terminal-mode parity', (keymapId) => {
+    const keymap = KEYMAPS[keymapId];
+
+    it('terminal mode has Meta+ equivalent for every non-nav selected-mode action', () => {
+      // For every action in selected mode that is NOT navigation (which uses
+      // plain keys), there should be a Meta+ equivalent in terminal mode.
+      // Exceptions: Escape (can't Meta+Escape to clear_selection in terminal,
+      // because Meta+Escape means close_panel), and plain key spawns/kill.
+      const selectedBindings = Object.entries(keymap.bindings.selected);
+      const terminalBindings = keymap.bindings.terminal;
+
+      // Actions that need Meta+ equivalents in terminal mode
+      const actionsNeeded = ['open_panel', 'kill', 'select_center', 'toggle_meta_panel', 'show_help'];
+
+      for (const actionType of actionsNeeded) {
+        const selectedEntry = selectedBindings.find(([, a]) => a.type === actionType);
+        if (!selectedEntry) continue;
+
+        // Find Meta+ version in terminal mode
+        const hasTerminalBinding = Object.entries(terminalBindings).some(
+          ([, a]) => a.type === actionType
+        );
+        expect(hasTerminalBinding).toBe(true);
+      }
+    });
+
+    it('terminal mode has Meta+Enter for open_panel', () => {
+      expect(keymap.bindings.terminal['Meta+Enter']).toEqual({ type: 'open_panel' });
+    });
+
+    it('terminal mode has Meta+x for kill', () => {
+      expect(keymap.bindings.terminal['Meta+x']).toEqual({ type: 'kill' });
+    });
+
+    it('terminal mode has Meta+g for select_center', () => {
+      expect(keymap.bindings.terminal['Meta+g']).toEqual({ type: 'select_center' });
+    });
+
+    it('terminal mode has Meta+m for toggle_meta_panel', () => {
+      expect(keymap.bindings.terminal['Meta+m']).toEqual({ type: 'toggle_meta_panel' });
     });
   });
 

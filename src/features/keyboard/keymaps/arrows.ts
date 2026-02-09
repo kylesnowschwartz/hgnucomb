@@ -41,6 +41,12 @@ const UTILITIES: Record<KeyCombo, KeyAction> = {
   '?': { type: 'show_help' },
 };
 
+/** Leader+ utilities -- usable in terminal mode */
+const META_UTILITIES: Record<KeyCombo, KeyAction> = {
+  'Meta+g': { type: 'select_center' },
+  'Meta+m': { type: 'toggle_meta_panel' },
+};
+
 // ---------------------------------------------------------------------------
 // Keymap definition
 // ---------------------------------------------------------------------------
@@ -83,18 +89,23 @@ export const arrowsKeymap: Keymap = {
     },
 
     // ========================================================================
-    // Terminal mode
+    // Terminal mode: leader+ combos pass through xterm
     // ========================================================================
     terminal: {
       'Meta+Escape': { type: 'close_panel' },
       ...NAV_META_ARROWS,
 
-      // Spawn from terminal mode (Cmd+key passes through in standalone PWA;
-      // harmlessly ignored in a browser tab where Chrome eats the event)
+      // Actions available via leader key
+      'Meta+Enter': { type: 'open_panel' },
+      'Meta+x': { type: 'kill' },
+
+      // Spawn from terminal mode
       'Meta+t': { type: 'spawn', cellType: 'terminal' },
       'Meta+o': { type: 'spawn', cellType: 'orchestrator' },
       'Meta+w': { type: 'spawn', cellType: 'worker' },
 
+      // Utilities
+      ...META_UTILITIES,
       'Meta+?': { type: 'show_help' },
     },
   },

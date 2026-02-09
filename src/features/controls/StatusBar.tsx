@@ -21,18 +21,20 @@ const MODE_LABELS: Record<InputMode, string> = {
   terminal: 'TERMINAL',
 };
 
-const MODE_HINTS: Record<InputMode, string> = {
-  grid: 'hjkl navigate | Shift+hjkl diagonals | g origin | ? help',
-  selected: 'hjkl nav | Enter open | t/o/w spawn | X kill | Esc clear | Cmd+Esc close',
-  terminal: 'Cmd+O orchestrator | Cmd+Esc close | Click outside for grid controls',
-};
-
-/** Hints shown in standalone mode (Cmd+T/W available) */
-const PWA_MODE_HINTS: Record<InputMode, string> = {
-  grid: 'hjkl navigate | Shift+hjkl diagonals | g origin | ? help',
-  selected: 'hjkl nav | Enter open | t/o/w Cmd+T/W spawn | X kill | Esc clear',
-  terminal: 'Cmd+T terminal | Cmd+W worker | Cmd+O orchestrator | Cmd+Esc close',
-};
+function buildHints(isPwa: boolean): Record<InputMode, string> {
+  if (isPwa) {
+    return {
+      grid: 'hjkl navigate | Shift+hjkl diagonals | g origin | ? help',
+      selected: 'hjkl nav | Enter open | t/o/w Cmd+T/W spawn | X kill | Esc clear',
+      terminal: 'Cmd+T terminal | Cmd+W worker | Cmd+O orchestrator | Cmd+Esc close',
+    };
+  }
+  return {
+    grid: 'hjkl navigate | Shift+hjkl diagonals | g origin | ? help',
+    selected: 'hjkl nav | Enter open | t/o/w spawn | X kill | Esc clear | Cmd+Esc close',
+    terminal: 'Cmd+O orchestrator | Cmd+Esc close | Click outside for grid controls',
+  };
+}
 
 export function StatusBar() {
   const mode = useUIStore((s) => s.getMode());
@@ -42,7 +44,7 @@ export function StatusBar() {
   const isStandalone = usePwaStore((s) => s.isStandalone);
   const installPrompt = usePwaStore((s) => s.installPrompt);
 
-  const hints = isStandalone ? PWA_MODE_HINTS : MODE_HINTS;
+  const hints = useMemo(() => buildHints(isStandalone), [isStandalone]);
 
   // Show hovered hex coords (mouse tracking), fall back to selected hex (keyboard nav)
   const displayHex = hoveredHex || selectedHex;

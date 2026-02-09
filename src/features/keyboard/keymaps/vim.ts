@@ -53,11 +53,29 @@ const NAV_META_ARROWS: Record<KeyCombo, KeyAction> = {
   'Meta+ArrowDown': { type: 'navigate_vertical', direction: 'down' },
 };
 
+/** Leader+hjkl navigation -- usable in terminal mode */
+const NAV_META_HJKL: Record<KeyCombo, KeyAction> = {
+  'Meta+h': { type: 'navigate', direction: 'w' },
+  'Meta+l': { type: 'navigate', direction: 'e' },
+  'Meta+k': { type: 'navigate_vertical', direction: 'up' },
+  'Meta+j': { type: 'navigate_vertical', direction: 'down' },
+  'Meta+Shift+K': { type: 'navigate', direction: 'ne' },
+  'Meta+Shift+J': { type: 'navigate', direction: 'se' },
+  'Meta+Shift+H': { type: 'navigate', direction: 'nw' },
+  'Meta+Shift+L': { type: 'navigate', direction: 'sw' },
+};
+
 /** Utilities shared across grid and selected modes */
 const UTILITIES: Record<KeyCombo, KeyAction> = {
   g: { type: 'select_center' },
   m: { type: 'toggle_meta_panel' },
   '?': { type: 'show_help' },
+};
+
+/** Leader+ utilities -- usable in terminal mode */
+const META_UTILITIES: Record<KeyCombo, KeyAction> = {
+  'Meta+g': { type: 'select_center' },
+  'Meta+m': { type: 'toggle_meta_panel' },
 };
 
 // ---------------------------------------------------------------------------
@@ -112,21 +130,27 @@ export const vimKeymap: Keymap = {
     },
 
     // ========================================================================
-    // Terminal mode: panel open, most keys go to terminal
+    // Terminal mode: panel open, most keys go to terminal.
+    // Leader+ combos pass through xterm to reach the keymap router.
     // ========================================================================
     terminal: {
       'Meta+Escape': { type: 'close_panel' },
 
-      // Cmd+arrows for navigation while panel open
+      // Navigation: arrows and hjkl with leader
       ...NAV_META_ARROWS,
+      ...NAV_META_HJKL,
 
-      // Spawn from terminal mode (Cmd+key passes through in standalone PWA;
-      // harmlessly ignored in a browser tab where Chrome eats the event)
+      // Actions available via leader key
+      'Meta+Enter': { type: 'open_panel' },
+      'Meta+x': { type: 'kill' },
+
+      // Spawn from terminal mode
       'Meta+t': { type: 'spawn', cellType: 'terminal' },
       'Meta+o': { type: 'spawn', cellType: 'orchestrator' },
       'Meta+w': { type: 'spawn', cellType: 'worker' },
 
-      // Help
+      // Utilities
+      ...META_UTILITIES,
       'Meta+?': { type: 'show_help' },
     },
   },
