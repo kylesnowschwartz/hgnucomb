@@ -27,6 +27,7 @@ import type {
   McpReportResultResponse,
   McpGetMessagesResponse,
   McpGetWorkerStatusResponse,
+  McpCheckWorkersResponse,
   McpGetWorkerDiffResponse,
   McpListWorkerFilesResponse,
   McpListWorkerCommitsResponse,
@@ -37,6 +38,7 @@ import type {
   McpKillWorkerResponse,
   DetailedStatus,
   AgentMessage,
+  WorkerSummary,
 } from "../shared/protocol.ts";
 
 const WS_URL = process.env.HGNUCOMB_WS_URL ?? "ws://localhost:3001";
@@ -689,10 +691,80 @@ mcpServer.tool(
   }
 );
 
+// Tool: check_workers
+mcpServer.tool(
+  "check_workers",
+  "Get status of ALL your spawned workers in one call. Returns immediately (non-blocking). " +
+  "Use this to monitor progress while staying interactive with the user. " +
+  "Prefer this over await_worker when you want to remain responsive.",
+  {},
+  async () => {
+    if (!canSpawn()) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Permission denied: Only orchestrators can check workers. You are a ${CELL_TYPE}.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    try {
+      const result = await sendRequest<McpCheckWorkersResponse["payload"]>("mcp.checkWorkers", {});
+
+      if (!result.success) {
+        return {
+          content: [{ type: "text", text: `Failed to check workers: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      const workers = result.workers ?? [];
+      if (workers.length === 0) {
+        return {
+          content: [{ type: "text", text: "No workers spawned yet." }],
+        };
+      }
+
+      const summary = result.summary!;
+      const lines = workers.map((w: WorkerSummary) => {
+        const result = w.hasResult ? " [RESULT READY]" : "";
+        const msg = w.statusMessage ? ` (${w.statusMessage})` : "";
+        const task = w.task ? ` task="${w.task}"` : "";
+        return `  ${w.workerId}: ${w.status}${msg}${task}${result}`;
+      });
+
+      const header = `Workers: ${summary.total} total, ${summary.done} done, ${summary.error} error, ${summary.working} working`;
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${header}\n\n${lines.join("\n")}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
 // Tool: await_worker
 mcpServer.tool(
   "await_worker",
-  "Wait for a worker to complete. Polls status every 2s until done/error or timeout. Returns final status and any messages. Use this instead of get_messages to wait for worker results.",
+  "Wait for a worker to complete. Polls status every 2s until done/error or timeout. Returns final status and any messages. " +
+  "WARNING: This BLOCKS your session. Prefer check_workers for non-blocking status checks.",
   {
     workerId: z.string().describe("Worker agent ID to wait for"),
     timeout: z.number().optional().default(300000).describe("Timeout in ms (default: 300000/5min, max: 600000/10min)"),
