@@ -12,6 +12,7 @@ import { useKeyboardStore } from './keyboardStore';
 import { serializeKey, type KeyAction } from './types';
 import { getNeighborInDirection, getVerticalDirection } from './directions';
 import { isFocusInTextEntry } from './focusGuards';
+import { initModifierTracking, isMetaDown } from './modifierState';
 import type { CellType, HexCoordinate } from '@shared/types';
 
 interface UseKeyboardNavigationOptions {
@@ -163,7 +164,15 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
   }, []);
 
   useEffect(() => {
+    // Start explicit modifier tracking (blur/visibilitychange resets).
+    // Fixes macOS Cmd+Tab stickiness where e.metaKey stays true.
+    const cleanupModifiers = initModifierTracking();
+
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Use tracked Meta state instead of e.metaKey.
+      // The browser's metaKey property is unreliable on macOS after Cmd+Tab.
+      const meta = isMetaDown();
+
       // Check if focus is in the terminal panel
       const terminalPanel = document.querySelector('.terminal-panel');
       const focusIsInTerminal = terminalPanel?.contains(document.activeElement);
@@ -173,7 +182,7 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
 
       // TERMINAL FOCUSED: Let terminal handle ALL non-Meta keys.
       // Meta+ keys fall through to keymap lookup (Cmd+hjkl, Cmd+Escape, etc.)
-      if (focusIsInTerminal && !e.metaKey) {
+      if (focusIsInTerminal && !meta) {
         return;
       }
 
@@ -190,8 +199,8 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
       const uiMode = useUIStore.getState().getMode();
       const mode = (uiMode === 'terminal' && !focusIsInTerminal) ? 'selected' : uiMode;
 
-      // Serialize the key event
-      const combo = serializeKey(e);
+      // Serialize the key event (pass tracked meta to avoid stale e.metaKey)
+      const combo = serializeKey(e, meta);
       if (!combo) return; // Pure modifier key press
 
       // Look up in active keymap
@@ -217,7 +226,7 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
       // No action bound - decide if we should prevent default browser behavior
       // Allow essential editing shortcuts to pass through (copy/paste/undo/find)
       const isEditingShortcut =
-        (e.metaKey || e.ctrlKey) &&
+        (meta || e.ctrlKey) &&
         (e.key === 'c' || // copy
           e.key === 'v' || // paste
           e.key === 'x' || // cut
@@ -228,12 +237,15 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
 
       // Block problematic browser shortcuts (bookmark, address bar, search, new tab, etc.)
       // while allowing essential editing to work
-      if ((e.metaKey || e.ctrlKey) && !isEditingShortcut) {
+      if ((meta || e.ctrlKey) && !isEditingShortcut) {
         e.preventDefault();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      cleanupModifiers();
+    };
   }, [executeAction]);
 }

@@ -15,6 +15,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { useTerminalStore } from './terminalStore';
 import { TERMINAL_FONT } from './terminalConfig';
 import { isFocusInTextEntry } from '@features/keyboard/focusGuards';
+import { isMetaDown } from '@features/keyboard/modifierState';
 import { xtermTheme } from '@theme/catppuccin-mocha';
 import './fonts.css';
 import './TerminalPanel.css';
@@ -228,8 +229,9 @@ export function TerminalPanel({
   // EXCEPT for Cmd+ modified keys which are handled by keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't refocus on Cmd+ keys -- those are for navigation
-      if (e.metaKey) return;
+      // Don't refocus on Cmd+ keys -- those are for navigation.
+      // Use tracked state: e.metaKey is unreliable after Cmd+Tab on macOS.
+      if (isMetaDown()) return;
 
       // Navigation handler already claimed this key (e.g., 'h' for navigate)
       if (e.defaultPrevented) return;
@@ -292,8 +294,10 @@ export function TerminalPanel({
     // Meta+ keys always pass through: the terminal has no Cmd shortcuts,
     // so Cmd+Escape (close panel), Cmd+hjkl (navigate), Cmd+c/v (clipboard)
     // all bubble to the app or browser where they belong.
-    terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-      if (e.metaKey) return false;
+    // Use tracked Meta state to avoid macOS Cmd+Tab stickiness.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    terminal.attachCustomKeyEventHandler((_e: KeyboardEvent) => {
+      if (isMetaDown()) return false;
       return true;
     });
 

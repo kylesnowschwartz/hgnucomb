@@ -59,12 +59,17 @@ export type KeyCombo = string;
 
 /**
  * Serialize a KeyboardEvent to a KeyCombo string.
+ *
+ * @param meta - Override for Meta modifier state. When provided, used instead
+ *   of e.metaKey. Pass the tracked value from modifierState.ts to avoid the
+ *   macOS Cmd+Tab stickiness bug where e.metaKey reports true after the key
+ *   was released in another window.
  */
-export function serializeKey(e: KeyboardEvent): KeyCombo {
+export function serializeKey(e: KeyboardEvent, meta?: boolean): KeyCombo {
   const parts: string[] = [];
 
   // Modifiers in consistent order
-  if (e.metaKey) parts.push('Meta');
+  if (meta ?? e.metaKey) parts.push('Meta');
   if (e.ctrlKey) parts.push('Ctrl');
   if (e.altKey) parts.push('Alt');
   if (e.shiftKey) parts.push('Shift');
