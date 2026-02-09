@@ -133,6 +133,14 @@ export class TerminalSession {
   }
 
   /**
+   * Update the working directory for the next respawn.
+   * Used when converting an agent to terminal to set a valid CWD before respawning.
+   */
+  setCwd(cwd: string): void {
+    this.cwd = cwd;
+  }
+
+  /**
    * Respawn the PTY with a different shell (used when converting agent to terminal).
    * Kills the current process and starts a new shell as a regular terminal.
    */

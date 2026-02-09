@@ -614,6 +614,10 @@ Work autonomously. Do not ask questions.`;
         // instead of removing it. This allows users to "drop into" a shell after /exit.
         if (isClaudeAgent && metadata) {
           try {
+            // Set CWD to project root before respawn (worktree will be deleted)
+            const projectRoot = getProjectDirForAgent(metadata.agentId);
+            session.setCwd(projectRoot);
+
             // Respawn the session as a regular shell
             session.respawn();
 
@@ -1520,12 +1524,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
         break;
       }
 
-      // Clean up the worktree, inbox, and transcript watcher
-      const result = removeWorktree(getProjectDirForAgent(workerId), workerId);
-      agentInboxes.delete(workerId);
-      transcriptWatcher.stopWatching(workerId);
-
-      // Dispose PTY session and remove from all tracking maps
+      // Dispose PTY session first (while worktree still exists)
       const sessionId = findSessionByAgentId(workerId);
       if (sessionId) {
         manager.dispose(sessionId);
@@ -1533,6 +1532,11 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
         sessionClient.delete(sessionId);
         sessionMetadata.delete(sessionId);
       }
+
+      // Clean up the worktree, inbox, and transcript watcher after PTY is disposed
+      const result = removeWorktree(getProjectDirForAgent(workerId), workerId);
+      agentInboxes.delete(workerId);
+      transcriptWatcher.stopWatching(workerId);
 
       // Broadcast removal to all browser clients (even if worktree cleanup had issues - agent is gone)
       broadcastAgentRemoval(workerId, 'cleanup', sessionId);
