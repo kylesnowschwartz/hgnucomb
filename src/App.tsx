@@ -13,6 +13,7 @@ import { useAgentStore, type AgentState } from '@features/agents/agentStore';
 import { agentToSnapshot } from '@features/agents/snapshot';
 import { useEventLogStore } from '@features/events/eventLogStore';
 import { useKeyboardNavigation, HelpModal } from '@features/keyboard';
+import { usePwaLifecycle } from '@features/pwa';
 import { useViewportStore } from '@features/grid/viewportStore';
 import { useProjectStore } from '@features/project/projectStore';
 import { MetaPanel } from '@features/meta/MetaPanel';
@@ -105,6 +106,8 @@ const DEFAULT_PANEL_WIDTH = Math.min(930, window.innerWidth * 0.5);
 const DEFAULT_PANEL_HEIGHT = Math.min(600, window.innerHeight - 80);
 
 function App() {
+  usePwaLifecycle();
+
   const [dimensions, setDimensions] = useState({
     width: window.innerWidth,
     height: window.innerHeight,

@@ -68,19 +68,6 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
         const next = getNeighborInDirection(current, direction);
         selectHex(next);
 
-        // If in terminal mode with panel open, switch to agent at new hex if occupied
-        // Keep panel open when navigating to empty cells (user can close explicitly)
-        if (selectedAgentId) {
-          const agents = getAllAgents();
-          const agentAtNext = agents.find(
-            (a) => a.hex.q === next.q && a.hex.r === next.r
-          );
-          if (agentAtNext) {
-            selectAgent(agentAtNext.id);
-          }
-          // Empty cell: keep current panel open, just move hex selection
-        }
-
         // Pan viewport if needed
         optionsRef.current.onPanToHex?.(next);
         break;
@@ -108,7 +95,16 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
           (a) => a.hex.q === selectedHex.q && a.hex.r === selectedHex.r
         );
         if (agentAtHex) {
+          const alreadyOpen = selectedAgentId === agentAtHex.id;
           selectAgent(agentAtHex.id);
+          if (alreadyOpen) {
+            // Panel already showing this agent -- just refocus the terminal.
+            // New panels auto-focus via TerminalPanel's mount effect.
+            requestAnimationFrame(() => {
+              const el = document.querySelector('.terminal-panel textarea');
+              if (el instanceof HTMLElement) el.focus();
+            });
+          }
         }
         break;
       }
@@ -182,8 +178,9 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
       }
 
       // INPUT FOCUSED: Let the input handle all keys so users can actually type.
-      // Escape still bubbles up to close dropdowns via their own handlers.
-      if (focusIsInInput) {
+      // Skip this guard when focus is in the terminal panel -- xterm's textarea
+      // IS a <textarea>, but it's already handled by the terminal guard above.
+      if (focusIsInInput && !focusIsInTerminal) {
         return;
       }
 
@@ -200,7 +197,7 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
       // Look up in active keymap
       const keymap = useKeyboardStore.getState().getActiveKeymap();
       const bindings = keymap.bindings[mode];
-      let action = bindings[combo];
+      let action: KeyAction | undefined = bindings[combo];
 
       // Handle kill confirmation: if active, Enter confirms
       // (x already maps to 'kill' which handles both initiate and confirm)

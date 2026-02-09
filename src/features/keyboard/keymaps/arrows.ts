@@ -72,6 +72,9 @@ export const arrowsKeymap: Keymap = {
       t: { type: 'spawn', cellType: 'terminal' },
       o: { type: 'spawn', cellType: 'orchestrator' },
       w: { type: 'spawn', cellType: 'worker' },
+      'Meta+t': { type: 'spawn', cellType: 'terminal' },
+      'Meta+o': { type: 'spawn', cellType: 'orchestrator' },
+      'Meta+w': { type: 'spawn', cellType: 'worker' },
       x: { type: 'kill' },
 
       Escape: { type: 'clear_selection' },
@@ -85,6 +88,13 @@ export const arrowsKeymap: Keymap = {
     terminal: {
       'Meta+Escape': { type: 'close_panel' },
       ...NAV_META_ARROWS,
+
+      // Spawn from terminal mode (Cmd+key passes through in standalone PWA;
+      // harmlessly ignored in a browser tab where Chrome eats the event)
+      'Meta+t': { type: 'spawn', cellType: 'terminal' },
+      'Meta+o': { type: 'spawn', cellType: 'orchestrator' },
+      'Meta+w': { type: 'spawn', cellType: 'worker' },
+
       'Meta+?': { type: 'show_help' },
     },
   },

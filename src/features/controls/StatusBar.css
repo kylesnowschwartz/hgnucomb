@@ -64,3 +64,20 @@
   background: var(--ctp-surface0);
   border-radius: 3px;
 }
+
+.status-bar__install {
+  padding: 2px 8px;
+  border: 1px solid var(--ctp-mauve);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ctp-mauve);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.status-bar__install:hover {
+  background: var(--ctp-mauve);
+  color: var(--ctp-crust);
+}

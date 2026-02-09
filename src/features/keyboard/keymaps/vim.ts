@@ -94,6 +94,9 @@ export const vimKeymap: Keymap = {
       t: { type: 'spawn', cellType: 'terminal' },
       o: { type: 'spawn', cellType: 'orchestrator' },
       w: { type: 'spawn', cellType: 'worker' },
+      'Meta+t': { type: 'spawn', cellType: 'terminal' },
+      'Meta+o': { type: 'spawn', cellType: 'orchestrator' },
+      'Meta+w': { type: 'spawn', cellType: 'worker' },
 
       // x to initiate/confirm kill (lowercase, no modifier -- won't steal from terminal)
       x: { type: 'kill' },
@@ -114,14 +117,14 @@ export const vimKeymap: Keymap = {
     terminal: {
       'Meta+Escape': { type: 'close_panel' },
 
-      // Cmd+hjkl for navigation while panel open
-      'Meta+h': { type: 'navigate', direction: 'w' },
-      'Meta+l': { type: 'navigate', direction: 'e' },
-      'Meta+k': { type: 'navigate_vertical', direction: 'up' },
-      'Meta+j': { type: 'navigate_vertical', direction: 'down' },
-
-      // Cmd+arrows as alternative
+      // Cmd+arrows for navigation while panel open
       ...NAV_META_ARROWS,
+
+      // Spawn from terminal mode (Cmd+key passes through in standalone PWA;
+      // harmlessly ignored in a browser tab where Chrome eats the event)
+      'Meta+t': { type: 'spawn', cellType: 'terminal' },
+      'Meta+o': { type: 'spawn', cellType: 'orchestrator' },
+      'Meta+w': { type: 'spawn', cellType: 'worker' },
 
       // Help
       'Meta+?': { type: 'show_help' },

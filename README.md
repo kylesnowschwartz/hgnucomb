@@ -116,7 +116,7 @@ Vim-style by default. Arrow keys also work.
 | `o` | Spawn orchestrator |
 | `w` | Spawn worker |
 | `Enter` | Open terminal panel |
-| `Shift+X` | Kill (press twice) |
+| `x` | Kill (press twice) |
 | `Escape` | Close panel / deselect |
 | `g` | Jump to center |
 | `?` | Help overlay |
@@ -126,7 +126,7 @@ Vim-style by default. Arrow keys also work.
 | Key | Action |
 |-----|--------|
 | `Cmd+Escape` | Close panel |
-| `Cmd+hjkl` | Navigate grid with panel open |
+| `Cmd+Arrows` | Navigate grid with panel open |
 
 ## Architecture
 

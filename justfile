@@ -2,6 +2,7 @@
 
 # Start frontend and server in parallel (Vite HMR + tsx --watch)
 dev:
+    open http://localhost:5173 &
     pnpm dev:all
 
 # Install all dependencies
@@ -24,6 +25,7 @@ run:
     cd server && pnpm build
     @echo "Starting frozen prod on port 3002 (server + UI)..."
     @echo "Code changes will NOT hot reload. Run 'just run' to rebuild."
+    (sleep 1 && open http://localhost:3002) &
     cd server && PORT=3002 pnpm start
 
 # Kill all hgnucomb processes (dev + prod)

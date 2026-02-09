@@ -96,6 +96,8 @@ const MIME_TYPES: Record<string, string> = {
   ".ttf": "font/ttf",
   ".png": "image/png",
   ".ico": "image/x-icon",
+  ".json": "application/json",
+  ".webmanifest": "application/manifest+json",
 };
 
 /**
