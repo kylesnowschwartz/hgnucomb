@@ -19,6 +19,8 @@ import { useAgentStore, type AgentState, type FlashType } from '@features/agents
 import { useUIStore } from '@features/controls/uiStore';
 import { useEventLogStore } from '@features/events/eventLogStore';
 import { useViewportStore } from './viewportStore';
+import { computeFamilyGroups, buildFamilyLookup } from './hexPerimeter';
+import type { EdgeSegment } from './hexPerimeter';
 import { useShallow } from 'zustand/shallow';
 import { hexGrid, agentColors, palette } from '@theme/catppuccin-mocha';
 
@@ -509,22 +511,22 @@ export function HexGrid({
     return map;
   }, [agents]);
 
-  // Build set of agents that are part of a "family" (have parent-child connections)
-  // Used to give connected agents a shared thick black border
-  const familyMembers = useMemo(() => {
-    const members = new Set<string>();
-    for (const agent of agents) {
-      // Agent has connections (it's a child with a parent)
-      if (agent.connections.length > 0) {
-        members.add(agent.id);
-        // Also add all its connections (the parents)
-        for (const connId of agent.connections) {
-          members.add(connId);
-        }
+  // Compute family groups for merged-cell rendering.
+  // Families = orchestrator + direct workers. Internal edges are suppressed,
+  // perimeter edges drawn as a colored border ("mush together" effect).
+  const familyData = useMemo(() => {
+    const groups = computeFamilyGroups(agents, hexSize);
+    const lookup = buildFamilyLookup(groups);
+    const edges: Array<EdgeSegment & { color: string }> = [];
+    for (const group of groups.values()) {
+      if (group.perimeterEdges.length === 0) continue;
+      const color = darkenColor(CELL_COLORS[group.rootCellType], 0.2);
+      for (const edge of group.perimeterEdges) {
+        edges.push({ ...edge, color });
       }
     }
-    return members;
-  }, [agents]);
+    return { groups, lookup, edges };
+  }, [agents, hexSize]);
 
   // Build lookup: orchestrator agentId -> { done, total } child progress
   const orchestratorProgress = useMemo(() => {
@@ -544,18 +546,19 @@ export function HexGrid({
 
   // Sort hexes by z-priority so strokes render on top of adjacent fills.
   // Higher priority = rendered later = visually on top.
-  // empty(0) < family(1) < hovered(2) < keyboard-selected(3) < panel-open(4)
+  // Family members no longer need z-boost: perimeter edges render in a
+  // separate pass above all hex fills.
+  // empty(0) < hovered(1) < keyboard-selected(2) < panel-open(3)
   const sortedHexes = useMemo(() => {
     const priority = (hex: { q: number; r: number }): number => {
       const agent = agentByHex.get(`${hex.q},${hex.r}`);
-      if (agent?.id === selectedAgentId) return 4;
-      if (selectedHex?.q === hex.q && selectedHex?.r === hex.r) return 3;
-      if (hoveredHex?.q === hex.q && hoveredHex?.r === hex.r) return 2;
-      if (agent && familyMembers.has(agent.id)) return 1;
+      if (agent?.id === selectedAgentId) return 3;
+      if (selectedHex?.q === hex.q && selectedHex?.r === hex.r) return 2;
+      if (hoveredHex?.q === hex.q && hoveredHex?.r === hex.r) return 1;
       return 0;
     };
     return [...visibleHexes].sort((a, b) => priority(a) - priority(b));
-  }, [visibleHexes, agentByHex, selectedAgentId, selectedHex, hoveredHex, familyMembers]);
+  }, [visibleHexes, agentByHex, selectedAgentId, selectedHex, hoveredHex]);
 
   /**
    * Handle wheel zoom - scales toward cursor position.
@@ -639,7 +642,9 @@ export function HexGrid({
             selectedHex && selectedHex.q === hex.q && selectedHex.r === hex.r;
           const isHovered =
             hoveredHex && hoveredHex.q === hex.q && hoveredHex.r === hex.r;
-          const isInFamily = agent && familyMembers.has(agent.id);
+          // Family merge: suppress grid stroke when hex is part of a multi-member family.
+          // Internal edges vanish; perimeter edges render in a separate pass above.
+          const isInMergedFamily = familyData.lookup.has(`${hex.q},${hex.r}`);
 
           // Fill: cell type color > selected/hover highlight > default
           const fill = agent
@@ -650,26 +655,27 @@ export function HexGrid({
                 ? STYLE.hexFillHover
                 : STYLE.hexFill;
 
-          // Stroke: neon accent for panel-open/selected, darkened fill for family/hover, gray default
+          // Stroke: neon accent for interaction states, transparent for merged families, gray default.
+          // Hover/select temporarily reveals individual cell boundaries within the merged blob.
           const stroke = isPanelOpen
             ? STYLE.accentNeon
             : isSelected
               ? STYLE.accentNeon
-              : isInFamily
+              : isHovered
                 ? darkenColor(fill, 0.3)
-                : isHovered
-                  ? darkenColor(fill, 0.3)
+                : isInMergedFamily
+                  ? 'transparent'
                   : STYLE.hexStroke;
 
-          // Stroke width: thin neon, medium family, subtle hover
+          // Stroke width: neon accents > hover > merged (hidden) > default grid
           const strokeWidth = isPanelOpen
             ? 2
             : isSelected
               ? 2
-              : isInFamily
-                ? 3
-                : isHovered
-                  ? 1.5
+              : isHovered
+                ? 1.5
+                : isInMergedFamily
+                  ? 0
                   : STYLE.gridStrokeWidth;
 
           // Dash: dashed border for keyboard-selected (not panel-open, which is solid)
@@ -754,6 +760,18 @@ export function HexGrid({
         })}
 
 
+
+        {/* Family perimeter borders (merged cell boundaries) */}
+        {familyData.edges.map((edge, i) => (
+          <Line
+            key={`fam-edge-${i}`}
+            points={[edge.x1, edge.y1, edge.x2, edge.y2]}
+            stroke={edge.color}
+            strokeWidth={2.5}
+            lineCap="round"
+            listening={false}
+          />
+        ))}
 
         {/* Render flash overlays for status transitions */}
         {Array.from(flashes.entries()).map(([agentId, flashType]: [string, FlashType]) => {

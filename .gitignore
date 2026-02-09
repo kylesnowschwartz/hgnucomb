@@ -38,3 +38,6 @@ build
 src/generated/
 
 .agent-assets/
+
+# Transcript path file (created by transcript watcher, agent-specific)
+.hgnucomb-transcript-path

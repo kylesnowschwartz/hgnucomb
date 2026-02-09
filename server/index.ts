@@ -4,8 +4,9 @@
  * Listens on PORT env var (default 3001), manages PTY sessions, and routes
  * messages between browser clients and terminal processes.
  *
- * When a built frontend exists in dist/, serves it as static files on the
- * same port. Otherwise runs as WebSocket-only (dev mode with Vite on :5173).
+ * Mode detection (explicit, not filesystem-based):
+ * - PORT set: Prod mode, serve dist/ on that port (e.g., PORT=3002)
+ * - PORT not set: Dev mode, WebSocket-only on 3001 (Vite on :5173)
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "http";
@@ -73,7 +74,8 @@ import { TranscriptWatcher } from "./transcript-watcher.js";
 
 runPreflight();
 
-const PORT = parseInt(process.env.PORT ?? '3001', 10);
+const PORT_ENV = process.env.PORT;
+const PORT = parseInt(PORT_ENV ?? '3001', 10);
 const manager = new TerminalSessionManager();
 const transcriptWatcher = new TranscriptWatcher();
 
@@ -106,7 +108,9 @@ const TOOL_DIR = getGitRoot(process.cwd()) ?? HGNUCOMB_ROOT;
 // ============================================================================
 
 const DIST_DIR = resolve(HGNUCOMB_ROOT, "dist");
-const SERVE_STATIC = existsSync(DIST_DIR);
+// Prod mode if PORT env var is explicitly set (not default)
+// Dev mode (WebSocket-only) if PORT not set - even if dist/ exists
+const SERVE_STATIC = PORT_ENV !== undefined;
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
