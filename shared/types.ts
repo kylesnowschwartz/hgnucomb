@@ -71,6 +71,8 @@ export interface StoredAgentMetadata extends AgentSnapshot {
   statusMessage?: string;
   /** Directory of the target project (where agents work). Falls back to server's TOOL_DIR. */
   projectDir?: string;
+  /** Epoch ms when the session was created (for elapsed time display) */
+  createdAt?: number;
 }
 
 // ============================================================================

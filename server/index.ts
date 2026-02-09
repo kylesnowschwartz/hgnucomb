@@ -63,6 +63,7 @@ import {
   checkMergeConflicts,
   mergeWorkerToStaging,
   mergeStagingToMain,
+  gitExecWithError,
 } from "./git.js";
 import { join, resolve, extname, basename } from "path";
 import { existsSync, readFileSync } from "fs";
@@ -534,6 +535,7 @@ Work autonomously. Do not ask questions.`;
           instructions,
           detailedStatus: 'pending',
           projectDir: projectDir ?? TOOL_DIR,
+          createdAt: Date.now(),
         });
 
         // Initialize activity tracking only for Claude agents (not plain terminals)
@@ -1647,6 +1649,90 @@ if (SERVE_STATIC) {
 console.log(`[Server] WebSocket listening on ws://localhost:${PORT}`);
 
 // ============================================================================
+// Agent Activity Broadcast (HUD observability)
+// ============================================================================
+
+const ACTIVITY_BROADCAST_INTERVAL_MS = 5000;  // 5 seconds
+
+/**
+ * Get git commit count and recent commits for an agent's worktree branch.
+ * Returns { count: 0, commits: [] } if not in a git repo or no commits.
+ */
+function getAgentGitInfo(agentId: string): { count: number; commits: string[] } {
+  const projectDir = getProjectDirForAgent(agentId);
+  const gitRoot = getGitRoot(projectDir);
+  if (!gitRoot) return { count: 0, commits: [] };
+
+  // Agent worktree branch is named hgnucomb-<agentId>
+  const branch = `hgnucomb-${agentId}`;
+
+  // Count commits on branch vs main
+  const countResult = gitExecWithError(
+    ["rev-list", "--count", `main..${branch}`],
+    gitRoot
+  );
+  const count = countResult.ok ? parseInt(countResult.output, 10) || 0 : 0;
+
+  if (count === 0) return { count: 0, commits: [] };
+
+  // Get recent commit messages
+  const logResult = gitExecWithError(
+    ["log", "--oneline", "-3", branch, "--not", "main"],
+    gitRoot
+  );
+  const commits = logResult.ok
+    ? logResult.output.split("\n").filter(Boolean)
+    : [];
+
+  return { count, commits };
+}
+
+/**
+ * Broadcast agent activity data to all browser clients.
+ * Runs every 5 seconds, only includes Claude agents (not plain terminals).
+ */
+const activityBroadcastInterval = setInterval(() => {
+  if (browserClients.size === 0) return;  // No browsers connected
+
+  const agentActivities: Array<{
+    agentId: string;
+    createdAt: number;
+    lastActivityAt: number;
+    gitCommitCount: number;
+    gitRecentCommits: string[];
+  }> = [];
+
+  for (const [sessionId, metadata] of sessionMetadata.entries()) {
+    // Skip plain terminals (only report Claude agents)
+    if (metadata.cellType === 'terminal') continue;
+
+    const activity = sessionActivity.get(sessionId);
+    const gitInfo = getAgentGitInfo(metadata.agentId);
+
+    agentActivities.push({
+      agentId: metadata.agentId,
+      createdAt: metadata.createdAt ?? Date.now(),
+      lastActivityAt: activity?.lastOutputTime ?? 0,
+      gitCommitCount: gitInfo.count,
+      gitRecentCommits: gitInfo.commits,
+    });
+  }
+
+  if (agentActivities.length === 0) return;
+
+  const msg = JSON.stringify({
+    type: 'agent.activity',
+    payload: { agents: agentActivities },
+  });
+
+  for (const browser of browserClients) {
+    if (browser.readyState === WebSocket.OPEN) {
+      browser.send(msg);
+    }
+  }
+}, ACTIVITY_BROADCAST_INTERVAL_MS);
+
+// ============================================================================
 // Activity Check Interval (idle detection)
 // ============================================================================
 
@@ -1673,6 +1759,7 @@ const activityCheckInterval = setInterval(() => {
 function shutdown(signal: string): void {
   console.log(`\n${signal} received, shutting down...`);
   clearInterval(activityCheckInterval);
+  clearInterval(activityBroadcastInterval);
   manager.disposeAll();
 
   // Forcibly close all WebSocket connections so the server can close immediately

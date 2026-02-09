@@ -410,6 +410,24 @@ function App() {
         return;
       }
 
+      // Handle agent activity broadcast (HUD observability data)
+      if (msg.type === 'agent.activity') {
+        const { agents: activities } = msg.payload as {
+          agents: Array<{
+            agentId: string;
+            createdAt: number;
+            lastActivityAt: number;
+            gitCommitCount: number;
+            gitRecentCommits: string[];
+          }>;
+        };
+        const { updateActivity } = useAgentStore.getState();
+        for (const activity of activities) {
+          updateActivity(activity.agentId, activity);
+        }
+        return;
+      }
+
       // Handle inferred status updates (from PTY activity detection)
       // Inferred status must NOT override sticky states that were explicitly reported
       // Exception: 'done' agents can transition back to 'working' via PTY activity

@@ -762,6 +762,33 @@ export interface InboxSyncMessage {
 }
 
 // ============================================================================
+// Agent Activity Broadcast (server -> browser, periodic)
+// ============================================================================
+
+/**
+ * Periodic activity data for agent observability HUD.
+ * Sent every 5 seconds for each Claude agent session.
+ */
+export interface AgentActivityMessage {
+  type: 'agent.activity';
+  payload: {
+    agents: AgentActivityData[];
+  };
+}
+
+export interface AgentActivityData {
+  agentId: string;
+  /** Session creation time (epoch ms) */
+  createdAt: number;
+  /** Last PTY output time (epoch ms), 0 if never */
+  lastActivityAt: number;
+  /** Number of commits on agent's worktree branch vs main */
+  gitCommitCount: number;
+  /** Recent commit messages (last 3, one-line) */
+  gitRecentCommits: string[];
+}
+
+// ============================================================================
 // Agent Removal Notification (server -> browser)
 // ============================================================================
 

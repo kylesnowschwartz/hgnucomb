@@ -39,6 +39,15 @@ export interface AgentState {
   model?: AgentModel;
   /** Message inbox for receiving results and broadcasts */
   inbox: AgentMessage[];
+  // Activity data (populated by server agent.activity broadcast)
+  /** Session creation timestamp (epoch ms) */
+  createdAt?: number;
+  /** Last PTY output timestamp (epoch ms) */
+  lastActivityAt?: number;
+  /** Number of git commits in agent's worktree branch */
+  gitCommitCount?: number;
+  /** Recent commit messages (last 3-5, one-line each) */
+  gitRecentCommits?: string[];
 }
 
 export interface SpawnOptions {
@@ -51,8 +60,13 @@ export interface SpawnOptions {
   model?: AgentModel;
 }
 
+/** Transient flash state for status transition animations (done/error) */
+export type FlashType = 'done' | 'error';
+
 interface AgentStore {
   agents: Map<string, AgentState>;
+  /** Active flashes: agentId -> flash type. Cleared by HexGrid after animation. */
+  flashes: Map<string, FlashType>;
   clear: () => void;
   getAgent: (id: string) => AgentState | undefined;
   getAllAgents: () => AgentState[];
@@ -67,12 +81,22 @@ interface AgentStore {
   // Inbox operations for bilateral communication
   addMessageToInbox: (agentId: string, message: AgentMessage) => boolean;
   getMessages: (agentId: string, since?: string) => AgentMessage[];
+  // Flash operations (for hex cell transition animations)
+  clearFlash: (agentId: string) => void;
+  // Activity data (from server agent.activity broadcast)
+  updateActivity: (agentId: string, data: {
+    createdAt: number;
+    lastActivityAt: number;
+    gitCommitCount: number;
+    gitRecentCommits: string[];
+  }) => void;
 }
 
 export const useAgentStore = create<AgentStore>()((set, get) => ({
   agents: new Map(),
+  flashes: new Map(),
 
-  clear: () => set({ agents: new Map() }),
+  clear: () => set({ agents: new Map(), flashes: new Map() }),
   getAgent: (id) => get().agents.get(id),
   getAllAgents: () => Array.from(get().agents.values()),
 
@@ -139,13 +163,24 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       return undefined;
     }
     const previousStatus = existing.detailedStatus;
-    set((s) => ({
-      agents: new Map(s.agents).set(agentId, {
-        ...existing,
-        detailedStatus: status,
-        statusMessage: message,
-      }),
-    }));
+
+    // Trigger flash on terminal status transitions (done/error)
+    const flashType: FlashType | null =
+      status === 'done' && previousStatus !== 'done' ? 'done' :
+      status === 'error' && previousStatus !== 'error' ? 'error' :
+      null;
+
+    set((s) => {
+      const newFlashes = flashType ? new Map(s.flashes).set(agentId, flashType) : s.flashes;
+      return {
+        agents: new Map(s.agents).set(agentId, {
+          ...existing,
+          detailedStatus: status,
+          statusMessage: message,
+        }),
+        flashes: newFlashes,
+      };
+    });
     console.log('[AgentStore] Status updated:', agentId, previousStatus, '->', status);
     return previousStatus;
   },
@@ -171,6 +206,28 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       message.payload
     );
     return true;
+  },
+
+  clearFlash: (agentId) => {
+    set((s) => {
+      const next = new Map(s.flashes);
+      next.delete(agentId);
+      return { flashes: next };
+    });
+  },
+
+  updateActivity: (agentId, data) => {
+    const existing = get().agents.get(agentId);
+    if (!existing) return;
+    set((s) => ({
+      agents: new Map(s.agents).set(agentId, {
+        ...existing,
+        createdAt: data.createdAt,
+        lastActivityAt: data.lastActivityAt,
+        gitCommitCount: data.gitCommitCount,
+        gitRecentCommits: data.gitRecentCommits,
+      }),
+    }));
   },
 
   getMessages: (agentId, since) => {

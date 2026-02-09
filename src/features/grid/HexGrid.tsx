@@ -13,9 +13,9 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Stage, Layer, Line, RegularPolygon, Circle, Group, Text } from 'react-konva';
 import Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
-import { hexToPixel, hexesInRect } from '@shared/types';
+import { hexToPixel, hexesInRect, TERMINAL_STATUSES } from '@shared/types';
 import type { AgentStatus, CellType, DetailedStatus } from '@shared/types';
-import { useAgentStore, type AgentState } from '@features/agents/agentStore';
+import { useAgentStore, type AgentState, type FlashType } from '@features/agents/agentStore';
 import { useUIStore } from '@features/controls/uiStore';
 import { useEventLogStore } from '@features/events/eventLogStore';
 import { useViewportStore } from './viewportStore';
@@ -65,6 +65,37 @@ const STATUS_OPACITY: Record<AgentStatus, number> = {
   blocked: 0.5,
   offline: 0.3,
 };
+
+// ============================================================================
+// Satellite Indicators - conditional labels around the center badge
+//
+// Zoom fade: satellites are illegible at low zoom. Fade them out below 0.8x
+// and fully hide below 0.5x. Badge remains always visible.
+// ============================================================================
+
+/** Compute satellite opacity based on current zoom scale */
+function satelliteOpacity(scale: number): number {
+  return Math.min(1, Math.max(0, (scale - 0.5) / 0.3));
+}
+
+/** Format elapsed time for satellite display: "0m", "3m", "1h", "2h" */
+function formatElapsed(createdAt: number, now: number): string {
+  const elapsedMs = now - createdAt;
+  const minutes = Math.floor(elapsedMs / 60000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h`;
+}
+
+/** Format idle time: "idle 1m", "idle 5m" */
+function formatIdle(lastActivityAt: number, now: number): string | null {
+  if (!lastActivityAt) return null;
+  const idleMs = now - lastActivityAt;
+  if (idleMs < 60000) return null; // Less than 1 minute idle - don't show
+  const minutes = Math.floor(idleMs / 60000);
+  if (minutes < 60) return `idle ${minutes}m`;
+  return `idle ${Math.floor(minutes / 60)}h`;
+}
 
 // ============================================================================
 // Status Badge System - Visual indicators at center of hex cells
@@ -284,6 +315,52 @@ function StatusBadge({ status, x, y }: { status: DetailedStatus; x: number; y: n
 }
 
 // ============================================================================
+// Flash Overlay - brief color pulse on status transitions
+// ============================================================================
+
+const FLASH_DURATION_MS = 400;
+const FLASH_COLORS: Record<string, string> = {
+  done: palette.green,
+  error: palette.red,
+};
+
+/** Temporary hex overlay that fades from 30% opacity to 0 */
+function FlashOverlay({ x, y, hexSize, flashType, onComplete }: {
+  x: number; y: number; hexSize: number; flashType: string; onComplete: () => void;
+}) {
+  const polygonRef = useRef<Konva.RegularPolygon>(null);
+
+  useEffect(() => {
+    const node = polygonRef.current;
+    if (!node) return;
+
+    const tween = new Konva.Tween({
+      node,
+      duration: FLASH_DURATION_MS / 1000,
+      opacity: 0,
+      easing: Konva.Easings.EaseOut,
+      onFinish: onComplete,
+    });
+    tween.play();
+
+    return () => { tween.destroy(); };
+  }, [onComplete]);
+
+  return (
+    <RegularPolygon
+      ref={polygonRef}
+      x={x}
+      y={y}
+      sides={6}
+      radius={hexSize}
+      fill={FLASH_COLORS[flashType] ?? palette.green}
+      opacity={0.3}
+      listening={false}
+    />
+  );
+}
+
+// ============================================================================
 // Component Props
 // ============================================================================
 
@@ -305,6 +382,13 @@ export function HexGrid({
   height,
   hexSize = STYLE.hexSize,
 }: HexGridProps) {
+  // Tick counter for elapsed time updates (1-second re-render)
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Viewport state (local state, synced to store for external components)
   const [scale, setScaleLocal] = useState(1);
   const [position, setPositionLocal] = useState({ x: width / 2, y: height / 2 });
@@ -339,7 +423,7 @@ export function HexGrid({
   // This synchronizes external store state with local React state - intentional setState in effect
   useEffect(() => {
     if (pendingPan) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: sync external store -> local state
       setPositionLocal(pendingPan.position);
       clearPendingPan();
     }
@@ -357,6 +441,8 @@ export function HexGrid({
   // Agent state - useShallow prevents infinite re-render from new array references
   const agents = useAgentStore(useShallow((s) => s.getAllAgents()));
   const spawnAgent = useAgentStore((s) => s.spawnAgent);
+  const flashes = useAgentStore(useShallow((s) => Array.from(s.flashes.entries())));
+  const clearFlash = useAgentStore((s) => s.clearFlash);
 
   // Event logging
   const addSpawn = useEventLogStore((s) => s.addSpawn);
@@ -404,6 +490,22 @@ export function HexGrid({
       }
     }
     return members;
+  }, [agents]);
+
+  // Build lookup: orchestrator agentId -> { done, total } child progress
+  const orchestratorProgress = useMemo(() => {
+    const progress = new Map<string, { done: number; total: number }>();
+    for (const agent of agents) {
+      if (agent.parentId) {
+        const parent = progress.get(agent.parentId) ?? { done: 0, total: 0 };
+        parent.total++;
+        if (TERMINAL_STATUSES.has(agent.detailedStatus)) {
+          parent.done++;
+        }
+        progress.set(agent.parentId, parent);
+      }
+    }
+    return progress;
   }, [agents]);
 
   // Sort hexes so active ones render last (strokes on top of adjacent hexes)
@@ -619,6 +721,23 @@ export function HexGrid({
 
 
 
+        {/* Render flash overlays for status transitions */}
+        {flashes.map(([agentId, flashType]: [string, FlashType]) => {
+          const agent = agentByHex.size > 0 ? agents.find(a => a.id === agentId) : undefined;
+          if (!agent) return null;
+          const { x, y } = hexToPixel(agent.hex, hexSize);
+          return (
+            <FlashOverlay
+              key={`flash-${agentId}`}
+              x={x}
+              y={y}
+              hexSize={hexSize}
+              flashType={flashType}
+              onComplete={() => clearFlash(agentId)}
+            />
+          );
+        })}
+
         {/* Render status badges at center of agent hex cells */}
         {agents.map((agent) => {
           const { x, y } = hexToPixel(agent.hex, hexSize);
@@ -630,6 +749,87 @@ export function HexGrid({
               x={x}
               y={y}
             />
+          );
+        })}
+
+        {/* Render satellite indicators on agent hex cells */}
+        {agents.map((agent) => {
+          // Skip plain terminals - satellites only for Claude agents
+          if (agent.cellType === 'terminal') return null;
+
+          const { x, y } = hexToPixel(agent.hex, hexSize);
+          const satOpacity = satelliteOpacity(scale);
+          if (satOpacity <= 0) return null;
+
+          const progress = orchestratorProgress.get(agent.id);
+          const hasProgress = progress && progress.total > 0;
+
+          // Elapsed time: show "idle Xm" if idle >1min, else "Xm" from creation
+          let elapsedText: string | null = null;
+          if (agent.createdAt) {
+            const idleText = agent.lastActivityAt ? formatIdle(agent.lastActivityAt, now) : null;
+            elapsedText = idleText ?? formatElapsed(agent.createdAt, now);
+          }
+
+          const hasGit = (agent.gitCommitCount ?? 0) > 0;
+
+          return (
+            <Group key={`sat-${agent.id}`} listening={false}>
+              {/* T: Elapsed time (top, above badge) */}
+              {elapsedText && (
+                <Text
+                  x={x}
+                  y={y - 18}
+                  text={elapsedText}
+                  fontSize={9}
+                  fontFamily="monospace"
+                  fill={palette.overlay1}
+                  align="center"
+                  width={40}
+                  offsetX={20}
+                  offsetY={4.5}
+                  opacity={satOpacity}
+                  listening={false}
+                />
+              )}
+
+              {/* P: Worker progress (bottom, below badge) */}
+              {hasProgress && (
+                <Text
+                  x={x}
+                  y={y + 18}
+                  text={`${progress.done}/${progress.total}`}
+                  fontSize={9}
+                  fontFamily="monospace"
+                  fill={palette.subtext0}
+                  align="center"
+                  width={40}
+                  offsetX={20}
+                  offsetY={4.5}
+                  opacity={satOpacity}
+                  listening={false}
+                />
+              )}
+
+              {/* G: Git commit count (bottom-right) */}
+              {hasGit && (
+                <Group x={x + 20} y={y + 25} opacity={satOpacity} listening={false}>
+                  <Circle radius={8} fill={palette.green} />
+                  <Text
+                    text={String(agent.gitCommitCount)}
+                    fontSize={8}
+                    fontFamily="monospace"
+                    fill={palette.crust}
+                    align="center"
+                    verticalAlign="middle"
+                    width={16}
+                    height={16}
+                    offsetX={8}
+                    offsetY={8}
+                  />
+                </Group>
+              )}
+            </Group>
           );
         })}
 

@@ -1,0 +1,188 @@
+/**
+ * AgentDetailsWidget styles - agent observability panel (Catppuccin Mocha)
+ *
+ * Lives inside MetaPanel, follows same conventions as ProjectWidget.
+ */
+
+.agent-details {
+  background: var(--ctp-base);
+  border-radius: 8px;
+  padding: 10px;
+  font-family: 'JetBrainsMono Nerd Font', 'SF Mono', Consolas, monospace;
+  font-size: 11px;
+  color: var(--ctp-subtext1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Header: type dot + cell type name + truncated ID */
+
+.agent-details__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-details__type-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.agent-details__type-dot--terminal {
+  background: var(--ctp-teal);
+}
+
+.agent-details__type-dot--orchestrator {
+  background: var(--ctp-blue);
+}
+
+.agent-details__type-dot--worker {
+  background: var(--ctp-green);
+}
+
+.agent-details__type-name {
+  color: var(--ctp-text);
+  font-weight: 600;
+}
+
+.agent-details__id {
+  color: var(--ctp-overlay1);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Info rows */
+
+.agent-details__row {
+  display: flex;
+  gap: 6px;
+  line-height: 1.4;
+}
+
+.agent-details__label {
+  color: var(--ctp-overlay1);
+  flex-shrink: 0;
+}
+
+.agent-details__value {
+  color: var(--ctp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-details__value--muted {
+  color: var(--ctp-overlay0);
+  font-style: italic;
+}
+
+/* Status line */
+
+.agent-details__status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.agent-details__status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Workers section */
+
+.agent-details__section {
+  border-top: 1px solid var(--ctp-surface0);
+  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-details__section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ctp-overlay1);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.agent-details__section-summary {
+  color: var(--ctp-subtext0);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.agent-details__worker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  font-size: 10px;
+  color: var(--ctp-subtext0);
+}
+
+.agent-details__worker-status {
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.agent-details__worker-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.agent-details__worker-task {
+  color: var(--ctp-overlay1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+
+/* Task text (multi-line allowed, truncated) */
+
+.agent-details__task {
+  color: var(--ctp-text);
+  font-size: 10px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Placeholder when no agent selected */
+
+.agent-details__empty {
+  color: var(--ctp-overlay0);
+  font-style: italic;
+  font-size: 11px;
+  padding: 4px 0;
+}
+
+/* Git section */
+
+.agent-details__commit {
+  font-size: 10px;
+  color: var(--ctp-subtext0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 0;
+}

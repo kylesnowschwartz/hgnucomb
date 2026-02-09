@@ -608,6 +608,7 @@ export class WebSocketBridge implements TerminalBridge {
         const msgAny = msg as { type: string };
         if (
           msgAny.type === 'agent.removed' ||
+          msgAny.type === 'agent.activity' ||
           msgAny.type === 'mcp.statusUpdate' ||
           msgAny.type === 'inbox.sync' ||
           msgAny.type === 'mcp.broadcast.event' ||
