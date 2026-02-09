@@ -64,7 +64,7 @@ import {
   mergeWorkerToStaging,
   mergeStagingToMain,
 } from "./git.js";
-import { join, resolve, extname } from "path";
+import { join, resolve, extname, basename } from "path";
 import { existsSync, readFileSync } from "fs";
 import { saveImageForSession } from "./imageStorage.js";
 import { runPreflight } from "./preflight.js";
@@ -77,11 +77,16 @@ const manager = new TerminalSessionManager();
 /**
  * HGNUCOMB_ROOT: where the hgnucomb package is installed on disk.
  *
- * Derived from the running bundle location (server/dist/index.js -> ../..).
  * Used for package-relative paths: built frontend, plugins, MCP server binary.
- * This is correct regardless of CWD (dev, prod, npx from another project).
+ *
+ * In prod (bundled):  import.meta.dirname = .../server/dist  → up 2 levels
+ * In dev (tsx):       import.meta.dirname = .../server       → up 1 level
+ *
+ * We detect by checking if we're in a "dist" directory.
  */
-const HGNUCOMB_ROOT = resolve(import.meta.dirname, "..", "..");
+const HGNUCOMB_ROOT = basename(import.meta.dirname) === "dist"
+  ? resolve(import.meta.dirname, "..", "..")
+  : resolve(import.meta.dirname, "..");
 
 /**
  * TOOL_DIR: the project directory hgnucomb operates in.
