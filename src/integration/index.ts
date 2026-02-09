@@ -47,3 +47,4 @@ export { createThreeWorkerTest, createOrchestratorStatusTest } from './scripts/t
 export { createBilateralCommunicationTest, createTaskAssignmentTest } from './scripts/bilateralCommunication';
 export { createMultiCycleDemoTest } from './scripts/multiCycleDemo';
 export { createStagingWorkflowTest, createSimpleMergeTest } from './scripts/stagingWorkflow';
+export { createHudShowcaseTest } from './scripts/hudShowcase';

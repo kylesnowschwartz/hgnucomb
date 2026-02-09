@@ -142,31 +142,38 @@ const STATUS_BADGE_CONFIG: Record<DetailedStatus, StatusBadgeConfig> = {
 };
 
 // ============================================================================
+// Shared Animation Loop
+//
+// All animated badges register callbacks with a single Konva.Animation instead
+// of each creating their own. One animation = one rAF = one layer redraw per
+// frame, eliminating jitter from competing animation loops.
+// ============================================================================
+
+/** Callback invoked on each animation frame with elapsed seconds */
+type AnimUpdateFn = (timeSec: number) => void;
+/** Register an animation callback by id, returns unregister function */
+type AnimRegisterFn = (id: string, cb: AnimUpdateFn) => () => void;
+
+// ============================================================================
 // Badge Components
 // ============================================================================
 
 /** Hollow ring - static for idle, pulsing for pending */
-function RingBadge({ x, y, color, pulse }: { x: number; y: number; color: string; pulse?: boolean }) {
+function RingBadge({ x, y, color, pulse, registerAnim, animId }: {
+  x: number; y: number; color: string; pulse?: boolean;
+  registerAnim: AnimRegisterFn; animId: string;
+}) {
   const circleRef = useRef<Konva.Circle>(null);
 
   useEffect(() => {
     if (!pulse) return;
-    const circle = circleRef.current;
-    const layer = circle?.getLayer();
-    if (!layer || !circle) return;
-
-    const anim = new Konva.Animation((frame) => {
-      if (!frame || !circleRef.current) return;
-      const t = frame.time / 1000;
-      // Slow pulse: scale between 0.8 and 1.2 at 0.5Hz
+    return registerAnim(animId, (t) => {
+      if (!circleRef.current) return;
       const s = 1 + Math.sin(t * Math.PI) * 0.2;
       circleRef.current.scaleX(s);
       circleRef.current.scaleY(s);
-    }, layer);
-
-    anim.start();
-    return () => { anim.stop(); };
-  }, [pulse]);
+    });
+  }, [pulse, registerAnim, animId]);
 
   return (
     <Circle
@@ -182,36 +189,28 @@ function RingBadge({ x, y, color, pulse }: { x: number; y: number; color: string
 }
 
 /** Three bouncing dots - working state */
-function DotsBadge({ x, y, color }: { x: number; y: number; color: string }) {
-  const groupRef = useRef<Konva.Group>(null);
+function DotsBadge({ x, y, color, registerAnim, animId }: {
+  x: number; y: number; color: string;
+  registerAnim: AnimRegisterFn; animId: string;
+}) {
   const dot1Ref = useRef<Konva.Circle>(null);
   const dot2Ref = useRef<Konva.Circle>(null);
   const dot3Ref = useRef<Konva.Circle>(null);
 
   useEffect(() => {
-    const group = groupRef.current;
-    const layer = group?.getLayer();
-    if (!layer || !dot1Ref.current || !dot2Ref.current || !dot3Ref.current) return;
-
-    const anim = new Konva.Animation((frame) => {
-      if (!frame || !dot1Ref.current || !dot2Ref.current || !dot3Ref.current) return;
-      const t = frame.time / 1000;
+    return registerAnim(animId, (t) => {
       const bounce = (offset: number) => Math.sin((t + offset) * Math.PI * 2) * 3;
-
-      dot1Ref.current.y(bounce(0));
-      dot2Ref.current.y(bounce(0.15));
-      dot3Ref.current.y(bounce(0.3));
-    }, layer);
-
-    anim.start();
-    return () => { anim.stop(); };
-  }, []);
+      dot1Ref.current?.y(bounce(0));
+      dot2Ref.current?.y(bounce(0.15));
+      dot3Ref.current?.y(bounce(0.3));
+    });
+  }, [registerAnim, animId]);
 
   const dotRadius = 2.5;
   const spacing = 6;
 
   return (
-    <Group ref={groupRef} x={x} y={y} listening={false}>
+    <Group x={x} y={y} listening={false}>
       <Circle ref={dot1Ref} x={-spacing} y={0} radius={dotRadius} fill={color} />
       <Circle ref={dot2Ref} x={0} y={0} radius={dotRadius} fill={color} />
       <Circle ref={dot3Ref} x={spacing} y={0} radius={dotRadius} fill={color} />
@@ -220,28 +219,19 @@ function DotsBadge({ x, y, color }: { x: number; y: number; color: string }) {
 }
 
 /** Filled circle with text label - attention and terminal states */
-function LabelBadge({ x, y, color, label, textColor, flash }: {
+function LabelBadge({ x, y, color, label, textColor, flash, registerAnim, animId }: {
   x: number; y: number; color: string; label: string; textColor: string; flash?: boolean;
+  registerAnim: AnimRegisterFn; animId: string;
 }) {
   const groupRef = useRef<Konva.Group>(null);
 
   useEffect(() => {
     if (!flash) return;
-    const group = groupRef.current;
-    const layer = group?.getLayer();
-    if (!layer || !group) return;
-
-    const anim = new Konva.Animation((frame) => {
-      if (!frame || !groupRef.current) return;
-      const t = frame.time / 1000;
-      // Flash: oscillate opacity 0.5-1.0 at 1Hz
-      const opacity = 0.75 + Math.sin(t * Math.PI * 2) * 0.25;
-      groupRef.current.opacity(opacity);
-    }, layer);
-
-    anim.start();
-    return () => { anim.stop(); };
-  }, [flash]);
+    return registerAnim(animId, (t) => {
+      if (!groupRef.current) return;
+      groupRef.current.opacity(0.75 + Math.sin(t * Math.PI * 2) * 0.25);
+    });
+  }, [flash, registerAnim, animId]);
 
   return (
     <Group ref={groupRef} x={x} y={y} listening={false}>
@@ -284,18 +274,21 @@ function needsBackground(color: string): boolean {
 }
 
 /** Routes DetailedStatus to the appropriate badge component */
-function StatusBadge({ status, x, y }: { status: DetailedStatus; x: number; y: number }) {
+function StatusBadge({ status, x, y, registerAnim, animId }: {
+  status: DetailedStatus; x: number; y: number;
+  registerAnim: AnimRegisterFn; animId: string;
+}) {
   const config = STATUS_BADGE_CONFIG[status];
   const showBg = needsBackground(config.color);
 
   switch (config.type) {
     case 'ring':
-      return <RingBadge x={x} y={y} color={config.color} pulse={config.pulse} />;
+      return <RingBadge x={x} y={y} color={config.color} pulse={config.pulse} registerAnim={registerAnim} animId={animId} />;
     case 'dots':
       return (
         <Group listening={false}>
           {showBg && <BadgeBackground x={x} y={y} />}
-          <DotsBadge x={x} y={y} color={config.color} />
+          <DotsBadge x={x} y={y} color={config.color} registerAnim={registerAnim} animId={animId} />
         </Group>
       );
     case 'label':
@@ -308,6 +301,8 @@ function StatusBadge({ status, x, y }: { status: DetailedStatus; x: number; y: n
             label={config.label!}
             textColor={config.textColor!}
             flash={config.flash}
+            registerAnim={registerAnim}
+            animId={animId}
           />
         </Group>
       );
@@ -324,9 +319,9 @@ const FLASH_COLORS: Record<string, string> = {
   error: palette.red,
 };
 
-/** Temporary hex overlay that fades from 30% opacity to 0 */
-function FlashOverlay({ x, y, hexSize, flashType, onComplete }: {
-  x: number; y: number; hexSize: number; flashType: string; onComplete: () => void;
+/** Temporary hex overlay that fades from 30% opacity to 0. Pure animation, no callbacks. */
+function FlashOverlay({ x, y, hexSize, flashType }: {
+  x: number; y: number; hexSize: number; flashType: string;
 }) {
   const polygonRef = useRef<Konva.RegularPolygon>(null);
 
@@ -339,12 +334,11 @@ function FlashOverlay({ x, y, hexSize, flashType, onComplete }: {
       duration: FLASH_DURATION_MS / 1000,
       opacity: 0,
       easing: Konva.Easings.EaseOut,
-      onFinish: onComplete,
     });
     tween.play();
 
     return () => { tween.destroy(); };
-  }, [onComplete]);
+  }, []);
 
   return (
     <RegularPolygon
@@ -438,11 +432,51 @@ export function HexGrid({
     setPositionLocal(newPos);
   }, []);
 
+  // Shared animation loop: one Konva.Animation for all animated badges
+  const layerRef = useRef<Konva.Layer>(null);
+  const animRegistryRef = useRef(new Map<string, AnimUpdateFn>());
+
+  const registerAnim = useCallback<AnimRegisterFn>((id, cb) => {
+    animRegistryRef.current.set(id, cb);
+    return () => { animRegistryRef.current.delete(id); };
+  }, []);
+
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer) return;
+
+    const anim = new Konva.Animation((frame) => {
+      if (!frame || animRegistryRef.current.size === 0) return;
+      const t = frame.time / 1000;
+      for (const cb of animRegistryRef.current.values()) {
+        cb(t);
+      }
+    }, layer);
+
+    anim.start();
+    return () => { anim.stop(); };
+  }, []);
+
   // Agent state - useShallow prevents infinite re-render from new array references
   const agents = useAgentStore(useShallow((s) => s.getAllAgents()));
   const spawnAgent = useAgentStore((s) => s.spawnAgent);
-  const flashes = useAgentStore(useShallow((s) => Array.from(s.flashes.entries())));
+  const flashes = useAgentStore((s) => s.flashes);
   const clearFlash = useAgentStore((s) => s.clearFlash);
+
+  // Auto-clear flashes after animation completes. Each flash gets one timeout;
+  // the Set prevents duplicates when flashes reference changes for other reasons.
+  const flashTimersRef = useRef(new Set<string>());
+  useEffect(() => {
+    for (const [agentId] of flashes) {
+      if (!flashTimersRef.current.has(agentId)) {
+        flashTimersRef.current.add(agentId);
+        setTimeout(() => {
+          clearFlash(agentId);
+          flashTimersRef.current.delete(agentId);
+        }, FLASH_DURATION_MS + 50);
+      }
+    }
+  }, [flashes, clearFlash]);
 
   // Event logging
   const addSpawn = useEventLogStore((s) => s.addSpawn);
@@ -508,19 +542,19 @@ export function HexGrid({
     return progress;
   }, [agents]);
 
-  // Sort hexes so active ones render last (strokes on top of adjacent hexes)
+  // Sort hexes by z-priority so strokes render on top of adjacent fills.
+  // Higher priority = rendered later = visually on top.
+  // empty(0) < family(1) < hovered(2) < keyboard-selected(3) < panel-open(4)
   const sortedHexes = useMemo(() => {
-    return [...visibleHexes].sort((a, b) => {
-      const aAgent = agentByHex.get(`${a.q},${a.r}`);
-      const bAgent = agentByHex.get(`${b.q},${b.r}`);
-      const aActive = (aAgent && (aAgent.id === selectedAgentId || familyMembers.has(aAgent.id)))
-        || (selectedHex && selectedHex.q === a.q && selectedHex.r === a.r)
-        || (hoveredHex && hoveredHex.q === a.q && hoveredHex.r === a.r);
-      const bActive = (bAgent && (bAgent.id === selectedAgentId || familyMembers.has(bAgent.id)))
-        || (selectedHex && selectedHex.q === b.q && selectedHex.r === b.r)
-        || (hoveredHex && hoveredHex.q === b.q && hoveredHex.r === b.r);
-      return (aActive ? 1 : 0) - (bActive ? 1 : 0);
-    });
+    const priority = (hex: { q: number; r: number }): number => {
+      const agent = agentByHex.get(`${hex.q},${hex.r}`);
+      if (agent?.id === selectedAgentId) return 4;
+      if (selectedHex?.q === hex.q && selectedHex?.r === hex.r) return 3;
+      if (hoveredHex?.q === hex.q && hoveredHex?.r === hex.r) return 2;
+      if (agent && familyMembers.has(agent.id)) return 1;
+      return 0;
+    };
+    return [...visibleHexes].sort((a, b) => priority(a) - priority(b));
   }, [visibleHexes, agentByHex, selectedAgentId, selectedHex, hoveredHex, familyMembers]);
 
   /**
@@ -595,7 +629,7 @@ export function HexGrid({
         onContextMenu={(e) => e.evt.preventDefault()}
         style={{ background: STYLE.background }}
       >
-      <Layer>
+      <Layer ref={layerRef}>
         {/* Render hex grid - active hexes last so strokes render on top */}
         {sortedHexes.map((hex) => {
           const { x, y } = hexToPixel(hex, hexSize);
@@ -722,7 +756,7 @@ export function HexGrid({
 
 
         {/* Render flash overlays for status transitions */}
-        {flashes.map(([agentId, flashType]: [string, FlashType]) => {
+        {Array.from(flashes.entries()).map(([agentId, flashType]: [string, FlashType]) => {
           const agent = agentByHex.size > 0 ? agents.find(a => a.id === agentId) : undefined;
           if (!agent) return null;
           const { x, y } = hexToPixel(agent.hex, hexSize);
@@ -733,7 +767,6 @@ export function HexGrid({
               y={y}
               hexSize={hexSize}
               flashType={flashType}
-              onComplete={() => clearFlash(agentId)}
             />
           );
         })}
@@ -748,6 +781,8 @@ export function HexGrid({
               status={agent.detailedStatus}
               x={x}
               y={y}
+              registerAnim={registerAnim}
+              animId={agent.id}
             />
           );
         })}
@@ -764,11 +799,16 @@ export function HexGrid({
           const progress = orchestratorProgress.get(agent.id);
           const hasProgress = progress && progress.total > 0;
 
-          // Elapsed time: show "idle Xm" if idle >1min, else "Xm" from creation
+          // Elapsed time: frozen for terminal states, live for active agents
           let elapsedText: string | null = null;
           if (agent.createdAt) {
-            const idleText = agent.lastActivityAt ? formatIdle(agent.lastActivityAt, now) : null;
-            elapsedText = idleText ?? formatElapsed(agent.createdAt, now);
+            if (TERMINAL_STATUSES.has(agent.detailedStatus) && agent.lastActivityAt) {
+              // Done/error/cancelled: freeze at total lifetime
+              elapsedText = formatElapsed(agent.createdAt, agent.lastActivityAt);
+            } else {
+              const idleText = agent.lastActivityAt ? formatIdle(agent.lastActivityAt, now) : null;
+              elapsedText = idleText ?? formatElapsed(agent.createdAt, now);
+            }
           }
 
           const hasGit = (agent.gitCommitCount ?? 0) > 0;

@@ -13,6 +13,7 @@ import { createMultiCycleDemoTest } from './scripts/multiCycleDemo';
 import { createStagingWorkflowTest, createSimpleMergeTest } from './scripts/stagingWorkflow';
 import { createCleanupCoordinationTest, createKillWorkerTest } from './scripts/cleanupCoordination';
 import { createBadgeShowcaseTest } from './scripts/badgeShowcase';
+import { createHudShowcaseTest } from './scripts/hudShowcase';
 
 export interface TestEntry {
   /** Unique identifier for the test */
@@ -89,6 +90,12 @@ export const TEST_REGISTRY: TestEntry[] = [
     name: 'Badge Showcase',
     description: 'Visual test: cycles worker through all 3 attention badge states (?, !, X)',
     factory: createBadgeShowcaseTest,
+  },
+  {
+    id: 'hud-showcase',
+    name: 'HUD Showcase',
+    description: 'Visual test: progress satellites, status flash, elapsed time, activity data',
+    factory: createHudShowcaseTest,
   },
 ];
 
