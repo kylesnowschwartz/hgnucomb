@@ -204,22 +204,23 @@ Reporting `done` prematurely (e.g., right after spawning workers) is semanticall
 
 ## Key Patterns
 
-**toolDir vs projectDir:**
-- `TOOL_DIR` (server/index.ts) = where hgnucomb itself lives, computed once at startup via `getGitRoot(process.cwd())`
-- `projectDir` = where agents create worktrees and work, user-selectable via ProjectBar, defaults to TOOL_DIR
-- Plugin paths and hgnucomb's own config always use `TOOL_DIR` (they live in this repo)
+**HGNUCOMB_ROOT vs TOOL_DIR vs projectDir:**
+- `HGNUCOMB_ROOT` (server/index.ts) = where the hgnucomb package is installed on disk, derived from `import.meta.dirname`. Used for package-relative paths: `dist/` (frontend), `server/dist/` (bundles), `server/plugins/` (agent hooks)
+- `TOOL_DIR` (server/index.ts) = the project directory hgnucomb operates in, `getGitRoot(process.cwd()) ?? HGNUCOMB_ROOT`. When developing hgnucomb this equals HGNUCOMB_ROOT; when run via npx on another project, it's that project's git root
+- `projectDir` = per-agent working directory, user-selectable via ProjectBar, defaults to TOOL_DIR. Stored in `sessionMetadata.projectDir`
+- Plugin paths, MCP server binary, and frontend always use `HGNUCOMB_ROOT` (they ship with the package)
 - Git operations (worktrees, diffs, merges) use `getProjectDirForAgent(agentId)` which looks up the stored `projectDir` from session metadata
-- The server sends `server.info` on WebSocket connect so the client knows the default
+- The server sends `server.info` on WebSocket connect so the client knows the default project dir
 
 **Terminal data flow:**
 - App.tsx subscribes to `bridge.onData()` → stores in buffer (persists when panel closed)
 - TerminalPanel writes to xterm only when mounted
 - Closing panel keeps PTY alive; reopening replays buffer
 
-**Agent isolation:**
-- Each orchestrator gets its own git worktree (prevents file conflicts)
-- Worktrees created on spawn, cleaned up on terminal dispose
-- MCP config generated with absolute paths for worktree context
+**Agent isolation (two strategies in `server/worktree.ts`):**
+- **Git repo (preferred):** Each agent gets a worktree at `{gitRoot}/.worktrees/{agentId}/` with its own branch. Full git isolation -- agents can commit, diff, merge without conflicts. Project dirs (`.claude`, `.beads-lite`) symlinked from gitRoot, deps (`node_modules`) symlinked from project.
+- **Non-git fallback:** Each agent gets a session dir at `{tmpdir}/hgnucomb-agent-{agentId}/`. No git operations, but agents still get MCP tools and file isolation. Cleaned up on dispose + on reboot.
+- Both paths write `.mcp.json` with absolute paths so Claude CLI discovers the MCP server
 
 **Spatial coordination:**
 - Hex grid uses axial coordinates (q, r)
@@ -441,8 +442,11 @@ Keydown events pass through three layers in order: (1) xterm's `customKeyEventHa
 **Silent validation failures:**
 Any user-facing action that can fail (path validation, WebSocket requests, etc.) must show feedback. The ProjectBar had a bug where invalid paths were validated but the user saw nothing. Always wire error states into the UI - red borders, error text, something visible.
 
-**process.cwd() in server/index.ts:**
-Never use `process.cwd()` directly for agent-scoped operations. Use `TOOL_DIR` for hgnucomb's own paths (plugin dirs, config) and `getProjectDirForAgent(agentId)` for agent work (worktrees, git ops). The whole point of the toolDir/projectDir split is that agents work in a different repo than hgnucomb itself.
+**HGNUCOMB_ROOT vs TOOL_DIR -- the three-way split:**
+There are three path concepts and confusing them breaks npx distribution. `HGNUCOMB_ROOT` is the package install directory (derived from `import.meta.dirname`, never CWD). `TOOL_DIR` is the user's project (`getGitRoot(process.cwd())`). `projectDir` is per-agent (from sessionMetadata). **Rule of thumb:** anything that ships with the hgnucomb package (frontend in `dist/`, server bundles in `server/dist/`, plugins in `server/plugins/`, MCP binary path in `.mcp.json`) must use `HGNUCOMB_ROOT`. Anything about the user's code (worktree creation, git ops, node_modules symlinks) uses `TOOL_DIR` or `projectDir`. When developing hgnucomb itself these are the same directory, which masks bugs. Test with `npm pack && npx --package ./hgnucomb-*.tgz hgnucomb` from a different directory to catch them.
+
+**Worktree symlinks -- project dirs vs hgnucomb dirs:**
+`server/worktree.ts` symlinks directories into agent worktrees from two sources. Project-specific dirs (`.claude`, `.beads-lite`) come from the project's gitRoot so agents inherit the right CLAUDE.md and task tracking. Hgnucomb-specific dirs (`.agent-history`, `.cloned-sources`) come from `HGNUCOMB_ROOT` (the package install dir). If you add a new symlinked directory, decide which source it belongs to -- getting this wrong means agents either can't find the dir (npx case) or get the wrong project's files (self-hosting case).
 
 **WebSocket connects to Vite in dev, not the backend:**
 `WebSocketBridge` defaults to `ws://${window.location.host}`, which works in prod (single port) but connects to Vite (5173) in dev instead of the backend (3001). The `.env.development` file sets `VITE_WS_URL=ws://localhost:3001` to fix this. If you delete that file or change the dev port, WebSocket connections will silently go to Vite and everything server-dependent (terminals, agents, project validation, server.info) will break with no obvious error.
