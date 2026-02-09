@@ -23,6 +23,8 @@ export interface EdgeSegment {
   y1: number;
   x2: number;
   y2: number;
+  /** Which hex generated this edge (for filtering during render) */
+  sourceHex: { q: number; r: number };
 }
 
 /** A family group: orchestrator + its direct workers */
@@ -106,7 +108,7 @@ export function computePerimeterEdges(
       if (!memberHexes.has(neighborKey)) {
         const v1 = hexVertex(cx, cy, hexSize, edgeIdx);
         const v2 = hexVertex(cx, cy, hexSize, (edgeIdx + 1) % 6);
-        edges.push({ x1: v1.x, y1: v1.y, x2: v2.x, y2: v2.y });
+        edges.push({ x1: v1.x, y1: v1.y, x2: v2.x, y2: v2.y, sourceHex: { q, r } });
       }
     }
   }

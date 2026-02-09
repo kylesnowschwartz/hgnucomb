@@ -762,16 +762,35 @@ export function HexGrid({
 
 
         {/* Family perimeter borders (merged cell boundaries) */}
-        {familyData.edges.map((edge, i) => (
-          <Line
-            key={`fam-edge-${i}`}
-            points={[edge.x1, edge.y1, edge.x2, edge.y2]}
-            stroke={edge.color}
-            strokeWidth={2.5}
-            lineCap="round"
-            listening={false}
-          />
-        ))}
+        {familyData.edges
+          .filter((edge) => {
+            // Skip edges from panel-open cell - selection highlight takes priority
+            const panelOpenAgent = agents.find(a => a.id === selectedAgentId);
+            if (panelOpenAgent &&
+                edge.sourceHex.q === panelOpenAgent.hex.q &&
+                edge.sourceHex.r === panelOpenAgent.hex.r) {
+              return false;
+            }
+
+            // Skip edges from keyboard-selected cell - selection highlight takes priority
+            if (selectedHex &&
+                edge.sourceHex.q === selectedHex.q &&
+                edge.sourceHex.r === selectedHex.r) {
+              return false;
+            }
+
+            return true;
+          })
+          .map((edge, i) => (
+            <Line
+              key={`fam-edge-${i}`}
+              points={[edge.x1, edge.y1, edge.x2, edge.y2]}
+              stroke={edge.color}
+              strokeWidth={2.5}
+              lineCap="round"
+              listening={false}
+            />
+          ))}
 
         {/* Render flash overlays for status transitions */}
         {Array.from(flashes.entries()).map(([agentId, flashType]: [string, FlashType]) => {
