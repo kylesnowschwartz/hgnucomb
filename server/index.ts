@@ -411,7 +411,7 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
         // Try to create a worktree for this agent
         // Pass wsUrl so MCP server connects back to THIS server instance
         const wsUrl = `ws://localhost:${PORT}`;
-        const worktreeResult = createWorktree(workingDir, agentSnapshot.agentId, agentSnapshot.cellType, wsUrl);
+        const worktreeResult = createWorktree(workingDir, agentSnapshot.agentId, agentSnapshot.cellType, wsUrl, TOOL_DIR);
         if (worktreeResult.success && worktreeResult.worktreePath) {
           workingDir = worktreeResult.worktreePath;
           console.log(`[Worktree] Agent ${agentSnapshot.agentId} (${agentSnapshot.cellType}) using: ${workingDir}`);
@@ -831,8 +831,9 @@ Work autonomously. Do not ask questions.`;
 
       try {
         // Save image to agent's worktree or scratchpad
-        const agentId = sessionMetadata.get(sessionId)?.agentId;
-        const imagePath = saveImageForSession(agentId, sessionId, filename, data);
+        const metadata = sessionMetadata.get(sessionId);
+        const agentId = metadata?.agentId;
+        const imagePath = saveImageForSession(agentId, sessionId, filename, data, metadata?.projectDir);
 
         // Inject path into terminal stdin so agent can read it
         session.write(imagePath + '\n');

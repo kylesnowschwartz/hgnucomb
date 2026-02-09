@@ -83,7 +83,7 @@ export interface WorktreeResult {
  * @param wsUrl - WebSocket URL for MCP server to connect back to
  * @returns Result with worktree path or error
  */
-export function createWorktree(targetDir: string, agentId: string, cellType: CellType = "orchestrator", wsUrl: string = "ws://localhost:3001"): WorktreeResult {
+export function createWorktree(targetDir: string, agentId: string, cellType: CellType = "orchestrator", wsUrl: string = "ws://localhost:3001", toolDir?: string): WorktreeResult {
   // Check if git repo
   const gitRoot = getGitRoot(targetDir);
   if (!gitRoot) {
@@ -137,31 +137,38 @@ export function createWorktree(targetDir: string, agentId: string, cellType: Cel
     }
   }
 
-  // Generate .mcp.json with absolute paths for this worktree
+  // Generate .mcp.json with absolute paths for this worktree.
   // Claude Code searches from CWD upward - worktree is its own git root,
-  // so we must provide the config directly rather than relying on parent repo
-  const mcpConfig = generateMcpConfig(gitRoot, agentId, cellType, wsUrl);
+  // so we must provide the config directly rather than relying on parent repo.
+  // MCP server paths always use toolDir (hgnucomb's root), NOT the project's gitRoot.
+  const mcpConfig = generateMcpConfig(toolDir ?? gitRoot, agentId, cellType, wsUrl);
+  if (!toolDir) {
+    console.warn(`[Worktree] No toolDir provided for ${agentId}, falling back to gitRoot for MCP paths. This may fail if project != hgnucomb.`);
+  }
   writeMcpConfig(worktreePath, mcpConfig);
   console.log(`[Worktree] Generated .mcp.json with absolute paths for ${cellType}`);
 
-  // Symlink shared directories so worktree inherits local config, research, reference repos, and task db
-  const sharedDirs = [".claude", ".agent-history", ".cloned-sources", ".beads-lite"];
-  for (const dir of sharedDirs) {
-    const sourceDir = join(gitRoot, dir);
+  // Symlink hgnucomb-specific directories from toolDir (NOT gitRoot).
+  // These live in hgnucomb's own repo regardless of which project the agent works on.
+  const hgnucombRoot = toolDir ?? gitRoot;
+  const hgnucombDirs = [".claude", ".agent-history", ".cloned-sources", ".beads-lite"];
+  for (const dir of hgnucombDirs) {
+    const sourceDir = join(hgnucombRoot, dir);
     if (existsSync(sourceDir)) {
       const targetDir = join(worktreePath, dir);
       try {
         symlinkSync(sourceDir, targetDir);
-        console.log(`[Worktree] Symlinked ${dir}/`);
+        console.log(`[Worktree] Symlinked ${dir}/ (from toolDir)`);
       } catch (err) {
         console.warn(`[Worktree] Failed to symlink ${dir}/: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   }
 
-  // Symlink node_modules so agents can run typecheck/lint/test/build without
-  // a separate install step. These are READ-ONLY - agents must not run
-  // pnpm install/add/remove in worktrees (it would mutate the parent's deps).
+  // Symlink project node_modules so agents can run typecheck/lint/test/build
+  // without a separate install step. These come from the PROJECT's gitRoot,
+  // not toolDir -- agents need the project's deps, not hgnucomb's.
+  // READ-ONLY: agents must not run pnpm install/add/remove in worktrees.
   const depDirs = ["node_modules", join("server", "node_modules")];
   for (const dir of depDirs) {
     const sourceDir = join(gitRoot, dir);
@@ -174,7 +181,7 @@ export function createWorktree(targetDir: string, agentId: string, cellType: Cel
       }
       try {
         symlinkSync(sourceDir, targetDir);
-        console.log(`[Worktree] Symlinked ${dir}/`);
+        console.log(`[Worktree] Symlinked ${dir}/ (from project)`);
       } catch (err) {
         console.warn(`[Worktree] Failed to symlink ${dir}/: ${err instanceof Error ? err.message : String(err)}`);
       }

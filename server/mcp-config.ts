@@ -39,20 +39,22 @@ export interface GeneratedMcpConfig {
 /**
  * Generate MCP config with absolute paths for a worktree agent.
  *
- * @param gitRoot - The main repository root (not the worktree)
+ * @param toolDir - Where hgnucomb itself lives (NOT the agent's project).
+ *   The MCP server binary and script always live in hgnucomb's own tree,
+ *   regardless of which project the agent is working in.
  * @param agentId - Unique agent identifier
  * @param cellType - Type of agent (orchestrator has full tools, worker has limited)
  * @param wsUrl - WebSocket URL for hgnucomb server
  * @returns MCP config object ready for serialization
  */
 export function generateMcpConfig(
-  gitRoot: string,
+  toolDir: string,
   agentId: string,
   cellType: CellType,
   wsUrl: string = "ws://localhost:3001"
 ): GeneratedMcpConfig {
   // Use tsx to run TypeScript directly (no dist/ build)
-  const serverDir = join(gitRoot, "server");
+  const serverDir = join(toolDir, "server");
   const tsxBin = join(serverDir, "node_modules", ".bin", "tsx");
   const mcpServerPath = join(serverDir, "mcp.ts");
 

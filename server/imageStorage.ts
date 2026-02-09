@@ -17,13 +17,15 @@ import { join, resolve } from 'node:path';
  * @param sessionId - Session ID for scratchpad isolation
  * @param filename - Original filename from browser
  * @param base64Data - Base64-encoded image data (with data: prefix)
+ * @param projectDir - Project directory where worktrees live (from session metadata)
  * @returns Absolute path to the saved image file
  */
 export function saveImageForSession(
   agentId: string | undefined,
   sessionId: string,
   filename: string,
-  base64Data: string
+  base64Data: string,
+  projectDir?: string
 ): string {
   // Extract base64 content (remove data:image/png;base64, prefix if present)
   const base64Content = base64Data.includes(',')
@@ -35,8 +37,9 @@ export function saveImageForSession(
   let savePath: string;
 
   if (agentId) {
-    // Claude agent - save to worktree
-    const repoRoot = resolve(process.cwd());
+    // Claude agent - save to worktree.
+    // Use provided projectDir (from session metadata), not process.cwd().
+    const repoRoot = projectDir ? resolve(projectDir) : resolve(process.cwd());
     const worktreePath = join(repoRoot, '.worktrees', agentId);
     const imagesDir = join(worktreePath, 'images');
 
