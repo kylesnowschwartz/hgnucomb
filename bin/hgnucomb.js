@@ -4,13 +4,14 @@
  * CLI entry point for hgnucomb.
  *
  * Starts the server (which serves the built frontend from dist/ if present)
- * and opens the browser. One command, one process.
+ * and opens the browser once the server is ready. One command, one process.
  */
 
 import { spawn } from "child_process";
 import { existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { get } from "http";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
@@ -45,14 +46,20 @@ server.on("exit", (code) => {
 process.on("SIGINT", () => server.kill("SIGINT"));
 process.on("SIGTERM", () => server.kill("SIGTERM"));
 
-// Open browser after a short delay to let the server bind
+// Poll for server readiness, then open browser
 const url = `http://localhost:${PORT}`;
-setTimeout(() => {
-  // Only open if dist/ exists (otherwise there's nothing to show in browser)
-  if (!existsSync(DIST_DIR)) return;
-
-  const platform = process.platform;
-  const cmd = platform === "darwin" ? "open" : platform === "win32" ? "start" : "xdg-open";
-  spawn(cmd, [url], { stdio: "ignore", detached: true }).unref();
-  console.log(`[hgnucomb] Opened ${url}`);
-}, 1500);
+if (existsSync(DIST_DIR)) {
+  const poll = setInterval(() => {
+    get(url, (res) => {
+      if (res.statusCode) {
+        clearInterval(poll);
+        const platform = process.platform;
+        const cmd = platform === "darwin" ? "open" : platform === "win32" ? "start" : "xdg-open";
+        spawn(cmd, [url], { stdio: "ignore", detached: true }).unref();
+        console.log(`[hgnucomb] Opened ${url}`);
+      }
+    }).on("error", () => {
+      // Server not ready yet, keep polling
+    });
+  }, 300);
+}
