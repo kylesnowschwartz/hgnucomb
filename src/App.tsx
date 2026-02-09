@@ -419,6 +419,7 @@ function App() {
             lastActivityAt: number;
             gitCommitCount: number;
             gitRecentCommits: string[];
+            telemetry?: import('@shared/protocol').AgentTelemetryData;
           }>;
         };
         const { updateActivity } = useAgentStore.getState();
