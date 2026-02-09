@@ -2,6 +2,7 @@
 
 # Start frontend and server in parallel (Vite HMR + tsx --watch)
 dev:
+    rm -rf dist
     (while ! curl -s http://localhost:5173 > /dev/null 2>&1; do sleep 0.3; done && open http://localhost:5173) &
     pnpm dev:all
 
