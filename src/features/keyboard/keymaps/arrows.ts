@@ -1,11 +1,49 @@
 /**
  * Arrow-keys only keymap.
  *
- * No vim-style hjkl - pure arrow navigation.
+ * No vim-style hjkl -- pure arrow navigation.
  * Up/down move vertically (zigzag), Shift for diagonals.
+ *
+ * Navigation bindings are shared constants -- add new nav combos to the
+ * constants below, NOT to individual mode objects.
  */
 
-import type { Keymap } from '../types';
+import type { Keymap, KeyCombo, KeyAction } from '../types';
+
+// ---------------------------------------------------------------------------
+// Shared navigation constants (grid + selected modes spread these in)
+// ---------------------------------------------------------------------------
+
+/** Arrow keys cardinal + Shift diagonals */
+const NAV_ARROWS: Record<KeyCombo, KeyAction> = {
+  ArrowLeft: { type: 'navigate', direction: 'w' },
+  ArrowRight: { type: 'navigate', direction: 'e' },
+  ArrowUp: { type: 'navigate_vertical', direction: 'up' },
+  ArrowDown: { type: 'navigate_vertical', direction: 'down' },
+  'Shift+ArrowUp': { type: 'navigate', direction: 'ne' },
+  'Shift+ArrowDown': { type: 'navigate', direction: 'se' },
+  'Shift+ArrowLeft': { type: 'navigate', direction: 'nw' },
+  'Shift+ArrowRight': { type: 'navigate', direction: 'sw' },
+};
+
+/** Cmd+arrows -- prevents browser back/forward, navigates grid instead */
+const NAV_META_ARROWS: Record<KeyCombo, KeyAction> = {
+  'Meta+ArrowLeft': { type: 'navigate', direction: 'w' },
+  'Meta+ArrowRight': { type: 'navigate', direction: 'e' },
+  'Meta+ArrowUp': { type: 'navigate_vertical', direction: 'up' },
+  'Meta+ArrowDown': { type: 'navigate_vertical', direction: 'down' },
+};
+
+/** Utilities shared across grid and selected modes */
+const UTILITIES: Record<KeyCombo, KeyAction> = {
+  g: { type: 'select_center' },
+  m: { type: 'toggle_meta_panel' },
+  '?': { type: 'show_help' },
+};
+
+// ---------------------------------------------------------------------------
+// Keymap definition
+// ---------------------------------------------------------------------------
 
 export const arrowsKeymap: Keymap = {
   id: 'arrows',
@@ -17,47 +55,18 @@ export const arrowsKeymap: Keymap = {
     // Grid mode
     // ========================================================================
     grid: {
-      ArrowLeft: { type: 'navigate', direction: 'w' },
-      ArrowRight: { type: 'navigate', direction: 'e' },
-      ArrowUp: { type: 'navigate_vertical', direction: 'up' },
-      ArrowDown: { type: 'navigate_vertical', direction: 'down' },
-      'Shift+ArrowUp': { type: 'navigate', direction: 'ne' },
-      'Shift+ArrowDown': { type: 'navigate', direction: 'se' },
-      'Shift+ArrowLeft': { type: 'navigate', direction: 'nw' },
-      'Shift+ArrowRight': { type: 'navigate', direction: 'sw' },
-
-      // Cmd+arrows - prevent browser back/forward navigation
-      'Meta+ArrowLeft': { type: 'navigate', direction: 'w' },
-      'Meta+ArrowRight': { type: 'navigate', direction: 'e' },
-      'Meta+ArrowUp': { type: 'navigate_vertical', direction: 'up' },
-      'Meta+ArrowDown': { type: 'navigate_vertical', direction: 'down' },
-
-      // Cmd+Escape is the global toggle
+      ...NAV_ARROWS,
+      ...NAV_META_ARROWS,
       'Meta+Escape': { type: 'close_panel' },
-
-      g: { type: 'select_center' },
-      m: { type: 'toggle_meta_panel' },
-      '?': { type: 'show_help' },
+      ...UTILITIES,
     },
 
     // ========================================================================
     // Selected mode
     // ========================================================================
     selected: {
-      ArrowLeft: { type: 'navigate', direction: 'w' },
-      ArrowRight: { type: 'navigate', direction: 'e' },
-      ArrowUp: { type: 'navigate_vertical', direction: 'up' },
-      ArrowDown: { type: 'navigate_vertical', direction: 'down' },
-      'Shift+ArrowUp': { type: 'navigate', direction: 'ne' },
-      'Shift+ArrowDown': { type: 'navigate', direction: 'se' },
-      'Shift+ArrowLeft': { type: 'navigate', direction: 'nw' },
-      'Shift+ArrowRight': { type: 'navigate', direction: 'sw' },
-
-      // Cmd+arrows - prevent browser back/forward navigation
-      'Meta+ArrowLeft': { type: 'navigate', direction: 'w' },
-      'Meta+ArrowRight': { type: 'navigate', direction: 'e' },
-      'Meta+ArrowUp': { type: 'navigate_vertical', direction: 'up' },
-      'Meta+ArrowDown': { type: 'navigate_vertical', direction: 'down' },
+      ...NAV_ARROWS,
+      ...NAV_META_ARROWS,
 
       Enter: { type: 'open_panel' },
       t: { type: 'spawn', cellType: 'terminal' },
@@ -67,23 +76,15 @@ export const arrowsKeymap: Keymap = {
 
       Escape: { type: 'clear_selection' },
       'Meta+Escape': { type: 'close_panel' },
-      g: { type: 'select_center' },
-      m: { type: 'toggle_meta_panel' },
-      '?': { type: 'show_help' },
+      ...UTILITIES,
     },
 
     // ========================================================================
     // Terminal mode
     // ========================================================================
     terminal: {
-      // Cmd+Escape closes panel
       'Meta+Escape': { type: 'close_panel' },
-
-      'Meta+ArrowLeft': { type: 'navigate', direction: 'w' },
-      'Meta+ArrowRight': { type: 'navigate', direction: 'e' },
-      'Meta+ArrowUp': { type: 'navigate_vertical', direction: 'up' },
-      'Meta+ArrowDown': { type: 'navigate_vertical', direction: 'down' },
-
+      ...NAV_META_ARROWS,
       'Meta+?': { type: 'show_help' },
     },
   },

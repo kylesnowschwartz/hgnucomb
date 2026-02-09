@@ -327,6 +327,23 @@ describe('KEYMAPS', () => {
     });
   });
 
+  describe.each(['vim', 'arrows'])('%s keymap navigation parity', (keymapId) => {
+    const keymap = KEYMAPS[keymapId];
+    const navActionTypes = ['navigate', 'navigate_vertical'];
+
+    it('selected mode includes every navigation binding from grid mode', () => {
+      const gridNavBindings = Object.entries(keymap.bindings.grid)
+        .filter(([, action]) => navActionTypes.includes(action.type));
+
+      // Sanity: grid mode must have at least some nav bindings
+      expect(gridNavBindings.length).toBeGreaterThan(0);
+
+      for (const [combo, action] of gridNavBindings) {
+        expect(keymap.bindings.selected[combo]).toEqual(action);
+      }
+    });
+  });
+
   describe('arrows keymap', () => {
     const arrows = KEYMAPS['arrows'];
 

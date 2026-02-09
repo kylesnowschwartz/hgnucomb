@@ -11,6 +11,7 @@ import { useAgentStore } from '@features/agents/agentStore';
 import { useKeyboardStore } from './keyboardStore';
 import { serializeKey, type KeyAction } from './types';
 import { getNeighborInDirection, getVerticalDirection } from './directions';
+import { isFocusInTextEntry } from './focusGuards';
 import type { CellType, HexCoordinate } from '@shared/types';
 
 interface UseKeyboardNavigationOptions {
@@ -171,17 +172,12 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
       const terminalPanel = document.querySelector('.terminal-panel');
       const focusIsInTerminal = terminalPanel?.contains(document.activeElement);
 
-      // Check if focus is in a text input (e.g., ProjectBar path input)
-      const activeTag = document.activeElement?.tagName;
-      const focusIsInInput = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
+      // Check if focus is in a text input (e.g., ProjectWidget, contenteditable)
+      const focusIsInInput = isFocusInTextEntry();
 
-      // Cmd+Esc is the global "escape hatch" - ALWAYS handled by app
-      // This lets user unfocus/close terminal even when it has focus
-      const isCmdEsc = e.metaKey && e.key === 'Escape';
-
-      // TERMINAL FOCUSED: Let terminal handle ALL keys (acts like real terminal)
-      // EXCEPT Cmd+Esc which is the global escape hatch
-      if (focusIsInTerminal && !isCmdEsc) {
+      // TERMINAL FOCUSED: Let terminal handle ALL non-Meta keys.
+      // Meta+ keys fall through to keymap lookup (Cmd+hjkl, Cmd+Escape, etc.)
+      if (focusIsInTerminal && !e.metaKey) {
         return;
       }
 
@@ -191,18 +187,11 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
         return;
       }
 
-      // APP FOCUSED: We handle all keys for grid navigation/controls
-      // Determine mode based on UI state (not focus)
-      const { selectedHex, selectedAgentId } = useUIStore.getState();
-      let mode: 'grid' | 'selected' | 'terminal';
-      if (selectedAgentId) {
-        // Panel open but unfocused - use selected mode for grid interaction
-        mode = selectedHex ? 'selected' : 'grid';
-      } else if (selectedHex) {
-        mode = 'selected';
-      } else {
-        mode = 'grid';
-      }
+      // Determine mode from uiStore (single source of truth).
+      // Override: when panel is open but focus is on the grid (not in terminal),
+      // use 'selected' so plain hjkl still navigates instead of being dead.
+      const uiMode = useUIStore.getState().getMode();
+      const mode = (uiMode === 'terminal' && !focusIsInTerminal) ? 'selected' : uiMode;
 
       // Serialize the key event
       const combo = serializeKey(e);

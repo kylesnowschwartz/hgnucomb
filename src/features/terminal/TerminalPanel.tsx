@@ -14,6 +14,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { useTerminalStore } from './terminalStore';
 import { TERMINAL_FONT } from './terminalConfig';
+import { isFocusInTextEntry } from '@features/keyboard/focusGuards';
 import { xtermTheme } from '@theme/catppuccin-mocha';
 import './fonts.css';
 import './TerminalPanel.css';
@@ -227,8 +228,14 @@ export function TerminalPanel({
   // EXCEPT for Cmd+ modified keys which are handled by keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't refocus on Cmd+ keys - those are for navigation
+      // Don't refocus on Cmd+ keys -- those are for navigation
       if (e.metaKey) return;
+
+      // Navigation handler already claimed this key (e.g., 'h' for navigate)
+      if (e.defaultPrevented) return;
+
+      // Don't steal focus from text inputs (ProjectWidget, future inputs)
+      if (isFocusInTextEntry()) return;
 
       // If terminal exists and focus is outside the panel, refocus
       if (terminalRef.current && !containerRef.current?.contains(document.activeElement)) {
@@ -281,18 +288,12 @@ export function TerminalPanel({
     // Open terminal to DOM
     terminal.open(container);
 
-    // Terminal captures ALL keys when focused - acts like a real terminal
-    // EXCEPT global controls (Cmd+Esc) and clipboard shortcuts
+    // Terminal captures ALL keys when focused - acts like a real terminal.
+    // Meta+ keys always pass through: the terminal has no Cmd shortcuts,
+    // so Cmd+Escape (close panel), Cmd+hjkl (navigate), Cmd+c/v (clipboard)
+    // all bubble to the app or browser where they belong.
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-      // Cmd+Esc is the global "escape hatch" - always passes through to app
-      if (e.metaKey && e.key === 'Escape') {
-        return false; // Don't handle in xterm, let it bubble to window
-      }
-      // Let browser handle clipboard shortcuts natively (copy/paste/cut/select-all)
-      if (e.metaKey && (e.key === 'c' || e.key === 'v' || e.key === 'x' || e.key === 'a')) {
-        return false; // Don't intercept in xterm
-      }
-      // Everything else stays in the terminal
+      if (e.metaKey) return false;
       return true;
     });
 

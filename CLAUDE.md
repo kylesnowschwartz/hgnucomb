@@ -432,8 +432,8 @@ bl close <id>         # Complete task
 
 Things that have bitten us. Read these before touching the relevant code.
 
-**Keyboard handler steals input keystrokes:**
-`useKeyboardNavigation` (src/features/keyboard/) captures all keydown events for vim-style grid navigation. If you add any `<input>` or `<textarea>` to the UI, the handler already guards against `INPUT`/`TEXTAREA` focus. But if you add a non-standard editable element (contenteditable, custom widget), you must extend the guard in `useKeyboardNavigation.ts` or keystrokes like `h`, `j`, `k`, `l` will be swallowed as navigation instead of typed characters.
+**Keyboard dispatch is three layers -- respect the ordering:**
+Keydown events pass through three layers in order: (1) xterm's `customKeyEventHandler` passes ALL `Meta+` keys to the app and swallows everything else when the terminal is focused. (2) `useKeyboardNavigation` is the single keymap router -- it determines the input mode via `uiStore.getMode()` (with one override: panel-open-but-grid-focused forces `'selected'` so plain hjkl still navigates), looks up bindings, and calls `e.preventDefault()` on matched keys. (3) `TerminalPanel`'s refocus handler auto-focuses the terminal on unbound keypresses, but yields to layer 2 via `e.defaultPrevented`. Both layers 2 and 3 share `isFocusInTextEntry()` from `src/features/keyboard/focusGuards.ts` (checks INPUT, TEXTAREA, SELECT, contenteditable). Invariants: never add `return true` cases to xterm's handler for specific Meta combos (the blanket rule handles it), never duplicate nav bindings across modes (use the shared constants in keymap files), and if you add a new editable element type, update `isFocusInTextEntry()` -- both listeners pick up the change automatically.
 
 **TerminalBridge is an interface, not just WebSocketBridge:**
 `WebSocketBridge` implements the `TerminalBridge` interface (`src/features/terminal/TerminalBridge.ts`). If you add a new method to WebSocketBridge (like `validateProject`), you must also add it to the interface or anything that types against `TerminalBridge` will fail to compile.
