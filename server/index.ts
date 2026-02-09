@@ -25,6 +25,8 @@ import type {
   McpReportResultRequest,
   McpGetMessagesRequest,
   McpGetWorkerStatusRequest,
+  McpCheckWorkersRequest,
+  McpCheckWorkersResponse,
   McpGetWorkerDiffRequest,
   McpListWorkerFilesRequest,
   McpListWorkerCommitsRequest,
@@ -1397,6 +1399,64 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
         },
       }));
       console.log(`[MCP] Worker status: ${workerId} = ${worker.detailedStatus ?? 'pending'}`);
+      break;
+    }
+
+    case "mcp.checkWorkers": {
+      // Non-blocking batch status of all workers belonging to the caller
+      const req = msg as McpCheckWorkersRequest;
+      const { callerId } = req.payload;
+
+      // Validate caller is orchestrator
+      const callerMeta = Array.from(sessionMetadata.values()).find(m => m.agentId === callerId);
+      if (!callerMeta || callerMeta.cellType !== 'orchestrator') {
+        ws.send(JSON.stringify({
+          type: "mcp.checkWorkers.result",
+          requestId: req.requestId,
+          payload: { success: false, error: 'Only orchestrators can check workers' },
+        } satisfies McpCheckWorkersResponse));
+        break;
+      }
+
+      // Find all workers belonging to this orchestrator
+      const workers = Array.from(sessionMetadata.values())
+        .filter(m => m.parentId === callerId);
+
+      // Check orchestrator's inbox for result messages from each worker
+      const inbox = agentInboxes.get(callerId) ?? [];
+      const workerIdsWithResults = new Set(
+        inbox.filter(m => m.type === 'result').map(m => m.from)
+      );
+
+      const workerSummaries = workers.map(w => ({
+        workerId: w.agentId,
+        status: (w.detailedStatus ?? 'pending') as DetailedStatus,
+        statusMessage: w.statusMessage,
+        task: w.task,
+        hasResult: workerIdsWithResults.has(w.agentId),
+      }));
+
+      const doneCount = workerSummaries.filter(w => w.status === 'done').length;
+      const errorCount = workerSummaries.filter(w => w.status === 'error').length;
+      const workingCount = workerSummaries.filter(w =>
+        w.status !== 'done' && w.status !== 'error'
+      ).length;
+
+      ws.send(JSON.stringify({
+        type: "mcp.checkWorkers.result",
+        requestId: req.requestId,
+        payload: {
+          success: true,
+          workers: workerSummaries,
+          summary: {
+            total: workers.length,
+            done: doneCount,
+            error: errorCount,
+            working: workingCount,
+          },
+        },
+      } satisfies McpCheckWorkersResponse));
+      console.log(`[MCP] check_workers: ${workers.length} workers for ${callerId} (${doneCount} done, ${errorCount} error, ${workingCount} working)`);
       break;
     }
 

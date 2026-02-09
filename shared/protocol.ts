@@ -478,6 +478,44 @@ export interface McpGetWorkerStatusResponse {
 }
 
 // ============================================================================
+// MCP Check Workers Types (Non-blocking batch status)
+// ============================================================================
+
+export interface WorkerSummary {
+  workerId: string;
+  status: DetailedStatus;
+  statusMessage?: string;
+  task?: string;
+  /** Whether this worker has delivered results to your inbox */
+  hasResult: boolean;
+}
+
+export interface McpCheckWorkersRequest {
+  type: 'mcp.checkWorkers';
+  requestId: string;
+  payload: {
+    callerId: string;
+  };
+}
+
+export interface McpCheckWorkersResponse {
+  type: 'mcp.checkWorkers.result';
+  requestId: string;
+  payload: {
+    success: boolean;
+    workers?: WorkerSummary[];
+    /** Count of workers in each terminal state */
+    summary?: {
+      total: number;
+      done: number;
+      error: number;
+      working: number;
+    };
+    error?: string;
+  };
+}
+
+// ============================================================================
 // MCP Diff Types (Get Worker Changes)
 // ============================================================================
 
@@ -836,6 +874,7 @@ export type McpRequest =
   | McpReportResultRequest
   | McpGetMessagesRequest
   | McpGetWorkerStatusRequest
+  | McpCheckWorkersRequest
   | McpGetWorkerDiffRequest
   | McpListWorkerFilesRequest
   | McpListWorkerCommitsRequest
@@ -853,6 +892,7 @@ export type McpResponse =
   | McpReportResultResponse
   | McpGetMessagesResponse
   | McpGetWorkerStatusResponse
+  | McpCheckWorkersResponse
   | McpGetWorkerDiffResponse
   | McpListWorkerFilesResponse
   | McpListWorkerCommitsResponse

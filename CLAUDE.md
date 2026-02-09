@@ -141,12 +141,13 @@ Agents interact with the grid via MCP:
 | `get_identity` | Get your own agent ID, cell type, parent ID, hex coordinates |
 | `spawn_agent` | Create child agent (returns immediately with agentId) |
 | `get_worker_status` | Check a worker's current status (orchestrators only) |
-| `await_worker` | Wait for worker to complete (polls status, returns with messages) |
+| `check_workers` | Non-blocking batch status of ALL your workers (orchestrators only) |
+| `await_worker` | BLOCKING wait for one worker to complete (orchestrators only) |
 | `get_grid_state` | Query grid: all agents, or filtered by distance |
 | `broadcast` | Send message to agents within radius |
 | `report_status` | Update status badge (UI observability). See semantics below. |
 | `report_result` | Send task result to parent orchestrator (workers only) |
-| `get_messages` | Get inbox messages (use for broadcasts, not worker results) |
+| `get_messages` | Get inbox messages (results from workers, broadcasts) |
 | `get_worker_diff` | Get diff of worker's changes vs main (orchestrators only) |
 | `list_worker_files` | List files changed by worker - raw git diff --stat output (orchestrators only) |
 | `list_worker_commits` | List commits made by worker - raw git log output (orchestrators only) |
@@ -156,11 +157,17 @@ Agents interact with the grid via MCP:
 | `cleanup_worker_worktree` | Remove worker's git worktree and branch (orchestrators only) |
 | `kill_worker` | Forcibly terminate a worker's PTY session (orchestrators only) |
 
-**Two-Phase Worker Coordination Pattern:**
+**Non-Blocking Worker Coordination (preferred):**
 1. `spawn_agent(task=...)` → returns `agentId` immediately
-2. `await_worker(workerId=<agentId>)` → polls status until done/error, returns status + messages
+2. Orchestrator stays interactive with user while workers run
+3. `check_workers()` → returns status of ALL workers in one call (non-blocking)
+4. `get_messages(fromAgent=workerId)` → collect results from completed workers
 
-This is preferred over `get_messages(wait=true)` because workers take 10-30s to boot Claude CLI.
+**Blocking Worker Coordination (single-worker only):**
+1. `spawn_agent(task=...)` → returns `agentId` immediately
+2. `await_worker(workerId=<agentId>)` → blocks until done/error, returns status + messages
+
+Use `check_workers` for multi-worker workflows to stay responsive. Use `await_worker` only when you have exactly one worker and nothing else to do.
 
 **Staging Workflow (merging worker changes to main):**
 ```
@@ -198,7 +205,7 @@ Status is for UI observability - it shows humans what each agent is doing. It's 
 | Agent Type | When to report `done` |
 |------------|----------------------|
 | Worker | After calling `report_result` to parent |
-| Orchestrator | After ALL spawned workers have completed (use `await_worker` first) |
+| Orchestrator | After ALL spawned workers have completed (use `check_workers` to verify) |
 
 Reporting `done` prematurely (e.g., right after spawning workers) is semantically incorrect - your mission isn't complete yet.
 
