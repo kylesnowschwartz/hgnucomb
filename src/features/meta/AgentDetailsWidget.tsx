@@ -1,7 +1,8 @@
 /**
  * AgentDetailsWidget - Observability panel for the selected hex cell agent.
  *
- * Shows agent type, status, task, workers (for orchestrators), and git info.
+ * Shows agent type, status, task, transcript telemetry (context %, current tool,
+ * progress, recent tools), workers (for orchestrators), and git info.
  * Lives in MetaPanel, updates based on uiStore.selectedAgentId.
  */
 
@@ -91,6 +92,19 @@ function formatLastActive(lastActivityAt: number, now: number): string {
   return 'idle';
 }
 
+/** Format tool duration: "2s" / "150ms" */
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${Math.round(ms / 1000)}s`;
+}
+
+/** Context bar color by threshold */
+function contextBarColor(percent: number): string {
+  if (percent < 70) return palette.green;
+  if (percent < 85) return palette.yellow;
+  return palette.red;
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -140,6 +154,12 @@ export function AgentDetailsWidget() {
   const doneCount = children.filter((c) =>
     TERMINAL_STATUSES.has(c.detailedStatus)
   ).length;
+
+  // Telemetry data (from transcript watcher via agent.activity broadcast)
+  const telemetry = agent.telemetry;
+  const todos = telemetry?.todos ?? [];
+  const completedTodos = todos.filter((t) => t.status === 'completed').length;
+  const recentTools = telemetry?.recentTools?.slice(0, 5) ?? [];
 
   return (
     <div className="agent-details">
@@ -200,6 +220,77 @@ export function AgentDetailsWidget() {
         </div>
       )}
 
+      {/* Context % bar (from transcript token usage) */}
+      {telemetry?.contextPercent != null && (
+        <div className="agent-details__row agent-details__context-row">
+          <span className="agent-details__label">Context:</span>
+          <div className="agent-details__context-bar-container">
+            <div
+              className="agent-details__context-bar-fill"
+              style={{
+                width: `${Math.min(100, telemetry.contextPercent)}%`,
+                background: contextBarColor(telemetry.contextPercent),
+              }}
+            />
+          </div>
+          <span
+            className="agent-details__context-percent"
+            style={{ color: contextBarColor(telemetry.contextPercent) }}
+          >
+            {telemetry.contextPercent}%
+          </span>
+        </div>
+      )}
+
+      {/* Current tool (what the agent is doing right now) */}
+      {telemetry?.currentTool && (
+        <div className="agent-details__section">
+          <div className="agent-details__section-header">
+            <span>Current tool</span>
+          </div>
+          <div className="agent-details__tool-current">
+            <span className="agent-details__tool-icon">{'\u22EF'}</span>
+            <span className="agent-details__tool-name">{telemetry.currentTool.name}</span>
+            {telemetry.currentTool.target && (
+              <span className="agent-details__tool-target">{telemetry.currentTool.target}</span>
+            )}
+            <span className="agent-details__tool-elapsed">
+              {formatDuration(now - telemetry.currentTool.startedMs)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Progress (todo list from transcript) */}
+      {todos.length > 0 && (
+        <div className="agent-details__section">
+          <div className="agent-details__section-header">
+            <span>Progress</span>
+            <span className="agent-details__section-summary">
+              {completedTodos}/{todos.length}
+            </span>
+          </div>
+          {todos.map((todo, i) => (
+            <div key={i} className="agent-details__todo">
+              <span className="agent-details__todo-icon" style={{
+                color: todo.status === 'completed' ? palette.green
+                  : todo.status === 'in_progress' ? palette.blue
+                  : palette.overlay0,
+              }}>
+                {todo.status === 'completed' ? '\u2713'
+                  : todo.status === 'in_progress' ? '\u22EF'
+                  : '\u25CB'}
+              </span>
+              <span className={`agent-details__todo-content${
+                todo.status === 'completed' ? ' agent-details__todo-content--done' : ''
+              }`}>
+                {todo.content}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Workers section (orchestrators with children) */}
       {children.length > 0 && (
         <div className="agent-details__section">
@@ -228,6 +319,32 @@ export function AgentDetailsWidget() {
               {child.task && (
                 <span className="agent-details__worker-task">{child.task}</span>
               )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Recent tools trail */}
+      {recentTools.length > 0 && (
+        <div className="agent-details__section">
+          <div className="agent-details__section-header">
+            <span>Recent tools</span>
+          </div>
+          {recentTools.map((tool, i) => (
+            <div key={i} className="agent-details__tool-entry">
+              <span
+                className="agent-details__tool-icon"
+                style={{ color: tool.status === 'error' ? palette.red : palette.green }}
+              >
+                {tool.status === 'error' ? '\u2717' : '\u2713'}
+              </span>
+              <span className="agent-details__tool-name">{tool.name}</span>
+              {tool.target && (
+                <span className="agent-details__tool-target">{tool.target}</span>
+              )}
+              <span className="agent-details__tool-duration">
+                {formatDuration(tool.durationMs)}
+              </span>
             </div>
           ))}
         </div>

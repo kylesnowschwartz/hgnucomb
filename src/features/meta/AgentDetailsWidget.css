@@ -98,7 +98,35 @@
   flex-shrink: 0;
 }
 
-/* Workers section */
+/* Context % bar */
+
+.agent-details__context-row {
+  align-items: center;
+}
+
+.agent-details__context-bar-container {
+  flex: 1;
+  height: 6px;
+  background: var(--ctp-surface0);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.agent-details__context-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.agent-details__context-percent {
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 28px;
+  text-align: right;
+}
+
+/* Sections (workers, tools, progress, git) */
 
 .agent-details__section {
   border-top: 1px solid var(--ctp-surface0);
@@ -125,6 +153,80 @@
   text-transform: none;
   letter-spacing: 0;
 }
+
+/* Tool entries (current + recent) */
+
+.agent-details__tool-current,
+.agent-details__tool-entry {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  font-size: 10px;
+  color: var(--ctp-subtext0);
+}
+
+.agent-details__tool-icon {
+  font-size: 10px;
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
+}
+
+.agent-details__tool-name {
+  color: var(--ctp-text);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.agent-details__tool-target {
+  color: var(--ctp-overlay1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-details__tool-elapsed,
+.agent-details__tool-duration {
+  color: var(--ctp-overlay0);
+  flex-shrink: 0;
+  font-size: 9px;
+}
+
+/* Todo / progress items */
+
+.agent-details__todo {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 1px 0;
+  font-size: 10px;
+}
+
+.agent-details__todo-icon {
+  font-size: 10px;
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.agent-details__todo-content {
+  color: var(--ctp-subtext0);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-details__todo-content--done {
+  color: var(--ctp-overlay0);
+  text-decoration: line-through;
+}
+
+/* Workers section */
 
 .agent-details__worker {
   display: flex;

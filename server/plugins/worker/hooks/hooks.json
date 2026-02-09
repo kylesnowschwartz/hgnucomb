@@ -1,6 +1,17 @@
 {
-  "description": "Worker Stop hook - blocks exit if uncommitted changes or report_result not called",
+  "description": "Worker hooks: transcript capture + clean exit enforcement",
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/capture-transcript-path.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

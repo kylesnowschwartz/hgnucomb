@@ -1,6 +1,17 @@
 {
-  "description": "Orchestrator workflow enforcement hooks",
+  "description": "Orchestrator hooks: transcript capture + workflow enforcement",
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/capture-transcript-path.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "mcp__hgnucomb__spawn_agent|mcp__hgnucomb__await_worker|mcp__hgnucomb__merge_worker_to_staging|mcp__hgnucomb__cleanup_worker_worktree|AskUserQuestion",

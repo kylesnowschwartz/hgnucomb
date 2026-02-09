@@ -786,6 +786,24 @@ export interface AgentActivityData {
   gitCommitCount: number;
   /** Recent commit messages (last 3, one-line) */
   gitRecentCommits: string[];
+  /** Transcript-derived telemetry (null until transcript discovered) */
+  telemetry?: AgentTelemetryData;
+}
+
+/** Real-time telemetry from Claude Code's JSONL transcript */
+export interface AgentTelemetryData {
+  currentTool: { name: string; target?: string; startedMs: number } | null;
+  recentTools: Array<{
+    name: string;
+    target?: string;
+    status: 'completed' | 'error';
+    durationMs: number;
+  }>;
+  todos: Array<{
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed';
+  }>;
+  contextPercent?: number;
 }
 
 // ============================================================================

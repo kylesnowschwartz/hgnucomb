@@ -69,11 +69,13 @@ import { join, resolve, extname, basename } from "path";
 import { existsSync, readFileSync } from "fs";
 import { saveImageForSession } from "./imageStorage.js";
 import { runPreflight } from "./preflight.js";
+import { TranscriptWatcher } from "./transcript-watcher.js";
 
 runPreflight();
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const manager = new TerminalSessionManager();
+const transcriptWatcher = new TranscriptWatcher();
 
 /**
  * HGNUCOMB_ROOT: where the hgnucomb package is installed on disk.
@@ -546,6 +548,9 @@ Work autonomously. Do not ask questions.`;
             lastOutputTime: Date.now(),
             inferredStatus: 'idle',  // Start idle until first output
           });
+
+          // Start watching for transcript (hook writes path file to worktree)
+          transcriptWatcher.startWatching(agentSnapshot.agentId, workingDir);
         }
       }
 
@@ -620,6 +625,7 @@ Work autonomously. Do not ask questions.`;
             cleanupContextFile(metadata.agentId);
             removeWorktree(getProjectDirForAgent(metadata.agentId), metadata.agentId);
             cleanupActivityTracking(sessionId);
+            transcriptWatcher.stopWatching(metadata.agentId);
 
             // Notify ALL clients that the cell has been converted to terminal.
             // Don't send agent.removed here - that would delete the agent from the
@@ -670,6 +676,7 @@ Work autonomously. Do not ask questions.`;
           cleanupContextFile(metadata.agentId);
           removeWorktree(metadata.projectDir ?? TOOL_DIR, metadata.agentId);
           agentInboxes.delete(metadata.agentId);
+          transcriptWatcher.stopWatching(metadata.agentId);
           broadcastAgentRemoval(metadata.agentId, 'cleanup', sessionId);
           sessionMetadata.delete(sessionId);
         }
@@ -750,6 +757,7 @@ Work autonomously. Do not ask questions.`;
           cleanupContextFile(metadata.agentId);
           removeWorktree(metadata.projectDir ?? TOOL_DIR, metadata.agentId);
           agentInboxes.delete(metadata.agentId);
+          transcriptWatcher.stopWatching(metadata.agentId);
           sessionMetadata.delete(sessionId);
         }
         send(ws, {
@@ -823,6 +831,7 @@ Work autonomously. Do not ask questions.`;
       for (const sessionId of sessionActivity.keys()) {
         cleanupActivityTracking(sessionId);
       }
+      transcriptWatcher.dispose();
 
       // Dispose all PTY sessions
       manager.disposeAll();
@@ -1507,9 +1516,10 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
         break;
       }
 
-      // Clean up the worktree and inbox
+      // Clean up the worktree, inbox, and transcript watcher
       const result = removeWorktree(getProjectDirForAgent(workerId), workerId);
       agentInboxes.delete(workerId);
+      transcriptWatcher.stopWatching(workerId);
 
       // Dispose PTY session and remove from all tracking maps
       const sessionId = findSessionByAgentId(workerId);
@@ -1601,10 +1611,11 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
           // Clean up tracking
           clientSessions.forEach(sessions => sessions.delete(sessionId));
           sessionClient.delete(sessionId);
-          // Clean up context file, worktree, and inbox
+          // Clean up context file, worktree, inbox, and transcript watcher
           cleanupContextFile(workerId);
           removeWorktree(getProjectDirForAgent(workerId), workerId);
           agentInboxes.delete(workerId);
+          transcriptWatcher.stopWatching(workerId);
           sessionMetadata.delete(sessionId);
 
           // Broadcast removal to all browser clients
@@ -1652,7 +1663,7 @@ console.log(`[Server] WebSocket listening on ws://localhost:${PORT}`);
 // Agent Activity Broadcast (HUD observability)
 // ============================================================================
 
-const ACTIVITY_BROADCAST_INTERVAL_MS = 5000;  // 5 seconds
+const ACTIVITY_BROADCAST_INTERVAL_MS = 3000;  // 3 seconds (telemetry benefits from lower latency)
 
 /**
  * Get git commit count and recent commits for an agent's worktree branch.
@@ -1689,7 +1700,8 @@ function getAgentGitInfo(agentId: string): { count: number; commits: string[] } 
 
 /**
  * Broadcast agent activity data to all browser clients.
- * Runs every 5 seconds, only includes Claude agents (not plain terminals).
+ * Runs every 3 seconds, only includes Claude agents (not plain terminals).
+ * Includes transcript-derived telemetry when available.
  */
 const activityBroadcastInterval = setInterval(() => {
   if (browserClients.size === 0) return;  // No browsers connected
@@ -1700,6 +1712,12 @@ const activityBroadcastInterval = setInterval(() => {
     lastActivityAt: number;
     gitCommitCount: number;
     gitRecentCommits: string[];
+    telemetry?: {
+      currentTool: { name: string; target?: string; startedMs: number } | null;
+      recentTools: Array<{ name: string; target?: string; status: 'completed' | 'error'; durationMs: number }>;
+      todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed' }>;
+      contextPercent?: number;
+    };
   }> = [];
 
   for (const [sessionId, metadata] of sessionMetadata.entries()) {
@@ -1708,6 +1726,7 @@ const activityBroadcastInterval = setInterval(() => {
 
     const activity = sessionActivity.get(sessionId);
     const gitInfo = getAgentGitInfo(metadata.agentId);
+    const telemetry = transcriptWatcher.getTelemetry(metadata.agentId);
 
     agentActivities.push({
       agentId: metadata.agentId,
@@ -1715,6 +1734,7 @@ const activityBroadcastInterval = setInterval(() => {
       lastActivityAt: activity?.lastOutputTime ?? 0,
       gitCommitCount: gitInfo.count,
       gitRecentCommits: gitInfo.commits,
+      telemetry: telemetry ?? undefined,
     });
   }
 
@@ -1760,6 +1780,7 @@ function shutdown(signal: string): void {
   console.log(`\n${signal} received, shutting down...`);
   clearInterval(activityCheckInterval);
   clearInterval(activityBroadcastInterval);
+  transcriptWatcher.dispose();
   manager.disposeAll();
 
   // Forcibly close all WebSocket connections so the server can close immediately

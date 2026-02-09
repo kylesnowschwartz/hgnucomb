@@ -6,7 +6,7 @@ import type {
   CellType,
   DetailedStatus,
 } from '@shared/types';
-import type { AgentMessage, AgentModel } from '@shared/protocol';
+import type { AgentMessage, AgentModel, AgentTelemetryData } from '@shared/protocol';
 import { useEventLogStore } from '@features/events/eventLogStore';
 
 // localStorage key for persisting agent state
@@ -48,6 +48,8 @@ export interface AgentState {
   gitCommitCount?: number;
   /** Recent commit messages (last 3-5, one-line each) */
   gitRecentCommits?: string[];
+  /** Transcript-derived telemetry (from agent.activity broadcast) */
+  telemetry?: AgentTelemetryData;
 }
 
 export interface SpawnOptions {
@@ -89,6 +91,7 @@ interface AgentStore {
     lastActivityAt: number;
     gitCommitCount: number;
     gitRecentCommits: string[];
+    telemetry?: AgentTelemetryData;
   }) => void;
 }
 
@@ -226,6 +229,8 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         lastActivityAt: data.lastActivityAt,
         gitCommitCount: data.gitCommitCount,
         gitRecentCommits: data.gitRecentCommits,
+        // Only overwrite telemetry when present (old broadcasts may lack it)
+        ...(data.telemetry ? { telemetry: data.telemetry } : {}),
       }),
     }));
   },
