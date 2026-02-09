@@ -92,6 +92,7 @@ export const xtermTheme = {
 
 // Agent type colors (for hex grid)
 export const agentColors = {
+  terminal: palette.teal,
   orchestrator: palette.blue,
   worker: palette.green,
   // Connection lines between agents
@@ -105,4 +106,5 @@ export const hexGrid = {
   hexFillHover: palette.surface0, // Subtle fill when cell is selected
   hexStroke: palette.surface1,
   originMarker: palette.overlay0,
+  accentNeon: '#ffaa6e', // Electric peach - intentionally outside Catppuccin palette for max contrast
 } as const;

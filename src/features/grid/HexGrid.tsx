@@ -20,7 +20,6 @@ import { useUIStore } from '@features/controls/uiStore';
 import { useEventLogStore } from '@features/events/eventLogStore';
 import { useViewportStore } from './viewportStore';
 import { useShallow } from 'zustand/shallow';
-import type { AgentRole } from '@protocol/types';
 import { hexGrid, agentColors, palette } from '@theme/catppuccin-mocha';
 
 // ============================================================================
@@ -45,6 +44,7 @@ const STYLE = {
   hexFill: hexGrid.hexFill,
   hexFillHover: hexGrid.hexFillHover,
   hexStroke: hexGrid.hexStroke,
+  accentNeon: hexGrid.accentNeon,
   originMarkerStroke: hexGrid.originMarker,
   gridStrokeWidth: 1,
   hexSize: 40,
@@ -53,7 +53,8 @@ const STYLE = {
   zoomFactor: 1.08,
 } as const;
 
-const ROLE_COLORS: Record<AgentRole, string> = {
+const CELL_COLORS: Record<CellType, string> = {
+  terminal: agentColors.terminal,
   orchestrator: agentColors.orchestrator,
   worker: agentColors.worker,
 };
@@ -503,32 +504,43 @@ export function HexGrid({
           const isHovered =
             hoveredHex && hoveredHex.q === hex.q && hoveredHex.r === hex.r;
           const isInFamily = agent && familyMembers.has(agent.id);
-          const isActive = isPanelOpen || isInFamily || isSelected || isHovered;
 
-          // Fill: agent role color > selected highlight > hover highlight > default
+          // Fill: cell type color > selected/hover highlight > default
           const fill = agent
-            ? ROLE_COLORS[agent.role]
+            ? CELL_COLORS[agent.cellType]
             : isSelected
               ? STYLE.hexFillHover
               : isHovered
                 ? STYLE.hexFillHover
                 : STYLE.hexFill;
 
-          // Stroke: darkened fill for active states, default gray otherwise
-          const stroke = isActive
-            ? darkenColor(fill, 0.3)
-            : STYLE.hexStroke;
+          // Stroke: neon accent for panel-open/selected, darkened fill for family/hover, gray default
+          const stroke = isPanelOpen
+            ? STYLE.accentNeon
+            : isSelected
+              ? STYLE.accentNeon
+              : isInFamily
+                ? darkenColor(fill, 0.3)
+                : isHovered
+                  ? darkenColor(fill, 0.3)
+                  : STYLE.hexStroke;
 
-          // Stroke width: panel-open/family = thick, selected = medium, hovered = thin+, default = thin
+          // Stroke width: thin neon, medium family, subtle hover
           const strokeWidth = isPanelOpen
-            ? 4
-            : isInFamily
-              ? 4
-              : isSelected
-                ? 2
+            ? 2
+            : isSelected
+              ? 2
+              : isInFamily
+                ? 3
                 : isHovered
                   ? 1.5
                   : STYLE.gridStrokeWidth;
+
+          // Dash: dashed border for keyboard-selected (not panel-open, which is solid)
+          const dash = isSelected && !isPanelOpen ? [8, 4] : undefined;
+
+          // Shadow: subtle glow for panel-open only
+          const shadowEnabled = !!isPanelOpen;
           const opacity = agent ? STATUS_OPACITY[agent.status] : 1;
 
           /** Determine cell type from modifier keys */
@@ -545,7 +557,14 @@ export function HexGrid({
               fill={fill}
               stroke={stroke}
               strokeWidth={strokeWidth}
+              dash={dash}
               opacity={opacity}
+              shadowColor={shadowEnabled ? STYLE.accentNeon : undefined}
+              shadowBlur={shadowEnabled ? 8 : 0}
+              shadowOpacity={shadowEnabled ? 0.5 : 0}
+              shadowOffsetX={0}
+              shadowOffsetY={0}
+              shadowEnabled={shadowEnabled}
               listening={true}
               onClick={(e) => {
                 // Only respond to left-click (button 0)
