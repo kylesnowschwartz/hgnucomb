@@ -7,9 +7,10 @@
  *    {gitRoot}/.worktrees/{agentId}/ with its own branch. Full git isolation --
  *    agents can commit, diff, and merge without conflicts.
  *
- * 2. **Session directory** (non-git fallback): Each agent gets a temp directory
- *    at {tmpdir}/hgnucomb-agent-{agentId}/. No git operations available, but
- *    agents still get MCP tools and file isolation. Cleaned up on session dispose.
+ * 2. **Direct directory** (non-git fallback): All agent types work directly in
+ *    the target directory. Without git there's no worktree isolation to offer,
+ *    and a temp dir would be useless (empty, no project files). MCP communication
+ *    still works; git-dependent tools (diff, merge) fail gracefully at call time.
  *
  * Both paths produce a WorktreeResult with a workspace directory. The caller
  * doesn't need to know which strategy was used.
@@ -77,8 +78,6 @@ export interface WorktreeResult {
   success: boolean;
   worktreePath?: string;
   branchName?: string;
-  /** True when using a temp session directory instead of a git worktree */
-  isSessionDir?: boolean;
   /** Path to MCP config file in $TMPDIR (for --mcp-config CLI flag) */
   mcpConfigPath?: string;
   error?: string;
@@ -88,7 +87,7 @@ export interface WorktreeResult {
  * Create an isolated workspace for an agent.
  *
  * In a git repo: creates a worktree at {gitRoot}/.worktrees/{agentId}/
- * Outside a git repo: creates a session dir at {tmpdir}/hgnucomb-agent-{agentId}/
+ * Outside a git repo: uses targetDir directly (no isolation, no temp dirs)
  *
  * All paths write MCP config to $TMPDIR, passed to Claude CLI via --mcp-config.
  *
@@ -103,70 +102,19 @@ export function createWorktree(targetDir: string, agentId: string, cellType: Cel
   const gitRoot = getGitRoot(targetDir);
 
   if (!gitRoot) {
-    // Non-git orchestrators work directly in the project directory.
-    // They don't write code and need to see the directory contents (e.g., to
-    // discover repos in a meta-directory). Only workers need isolation.
-    if (cellType === "orchestrator") {
-      let mcpConfigPath: string | undefined;
-      if (toolDir) {
-        const mcpConfig = generateMcpConfig(toolDir, agentId, cellType, wsUrl);
-        mcpConfigPath = writeMcpConfigToTemp(agentId, mcpConfig);
-        console.log(`[Worktree] Non-git orchestrator ${agentId}: using project dir directly, MCP config at ${mcpConfigPath}`);
-      }
-      return { success: true, worktreePath: targetDir, mcpConfigPath, isSessionDir: false };
-    }
-
-    return createSessionDir(targetDir, agentId, cellType, wsUrl, toolDir);
-  }
-
-  return createGitWorktree(gitRoot, agentId, cellType, wsUrl, toolDir);
-}
-
-/**
- * Non-git fallback: create a temp session directory for the agent.
- *
- * The directory is created under $TMPDIR so it's automatically cleaned up
- * on reboot, with explicit cleanup in removeWorktree as well.
- */
-function createSessionDir(targetDir: string, agentId: string, cellType: CellType, wsUrl: string, toolDir?: string): WorktreeResult {
-  const sessionDir = join(tmpdir(), `hgnucomb-agent-${agentId}`);
-  let mcpConfigPath: string | undefined;
-
-  try {
-    mkdirSync(sessionDir, { recursive: true });
-  } catch (err) {
-    console.error(`[Session] Failed to create session dir: ${err instanceof Error ? err.message : String(err)}`);
-    // Last resort: use targetDir directly, still write MCP config to temp
+    // No git repo: all agent types work directly in the target directory.
+    // A temp dir would be useless (empty, no project files). Git-dependent
+    // MCP tools (diff, merge) fail gracefully at call time.
+    let mcpConfigPath: string | undefined;
     if (toolDir) {
       const mcpConfig = generateMcpConfig(toolDir, agentId, cellType, wsUrl);
       mcpConfigPath = writeMcpConfigToTemp(agentId, mcpConfig);
+      console.log(`[Worktree] Non-git ${cellType} ${agentId}: using project dir directly, MCP config at ${mcpConfigPath}`);
     }
-    return { success: true, worktreePath: targetDir, mcpConfigPath, isSessionDir: false };
+    return { success: true, worktreePath: targetDir, mcpConfigPath };
   }
 
-  // Write MCP config to temp file (passed via --mcp-config CLI flag)
-  if (toolDir) {
-    const mcpConfig = generateMcpConfig(toolDir, agentId, cellType, wsUrl);
-    mcpConfigPath = writeMcpConfigToTemp(agentId, mcpConfig);
-    console.log(`[Session] MCP config for ${cellType} ${agentId} at ${mcpConfigPath}`);
-  }
-
-  // Symlink project-specific directories if they exist in the target dir
-  const projectDirs = [".claude", ".beads-lite"];
-  for (const dir of projectDirs) {
-    const sourceDir = join(targetDir, dir);
-    if (existsSync(sourceDir)) {
-      try {
-        symlinkSync(sourceDir, join(sessionDir, dir));
-        console.log(`[Session] Symlinked ${dir}/ (from project)`);
-      } catch (err) {
-        console.warn(`[Session] Failed to symlink ${dir}/: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-  }
-
-  console.log(`[Session] Created session dir: ${sessionDir} (non-git fallback)`);
-  return { success: true, worktreePath: sessionDir, mcpConfigPath, isSessionDir: true };
+  return createGitWorktree(gitRoot, agentId, cellType, wsUrl, toolDir);
 }
 
 /**
@@ -298,14 +246,14 @@ function createGitWorktree(gitRoot: string, agentId: string, cellType: CellType,
 }
 
 /**
- * Remove an agent's workspace (worktree or session directory).
+ * Remove an agent's workspace (worktree or stale session directory).
  *
  * @param targetDir - Original target directory (to find git root)
  * @param agentId - Agent identifier
  * @returns Result with success status
  */
 export function removeWorktree(targetDir: string, agentId: string): WorktreeResult {
-  // Try cleaning up a session directory first (non-git case)
+  // Clean up stale session dirs from older versions that used temp directories
   const sessionDir = join(tmpdir(), `hgnucomb-agent-${agentId}`);
   if (existsSync(sessionDir)) {
     try {

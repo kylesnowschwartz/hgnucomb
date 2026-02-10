@@ -445,20 +445,6 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
         const wsUrl = `ws://localhost:${PORT}`;
         const worktreeResult = createWorktree(workingDir, agentSnapshot.agentId, agentSnapshot.cellType, wsUrl, HGNUCOMB_ROOT);
 
-        // Workers require git isolation. If they got a session dir (no git repo),
-        // they can't commit, diff, or merge -- the entire staging workflow is useless.
-        // Fail loudly instead of silently degrading.
-        if (worktreeResult.isSessionDir && agentSnapshot.cellType === "worker") {
-          const errorMsg = `Worker requires a git repository for worktree isolation. The directory "${workingDir}" is not a git repo. Use repoPath in spawn_agent to specify which repo the worker should operate in.`;
-          console.error(`[Worktree] Worker ${agentSnapshot.agentId} cannot start: ${errorMsg}`);
-          send(ws, {
-            type: "terminal.error",
-            requestId: msg.requestId,
-            payload: { message: errorMsg },
-          });
-          break;
-        }
-
         if (worktreeResult.success && worktreeResult.worktreePath) {
           workingDir = worktreeResult.worktreePath;
           console.log(`[Worktree] Agent ${agentSnapshot.agentId} (${agentSnapshot.cellType}) using: ${workingDir}`);

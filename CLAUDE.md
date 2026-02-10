@@ -225,8 +225,8 @@ Reporting `done` prematurely (e.g., right after spawning workers) is semanticall
 
 **Agent isolation (two strategies in `server/worktree.ts`):**
 - **Git repo (preferred):** Each agent gets a worktree at `{gitRoot}/.worktrees/{agentId}/` with its own branch. Full git isolation -- agents can commit, diff, merge without conflicts. Project dirs (`.claude`, `.beads-lite`) symlinked from gitRoot, deps (`node_modules`) symlinked from project.
-- **Non-git fallback:** Each agent gets a session dir at `{tmpdir}/hgnucomb-agent-{agentId}/`. No git operations, but agents still get MCP tools and file isolation. Cleaned up on dispose + on reboot.
-- Both paths write `.mcp.json` with absolute paths so Claude CLI discovers the MCP server
+- **Non-git fallback:** All agent types work directly in the target directory. No git operations available, but MCP communication tools work. Git-dependent tools (diff, merge) fail gracefully at call time.
+- Both paths write MCP config to `$TMPDIR` (passed to Claude CLI via `--mcp-config` flag)
 
 **Spatial coordination:**
 - Hex grid uses axial coordinates (q, r)
