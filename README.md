@@ -2,8 +2,7 @@
 
 A spatial terminal multiplexer. Your terminals live on a hex grid -- navigate between them like an RTS, build spatial memory of your workspace, and optionally let AI agents coordinate across it.
 
-<!-- TODO: replace with demo GIF/WebM -->
-<!-- ![demo](docs/demo.gif) -->
+![hgnucomb demo](https://raw.githubusercontent.com/kylesnowschwartz/hgnucomb/main/docs/demo.gif)
 
 ## Why
 
@@ -40,20 +39,6 @@ just dev        # frontend :5173 + server :3001
 Navigate with `hjkl` or arrow keys. Press `t` on any empty cell to spawn a terminal. Press `Enter` to open it. Press `Cmd+Escape` to close the panel and return to the grid. Your terminal keeps running in the background -- reopen it anytime.
 
 That's it. Spatial terminals.
-
-```
-        ___
-   ___/     \___
-  /     dev     \___
-  \   server   /     \___
-   \___/     \/  tests   \
-  /     \___/ \  runner  /
-  /   db  \    \___/     \
-  \  shell /   /     \___/
-   \___/     \/  logs    \
-        \___/ \  tail   /
-               \___/
-```
 
 You build a layout once. You remember where things are. Navigating between "the server" and "the tests" becomes muscle memory, not tab-hunting.
 
