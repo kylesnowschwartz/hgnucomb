@@ -360,6 +360,12 @@ function FlashOverlay({ x, y, hexSize, flashType }: {
 // Component Props
 // ============================================================================
 
+/** Initial viewport offset: where hex origin (0,0) lands on screen.
+ *  x: centered horizontally. y: 40% from top to clear bottom terminal panel. */
+function initialViewportPosition(width: number, height: number) {
+  return { x: width / 2, y: height * 0.3 };
+}
+
 export interface HexGridProps {
   /** Canvas width in pixels */
   width: number;
@@ -387,7 +393,7 @@ export function HexGrid({
 
   // Viewport state (local state, synced to store for external components)
   const [scale, setScaleLocal] = useState(1);
-  const [position, setPositionLocal] = useState({ x: width / 2, y: height / 2 });
+  const [position, setPositionLocal] = useState(() => initialViewportPosition(width, height));
 
   // Store setters and pending pan
   const setViewport = useViewportStore((s) => s.setViewport);
@@ -412,7 +418,7 @@ export function HexGrid({
 
   // Initialize store position on mount
   useEffect(() => {
-    setViewport(scale, { x: width / 2, y: height / 2 });
+    setViewport(scale, initialViewportPosition(width, height));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Apply pending pan from external source (keyboard navigation)
