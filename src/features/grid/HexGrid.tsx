@@ -655,31 +655,22 @@ export function HexGrid({
                 ? STYLE.hexFillHover
                 : STYLE.hexFill;
 
-          // Stroke: neon accent for interaction states, transparent for merged families, gray default.
-          // Hover/select temporarily reveals individual cell boundaries within the merged blob.
-          const stroke = isPanelOpen
+          // Stroke: peach accent for any interaction (hover, select, panel-open)
+          const isActive = isPanelOpen || isSelected || isHovered;
+          const stroke = isActive
             ? STYLE.accentNeon
-            : isSelected
-              ? STYLE.accentNeon
-              : isHovered
-                ? darkenColor(fill, 0.3)
-                : isInMergedFamily
-                  ? 'transparent'
-                  : STYLE.hexStroke;
+            : isInMergedFamily
+              ? 'transparent'
+              : STYLE.hexStroke;
 
-          // Stroke width: neon accents > hover > merged (hidden) > default grid
-          const strokeWidth = isPanelOpen
+          const strokeWidth = isActive
             ? 2
-            : isSelected
-              ? 2
-              : isHovered
-                ? 1.5
-                : isInMergedFamily
-                  ? 0
-                  : STYLE.gridStrokeWidth;
+            : isInMergedFamily
+              ? 0
+              : STYLE.gridStrokeWidth;
 
-          // Dash: dashed border for keyboard-selected (not panel-open, which is solid)
-          const dash = isSelected && !isPanelOpen ? [8, 4] : undefined;
+          // Dashed border for any interaction state (keyboard or mouse)
+          const dash = isActive ? [8, 4] : undefined;
 
           // Shadow: subtle glow for panel-open only
           const shadowEnabled = !!isPanelOpen;
@@ -711,24 +702,22 @@ export function HexGrid({
               onClick={(e) => {
                 // Only respond to left-click (button 0)
                 if (e.evt.button !== 0) return;
+                selectHex(hex);
                 if (agent) {
                   // Occupied cell: open terminal panel directly
                   selectAgent(agent.id);
-                } else {
-                  // Empty cell: select to show spawn menu
-                  selectHex(hex);
                 }
               }}
               onTap={() => {
+                selectHex(hex);
                 if (agent) {
                   selectAgent(agent.id);
-                } else {
-                  selectHex(hex);
                 }
               }}
               onDblClick={(e) => {
                 // Only respond to left-click (button 0)
                 if (e.evt.button !== 0) return;
+                selectHex(hex);
                 if (agent) {
                   // Double-click occupied = open panel
                   selectAgent(agent.id);
@@ -741,6 +730,7 @@ export function HexGrid({
                 }
               }}
               onDblTap={() => {
+                selectHex(hex);
                 if (agent) {
                   selectAgent(agent.id);
                 } else {
