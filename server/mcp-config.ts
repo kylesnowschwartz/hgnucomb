@@ -5,7 +5,7 @@
  * in a worktree (its own git root), Claude won't find the parent repo's config.
  *
  * Solution: Generate .mcp.json with absolute paths and write it to the worktree.
- * This follows the claude-swarm pattern of per-instance MCP config generation.
+ * Each agent instance gets its own MCP config with absolute paths.
  *
  * ## Future: Per-Agent Settings
  *
@@ -19,7 +19,7 @@
  *   - CLAUDE.md (agent-specific system prompt)
  *   - .mcp.json (can move MCP config here too)
  *
- * Reference: .cloned-sources/gastown/internal/config/env.go
+ * See CLAUDE_CONFIG_DIR in Claude Code docs for details.
  */
 
 import { writeFileSync } from "fs";

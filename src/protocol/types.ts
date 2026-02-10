@@ -2,7 +2,7 @@
  * Event Protocol Types for hgnucomb
  *
  * Defines the message contract between the event hub and UI components.
- * Adapted from ccswarm patterns for hub-spoke agent coordination.
+ * Uses hub-spoke pattern for agent coordination.
  *
  * @see .agent-history/context-packet-task1-event-protocol.md
  */

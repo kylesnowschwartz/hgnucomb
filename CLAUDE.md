@@ -99,7 +99,6 @@ server/
     orchestrator/     # Orchestrator-specific hooks (reserved for future)
 
 .agent-history/       # AI-generated docs (plans, research, context packets)
-.cloned-sources/      # Upstream repos for reference (gitignored)
 ```
 
 ## Path Aliases
@@ -412,30 +411,6 @@ bl close <id>         # Complete task
 - Session persistence across page reloads
 - Production hardening (error handling, reconnection)
 
-## Reference Code
-
-`.cloned-sources/` contains upstream repos (gitignored):
-
-| Repo | Purpose |
-|------|---------|
-| `terminal-mcp` | xterm.js + node-pty patterns |
-| `mcp-sdk` | MCP TypeScript SDK |
-| `ccswarm`, `claude-swarm`, `swarm` | Multi-agent orchestration patterns |
-| `voicetree` | Tree-based agent coordination |
-| `claudio`, `gastown` | Git worktree isolation patterns |
-| `catppuccin-palette` | Official color palette |
-| `konva` | Canvas library internals |
-
-## Research Documents
-
-`.agent-history/` contains 14 research docs. Key ones:
-
-- `research-multi-agent-orchestration-*.md` - Agent coordination patterns
-- `research-adversarial-patterns-*.md` - Patterns from production users
-- `research-protocol-comparison-*.md` - IPC/protocol options
-- `research-terminal-mcp-*.md` - xterm.js integration patterns
-- `research-index.md` - Index of all research
-
 ## Development Footguns
 
 Things that have bitten us. Read these before touching the relevant code.
@@ -464,8 +439,7 @@ There are three path concepts and confusing them breaks npx distribution. `HGNUC
 ## Development Process
 
 1. **Check tasks:** `bl ready` before starting work
-2. **Source reference code:** Check `.cloned-sources/` first, clone if missing
-3. **Research patterns:** Document non-trivial findings in `.agent-history/research-*.md`
-4. **Plan:** Get approval before significant changes
-5. **Implement:** Follow patterns from reference repos
-6. **Close tasks:** `bl close <id>` when done
+2. **Research patterns:** Document non-trivial findings in `.agent-history/research-*.md`
+3. **Plan:** Get approval before significant changes
+4. **Implement:** Follow established patterns in the codebase
+5. **Close tasks:** `bl close <id>` when done

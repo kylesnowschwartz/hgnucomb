@@ -8,7 +8,7 @@
  *   4. getTelemetry(agentId) returns cached state for broadcast
  *   5. stopWatching(agentId) - cleans up timers and file handles
  *
- * Parsing logic ported from claude-hud transcript.ts.
+ * Parses JSONL transcript format from Claude Code sessions.
  */
 
 import { existsSync, readFileSync, statSync, createReadStream } from "fs";
@@ -316,7 +316,7 @@ export class TranscriptWatcher {
   }
 
   // ==========================================================================
-  // Internal: JSONL parsing (ported from claude-hud transcript.ts)
+  // Internal: JSONL parsing
   // ==========================================================================
 
   private processEntry(state: WatcherState, entry: TranscriptEntry): void {
@@ -441,7 +441,7 @@ export class TranscriptWatcher {
 }
 
 // ============================================================================
-// Helpers (ported from claude-hud)
+// Helpers
 // ============================================================================
 
 /**

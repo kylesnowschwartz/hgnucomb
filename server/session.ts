@@ -1,8 +1,8 @@
 /**
  * TerminalSession wraps node-pty to provide a simple PTY interface.
  *
- * Unlike terminal-mcp, we don't use xterm headless here - the browser
- * handles all terminal emulation and rendering. This is just a pipe.
+ * We don't use xterm headless on the server - the browser handles all
+ * terminal emulation and rendering. This is just a pipe.
  */
 
 import * as pty from "node-pty";
