@@ -17,14 +17,16 @@ AI agents live on the same grid -- spawn them, watch them work, merge their code
 ## Quick Start
 
 ```bash
-npx hgnucomb
+npm install -g hgnucomb
+hgnucomb
 ```
 
-That's it. Starts the server, opens the browser, you're on the grid.
+Installs the CLI globally, then starts the server and opens the browser. Run `hgnucomb` from any project directory -- it operates in your current working directory.
 
 ### Prerequisites
 
-- Node.js 20+ (with C++ build tools for node-pty -- Xcode CLI on macOS, `build-essential` on Linux)
+- Node.js 20+
+- C++ build tools (node-pty compiles a native addon at install time) -- `xcode-select --install` on macOS
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude`) -- only needed for AI agents
 
 ### Development
@@ -132,7 +134,7 @@ hgnucomb --help           Show usage
 Each orchestrator and worker gets its own git worktree under `.worktrees/` with a branch under `hgnucomb/`. Normally these are cleaned up automatically when agents finish or are killed. But if the server crashes or you Ctrl+C at the wrong moment, orphaned worktrees can pile up.
 
 ```bash
-npx hgnucomb cleanup
+hgnucomb cleanup
 ```
 
 This finds all `.worktrees/` directories and `hgnucomb/*` branches, shows you what it'll remove, and asks for confirmation. Safe to run anytime.

@@ -57,9 +57,9 @@ Environment:
   PORT                      Server port (overridden by --port flag)
 
 Examples:
-  npx hgnucomb              Run from npm
-  npx hgnucomb -p 8080      Run on a custom port
-  npx hgnucomb cleanup      Clean up leftover agent worktrees`);
+  hgnucomb                  Start in current directory
+  hgnucomb -p 8080          Run on a custom port
+  hgnucomb cleanup          Clean up leftover agent worktrees`);
 }
 
 // --- Commands ---

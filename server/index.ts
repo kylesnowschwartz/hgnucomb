@@ -98,12 +98,15 @@ const HGNUCOMB_ROOT = basename(import.meta.dirname) === "dist"
 /**
  * TOOL_DIR: the project directory hgnucomb operates in.
  *
- * Defaults to HGNUCOMB_ROOT (self-hosting: developing hgnucomb with hgnucomb).
+ * Resolves to the git root of CWD when inside a repo, otherwise CWD itself.
  * When run via npx from another project, this resolves to that project's git root
  * so agents create worktrees in the right repo. Overridable by the user via
  * ProjectBar in the UI (stored per-agent in sessionMetadata.projectDir).
+ *
+ * Never falls back to HGNUCOMB_ROOT — that's the package install dir (possibly
+ * an npx temp cache), not where the user wants to work.
  */
-const TOOL_DIR = getGitRoot(process.cwd()) ?? HGNUCOMB_ROOT;
+const TOOL_DIR = getGitRoot(process.cwd()) ?? process.cwd();
 
 // ============================================================================
 // Static File Serving (production mode)
