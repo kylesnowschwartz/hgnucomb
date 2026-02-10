@@ -37,6 +37,8 @@ export interface AgentState {
   taskDetails?: string;
   /** Claude model override (opus/sonnet/haiku). Defaults: orchestrator=opus, worker=sonnet */
   model?: AgentModel;
+  /** Target git repo for worker worktree (overrides project-level projectDir) */
+  repoPath?: string;
   /** Message inbox for receiving results and broadcasts */
   inbox: AgentMessage[];
   // Activity data (populated by server agent.activity broadcast)
@@ -60,6 +62,8 @@ export interface SpawnOptions {
   instructions?: string;
   taskDetails?: string;
   model?: AgentModel;
+  /** Target git repo for worker worktree (overrides project-level projectDir) */
+  repoPath?: string;
 }
 
 /** Transient flash state for status transition animations (done/error) */
@@ -104,7 +108,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
   getAllAgents: () => Array.from(get().agents.values()),
 
   spawnAgent: (hex, cellType = 'terminal', options = {}) => {
-    const { initialPrompt, parentId, parentHex, task, instructions, taskDetails, model } = options;
+    const { initialPrompt, parentId, parentHex, task, instructions, taskDetails, model, repoPath } = options;
     const id = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     // Role maps from cellType: orchestrator cells are orchestrators, terminal cells are workers
     const role: AgentRole = cellType === 'orchestrator' ? 'orchestrator' : 'worker';
@@ -125,6 +129,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         instructions,
         taskDetails,
         model,
+        repoPath,
         inbox: [],
       }),
     }));

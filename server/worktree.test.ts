@@ -5,9 +5,12 @@
  * 1. Session directory (non-git fallback) -- uses real temp dirs
  * 2. Git worktree -- mocked since we can't create real worktrees in CI
  * 3. Cleanup behavior for both strategies
+ * 4. Non-git orchestrator shortcut (uses project dir directly)
  *
  * The session dir tests use real filesystem operations (mkdirSync, existsSync)
  * because that's what we're actually verifying. Git operations are mocked.
+ *
+ * MCP config is now written to $TMPDIR (not .mcp.json in workspace).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -35,8 +38,13 @@ function cleanDir(dir: string): void {
   }
 }
 
-describe("createWorktree - session directory fallback", () => {
-  const agentId = `test-agent-${Date.now()}`;
+/** Get the expected temp MCP config path for an agent. */
+function mcpConfigTempPath(agentId: string): string {
+  return join(tmpdir(), `hgnucomb-mcp-${agentId}.json`);
+}
+
+describe("createWorktree - session directory fallback (workers)", () => {
+  const agentId = `test-worker-${Date.now()}`;
   const sessionDir = join(tmpdir(), `hgnucomb-agent-${agentId}`);
   let targetDir: string;
   let fakeToolDir: string;
@@ -57,11 +65,12 @@ describe("createWorktree - session directory fallback", () => {
     cleanDir(sessionDir);
     cleanDir(targetDir);
     cleanDir(fakeToolDir);
+    rmSync(mcpConfigTempPath(agentId), { force: true });
     vi.restoreAllMocks();
   });
 
-  it("creates session dir in tmpdir when target is not a git repo", () => {
-    const result = createWorktree(targetDir, agentId, "orchestrator", "ws://localhost:3001", fakeToolDir);
+  it("creates session dir in tmpdir when target is not a git repo (worker)", () => {
+    const result = createWorktree(targetDir, agentId, "worker", "ws://localhost:3001", fakeToolDir);
 
     expect(result.success).toBe(true);
     expect(result.isSessionDir).toBe(true);
@@ -69,22 +78,27 @@ describe("createWorktree - session directory fallback", () => {
     expect(existsSync(sessionDir)).toBe(true);
   });
 
-  it("writes .mcp.json in the session directory", () => {
-    createWorktree(targetDir, agentId, "orchestrator", "ws://localhost:3001", fakeToolDir);
+  it("writes MCP config to temp file, NOT .mcp.json in workspace", () => {
+    const result = createWorktree(targetDir, agentId, "worker", "ws://localhost:3001", fakeToolDir);
 
-    const mcpConfigPath = join(sessionDir, ".mcp.json");
-    expect(existsSync(mcpConfigPath)).toBe(true);
+    // Temp config file must exist
+    expect(result.mcpConfigPath).toBe(mcpConfigTempPath(agentId));
+    expect(existsSync(result.mcpConfigPath!)).toBe(true);
 
-    const config = JSON.parse(readFileSync(mcpConfigPath, "utf8"));
+    // .mcp.json must NOT exist in session dir
+    expect(existsSync(join(sessionDir, ".mcp.json"))).toBe(false);
+
+    // Validate config contents
+    const config = JSON.parse(readFileSync(result.mcpConfigPath!, "utf8"));
     expect(config.mcpServers.hgnucomb).toBeDefined();
     expect(config.mcpServers.hgnucomb.command).toBe("node");
     expect(config.mcpServers.hgnucomb.args[0]).toContain("server/dist/mcp.js");
   });
 
   it("MCP config uses toolDir for mcp.js path, not targetDir", () => {
-    createWorktree(targetDir, agentId, "orchestrator", "ws://localhost:3001", fakeToolDir);
+    const result = createWorktree(targetDir, agentId, "worker", "ws://localhost:3001", fakeToolDir);
 
-    const config = JSON.parse(readFileSync(join(sessionDir, ".mcp.json"), "utf8"));
+    const config = JSON.parse(readFileSync(result.mcpConfigPath!, "utf8"));
     const mcpPath = config.mcpServers.hgnucomb.args[0];
 
     // Must point to toolDir (hgnucomb install), not targetDir (user project)
@@ -93,9 +107,9 @@ describe("createWorktree - session directory fallback", () => {
   });
 
   it("sets agent env vars in MCP config", () => {
-    createWorktree(targetDir, agentId, "worker", "ws://localhost:9999", fakeToolDir);
+    const result = createWorktree(targetDir, agentId, "worker", "ws://localhost:9999", fakeToolDir);
 
-    const config = JSON.parse(readFileSync(join(sessionDir, ".mcp.json"), "utf8"));
+    const config = JSON.parse(readFileSync(result.mcpConfigPath!, "utf8"));
     const env = config.mcpServers.hgnucomb.env;
 
     expect(env.HGNUCOMB_AGENT_ID).toBe(agentId);
@@ -104,11 +118,10 @@ describe("createWorktree - session directory fallback", () => {
   });
 
   it("symlinks .claude from targetDir if it exists", () => {
-    // Create a .claude dir in the target
     const claudeDir = join(targetDir, ".claude");
     mkdirSync(claudeDir);
 
-    createWorktree(targetDir, agentId, "orchestrator", "ws://localhost:3001", fakeToolDir);
+    createWorktree(targetDir, agentId, "worker", "ws://localhost:3001", fakeToolDir);
 
     const symlinkPath = join(sessionDir, ".claude");
     expect(existsSync(symlinkPath)).toBe(true);
@@ -119,7 +132,7 @@ describe("createWorktree - session directory fallback", () => {
     const beadsDir = join(targetDir, ".beads-lite");
     mkdirSync(beadsDir);
 
-    createWorktree(targetDir, agentId, "orchestrator", "ws://localhost:3001", fakeToolDir);
+    createWorktree(targetDir, agentId, "worker", "ws://localhost:3001", fakeToolDir);
 
     const symlinkPath = join(sessionDir, ".beads-lite");
     expect(existsSync(symlinkPath)).toBe(true);
@@ -127,17 +140,63 @@ describe("createWorktree - session directory fallback", () => {
   });
 
   it("skips symlinks when project dirs do not exist", () => {
-    // targetDir has no .claude or .beads-lite
-    createWorktree(targetDir, agentId, "orchestrator", "ws://localhost:3001", fakeToolDir);
+    createWorktree(targetDir, agentId, "worker", "ws://localhost:3001", fakeToolDir);
 
     expect(existsSync(join(sessionDir, ".claude"))).toBe(false);
     expect(existsSync(join(sessionDir, ".beads-lite"))).toBe(false);
   });
 
   it("returns no branchName for session dirs", () => {
-    const result = createWorktree(targetDir, agentId, "orchestrator", "ws://localhost:3001", fakeToolDir);
+    const result = createWorktree(targetDir, agentId, "worker", "ws://localhost:3001", fakeToolDir);
 
     expect(result.branchName).toBeUndefined();
+  });
+});
+
+describe("createWorktree - non-git orchestrator shortcut", () => {
+  const agentId = `test-orch-${Date.now()}`;
+  let targetDir: string;
+  let fakeToolDir: string;
+
+  beforeEach(() => {
+    targetDir = makeTempDir("orch-target");
+    fakeToolDir = makeTempDir("orch-tooldir");
+    mkdirSync(join(fakeToolDir, "server", "dist"), { recursive: true });
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    cleanDir(targetDir);
+    cleanDir(fakeToolDir);
+    rmSync(mcpConfigTempPath(agentId), { force: true });
+    vi.restoreAllMocks();
+  });
+
+  it("uses project directory directly for non-git orchestrators", () => {
+    const result = createWorktree(targetDir, agentId, "orchestrator", "ws://localhost:3001", fakeToolDir);
+
+    expect(result.success).toBe(true);
+    expect(result.worktreePath).toBe(targetDir);
+    // NOT a session dir -- orchestrator uses the real directory
+    expect(result.isSessionDir).toBe(false);
+  });
+
+  it("does not create a session dir for non-git orchestrators", () => {
+    createWorktree(targetDir, agentId, "orchestrator", "ws://localhost:3001", fakeToolDir);
+
+    const sessionDir = join(tmpdir(), `hgnucomb-agent-${agentId}`);
+    expect(existsSync(sessionDir)).toBe(false);
+  });
+
+  it("writes MCP config to temp for non-git orchestrators", () => {
+    const result = createWorktree(targetDir, agentId, "orchestrator", "ws://localhost:3001", fakeToolDir);
+
+    expect(result.mcpConfigPath).toBe(mcpConfigTempPath(agentId));
+    expect(existsSync(result.mcpConfigPath!)).toBe(true);
+
+    const config = JSON.parse(readFileSync(result.mcpConfigPath!, "utf8"));
+    expect(config.mcpServers.hgnucomb.env.HGNUCOMB_CELL_TYPE).toBe("orchestrator");
   });
 });
 
@@ -230,19 +289,23 @@ describe("createWorktree + removeWorktree round-trip", () => {
     cleanDir(sessionDir);
     cleanDir(targetDir);
     cleanDir(fakeToolDir);
+    rmSync(mcpConfigTempPath(agentId), { force: true });
     vi.restoreAllMocks();
   });
 
-  it("create then remove leaves no artifacts", () => {
+  it("create then remove leaves no artifacts (worker)", () => {
     // Create
     const createResult = createWorktree(targetDir, agentId, "worker", "ws://localhost:3001", fakeToolDir);
     expect(createResult.success).toBe(true);
     expect(existsSync(sessionDir)).toBe(true);
-    expect(existsSync(join(sessionDir, ".mcp.json"))).toBe(true);
+    expect(existsSync(createResult.mcpConfigPath!)).toBe(true);
+    // No .mcp.json in session dir
+    expect(existsSync(join(sessionDir, ".mcp.json"))).toBe(false);
 
     // Remove
     const removeResult = removeWorktree(targetDir, agentId);
     expect(removeResult.success).toBe(true);
     expect(existsSync(sessionDir)).toBe(false);
+    // Note: temp MCP config is cleaned up separately by cleanupMcpConfig() in index.ts
   });
 });

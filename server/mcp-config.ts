@@ -4,8 +4,8 @@
  * Claude Code searches for .mcp.json from CWD upward. When an agent spawns
  * in a worktree (its own git root), Claude won't find the parent repo's config.
  *
- * Solution: Generate .mcp.json with absolute paths and write it to the worktree.
- * Each agent instance gets its own MCP config with absolute paths.
+ * Solution: Generate MCP config with absolute paths, write to $TMPDIR, and pass
+ * the path to Claude CLI via --mcp-config flag. Each agent gets its own config.
  *
  * ## Future: Per-Agent Settings
  *
@@ -22,8 +22,9 @@
  * See CLAUDE_CONFIG_DIR in Claude Code docs for details.
  */
 
-import { writeFileSync } from "fs";
+import { writeFileSync, rmSync } from "fs";
 import { join } from "path";
+import { tmpdir } from "os";
 import type { CellType } from "../shared/types.ts";
 
 export interface GeneratedMcpConfig {
@@ -72,15 +73,30 @@ export function generateMcpConfig(
 }
 
 /**
- * Write MCP config to a worktree directory.
+ * Write MCP config to a temp file and return the path.
  *
- * @param worktreePath - The worktree root where .mcp.json will be written
+ * The config is written to $TMPDIR/hgnucomb-mcp-{agentId}.json and passed
+ * to Claude CLI via --mcp-config flag. This avoids polluting the agent's
+ * working directory with .mcp.json files.
+ *
+ * @param agentId - Unique agent identifier (used in filename)
  * @param config - Generated MCP config
+ * @returns Absolute path to the temp config file
  */
-export function writeMcpConfig(
-  worktreePath: string,
+export function writeMcpConfigToTemp(
+  agentId: string,
   config: GeneratedMcpConfig
-): void {
-  const configPath = join(worktreePath, ".mcp.json");
+): string {
+  const configPath = join(tmpdir(), `hgnucomb-mcp-${agentId}.json`);
   writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+  return configPath;
+}
+
+/**
+ * Remove an agent's temp MCP config file.
+ * Safe to call even if the file doesn't exist.
+ */
+export function cleanupMcpConfig(agentId: string): void {
+  const configPath = join(tmpdir(), `hgnucomb-mcp-${agentId}.json`);
+  rmSync(configPath, { force: true });
 }

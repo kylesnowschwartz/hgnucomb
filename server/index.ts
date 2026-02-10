@@ -59,6 +59,7 @@ import {
   removeWorktree,
   getGitRoot,
 } from "./worktree.js";
+import { cleanupMcpConfig } from "./mcp-config.js";
 import {
   getWorkerDiff,
   listWorkerFiles,
@@ -437,15 +438,32 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
 
       // For orchestrators and workers: create worktree and set up context
       const isClaudeAgent = agentSnapshot && (agentSnapshot.cellType === "orchestrator" || agentSnapshot.cellType === "worker");
+      let mcpConfigPath: string | undefined;
       if (isClaudeAgent) {
         // Try to create a worktree for this agent
         // Pass wsUrl so MCP server connects back to THIS server instance
         const wsUrl = `ws://localhost:${PORT}`;
         const worktreeResult = createWorktree(workingDir, agentSnapshot.agentId, agentSnapshot.cellType, wsUrl, HGNUCOMB_ROOT);
+
+        // Workers require git isolation. If they got a session dir (no git repo),
+        // they can't commit, diff, or merge -- the entire staging workflow is useless.
+        // Fail loudly instead of silently degrading.
+        if (worktreeResult.isSessionDir && agentSnapshot.cellType === "worker") {
+          const errorMsg = `Worker requires a git repository for worktree isolation. The directory "${workingDir}" is not a git repo. Use repoPath in spawn_agent to specify which repo the worker should operate in.`;
+          console.error(`[Worktree] Worker ${agentSnapshot.agentId} cannot start: ${errorMsg}`);
+          send(ws, {
+            type: "terminal.error",
+            requestId: msg.requestId,
+            payload: { message: errorMsg },
+          });
+          break;
+        }
+
         if (worktreeResult.success && worktreeResult.worktreePath) {
           workingDir = worktreeResult.worktreePath;
           console.log(`[Worktree] Agent ${agentSnapshot.agentId} (${agentSnapshot.cellType}) using: ${workingDir}`);
         }
+        mcpConfigPath = worktreeResult.mcpConfigPath;
 
         // Build task assignment options if this is a worker with a task
         // parentHex is optional - identity (parentId) is what matters for communication
@@ -529,6 +547,7 @@ Work autonomously. Do not ask questions.`;
             "--dangerously-skip-permissions",
             ...(systemPrompt ? ["--append-system-prompt", systemPrompt] : []),
             ...(pluginDir ? ["--plugin-dir", pluginDir] : []),
+            ...(mcpConfigPath ? ["--mcp-config", mcpConfigPath] : []),
           ]
         : undefined;
 
@@ -637,6 +656,7 @@ Work autonomously. Do not ask questions.`;
             // Clean up agent-specific state
             cleanupContextFile(metadata.agentId);
             removeWorktree(getProjectDirForAgent(metadata.agentId), metadata.agentId);
+            cleanupMcpConfig(metadata.agentId);
             cleanupActivityTracking(sessionId);
             transcriptWatcher.stopWatching(metadata.agentId);
 
@@ -684,10 +704,11 @@ Work autonomously. Do not ask questions.`;
         sessions?.delete(sessionId);
         sessionClient.delete(sessionId);
         cleanupActivityTracking(sessionId);
-        // Clean up context file, worktree, and inbox if this was an agent
+        // Clean up context file, worktree, MCP config, and inbox if this was an agent
         if (metadata) {
           cleanupContextFile(metadata.agentId);
           removeWorktree(metadata.projectDir ?? TOOL_DIR, metadata.agentId);
+          cleanupMcpConfig(metadata.agentId);
           agentInboxes.delete(metadata.agentId);
           transcriptWatcher.stopWatching(metadata.agentId);
           broadcastAgentRemoval(metadata.agentId, 'cleanup', sessionId);
@@ -764,11 +785,12 @@ Work autonomously. Do not ask questions.`;
         clientSessions.get(ws)?.delete(sessionId);
         sessionClient.delete(sessionId);
         cleanupActivityTracking(sessionId);
-        // Clean up context file, worktree, and inbox if this was an agent
+        // Clean up context file, worktree, MCP config, and inbox if this was an agent
         const metadata = sessionMetadata.get(sessionId);
         if (metadata) {
           cleanupContextFile(metadata.agentId);
           removeWorktree(metadata.projectDir ?? TOOL_DIR, metadata.agentId);
+          cleanupMcpConfig(metadata.agentId);
           agentInboxes.delete(metadata.agentId);
           transcriptWatcher.stopWatching(metadata.agentId);
           sessionMetadata.delete(sessionId);
@@ -832,10 +854,11 @@ Work autonomously. Do not ask questions.`;
       // Kill all sessions and clear metadata (user-initiated reset)
       const count = manager.size();
 
-      // Clean up context files, worktrees, and inboxes for all agents
+      // Clean up context files, worktrees, MCP configs, and inboxes for all agents
       for (const [, metadata] of sessionMetadata.entries()) {
         cleanupContextFile(metadata.agentId);
         removeWorktree(metadata.projectDir ?? TOOL_DIR, metadata.agentId);
+        cleanupMcpConfig(metadata.agentId);
       }
       sessionMetadata.clear();
       agentInboxes.clear();
@@ -1596,8 +1619,9 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
         sessionMetadata.delete(sessionId);
       }
 
-      // Clean up the worktree, inbox, and transcript watcher after PTY is disposed
+      // Clean up the worktree, MCP config, inbox, and transcript watcher after PTY is disposed
       const result = removeWorktree(getProjectDirForAgent(workerId), workerId);
+      cleanupMcpConfig(workerId);
       agentInboxes.delete(workerId);
       transcriptWatcher.stopWatching(workerId);
 
@@ -1682,9 +1706,10 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
           // Clean up tracking
           clientSessions.forEach(sessions => sessions.delete(sessionId));
           sessionClient.delete(sessionId);
-          // Clean up context file, worktree, inbox, and transcript watcher
+          // Clean up context file, worktree, MCP config, inbox, and transcript watcher
           cleanupContextFile(workerId);
           removeWorktree(getProjectDirForAgent(workerId), workerId);
+          cleanupMcpConfig(workerId);
           agentInboxes.delete(workerId);
           transcriptWatcher.stopWatching(workerId);
           sessionMetadata.delete(sessionId);

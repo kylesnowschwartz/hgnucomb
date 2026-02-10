@@ -110,7 +110,7 @@ export function createMcpHandler(
       }
 
       case 'mcp.spawn': {
-        const { callerId, q, r, cellType, task, instructions, taskDetails, model } =
+        const { callerId, q, r, cellType, task, instructions, taskDetails, model, repoPath } =
           request.payload;
 
         // Validate caller exists and is orchestrator
@@ -173,6 +173,7 @@ export function createMcpHandler(
           instructions,
           taskDetails,
           model,
+          repoPath,
         });
         addSpawn(newAgentId, cellType, targetHex);
 

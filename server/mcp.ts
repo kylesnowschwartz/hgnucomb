@@ -215,8 +215,13 @@ mcpServer.tool(
       "Claude model to use. Defaults: orchestrator=opus, worker=sonnet. " +
       "Use haiku for simple/fast tasks, sonnet for standard work, opus for complex reasoning."
     ),
+    repoPath: z.string().optional().describe(
+      "Absolute path to a git repository for the worker's worktree. " +
+      "Required when orchestrator is outside a git repo (e.g., a meta-directory). " +
+      "The worker will get an isolated worktree in this repo."
+    ),
   },
-  async ({ q, r, cellType, task, instructions, taskDetails, model }) => {
+  async ({ q, r, cellType, task, instructions, taskDetails, model, repoPath }) => {
     // Permission check: only orchestrators can spawn
     if (!canSpawn()) {
       return {
@@ -239,6 +244,7 @@ mcpServer.tool(
         instructions,
         taskDetails,
         model,
+        repoPath,
       });
 
       if (!result.success) {
