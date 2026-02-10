@@ -58,12 +58,18 @@ bump level="patch":
     esac
     new="${major}.${minor}.${patch}"
     npm version "$new" --no-git-tag-version > /dev/null
+    git add package.json
+    git commit -m "chore: bump version to $new"
     echo "Bumped $current -> $new"
 
 # Tag current version, push, create GitHub release, and publish to npm
 release:
     #!/usr/bin/env bash
     set -euo pipefail
+    if [ -n "$(git status --porcelain)" ]; then
+        echo "Working tree is dirty. Commit or stash changes before releasing."
+        exit 1
+    fi
     version=$(node -p "require('./package.json').version")
     tag="v${version}"
     if git tag -l "$tag" | grep -q "$tag"; then
