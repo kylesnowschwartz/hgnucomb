@@ -41,6 +41,14 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  border: 1px solid var(--ctp-surface0);
+  border-radius: 4px;
+  padding: 6px;
+  transition: border-color 0.15s ease;
+}
+
+.meta-panel__section:focus-within {
+  border-color: var(--ctp-lavender);
 }
 
 .meta-panel__section-label {

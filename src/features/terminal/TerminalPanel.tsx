@@ -57,7 +57,11 @@ export function TerminalPanel({
   const [isDragOver, setIsDragOver] = useState(false);
 
   // Panel position (internal state - resets on remount)
-  const [position, setPosition] = useState({ x: 20, y: 20 });
+  // Default to bottom-left, above the status bar (~32px)
+  const [position, setPosition] = useState(() => ({
+    x: 0,
+    y: Math.max(0, window.innerHeight - dimensions.height - 32),
+  }));
 
   // Drag state
   const isDragging = useRef(false);

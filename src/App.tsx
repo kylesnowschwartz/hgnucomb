@@ -100,9 +100,9 @@ function useAnimatedMount<T>(value: T | null, animationMs: number) {
   };
 }
 
-// Default panel dimensions (930px width = 115 columns at 8px cell width)
-const DEFAULT_PANEL_WIDTH = Math.min(930, window.innerWidth * 0.5);
-const DEFAULT_PANEL_HEIGHT = Math.min(600, window.innerHeight - 80);
+// Default panel dimensions: wide and short, anchored bottom-left to maximize canvas
+const DEFAULT_PANEL_WIDTH = Math.min(1100, window.innerWidth * 0.6);
+const DEFAULT_PANEL_HEIGHT = Math.min(400, window.innerHeight * 0.45);
 
 function App() {
   usePwaLifecycle();
