@@ -21,14 +21,13 @@ check:
     pnpm test
     pnpm build
 
-# Build and run production on port 3002 (single process)
-# Uses the same CLI entry point as `npx hgnucomb`
+# Build and run production (single process, default port 3002)
+# Identical to `npx hgnucomb` -- no special flags needed
 run:
     just build
-    @echo "Starting frozen prod on port 3002 (server + UI)..."
+    @echo "Starting frozen prod (server + UI)..."
     @echo "Code changes will NOT hot reload. Run 'just run' to rebuild."
-    (while ! curl -s http://localhost:3002 > /dev/null 2>&1; do sleep 0.3; done && open http://localhost:3002) &
-    PORT=3002 node bin/hgnucomb.js
+    node bin/hgnucomb.js
 
 # Kill all hgnucomb processes (dev + prod)
 kill:
@@ -37,12 +36,13 @@ kill:
     -lsof -ti:5173 | xargs kill 2>/dev/null
     -pkill -f "tsx --watch" 2>/dev/null
     @echo "Cleaned up hgnucomb processes"
+    @if [ -d .worktrees ] && [ "$$(ls -A .worktrees 2>/dev/null)" ]; then \
+        echo "Tip: orphaned worktrees remain. Run 'hgnucomb cleanup' to remove them."; \
+    fi
 
-# Remove all agent worktrees
+# Remove all agent worktrees (delegates to the CLI cleanup command)
 clean-worktrees:
-    rm -rf .worktrees/*
-    git worktree prune
-    @echo "Cleaned up agent worktrees"
+    node bin/hgnucomb.js cleanup
 
 # Bump version in package.json (patch, minor, or major)
 bump level="patch":
@@ -60,7 +60,7 @@ bump level="patch":
     npm version "$new" --no-git-tag-version > /dev/null
     echo "Bumped $current -> $new"
 
-# Tag current version, push, and create GitHub release
+# Tag current version, push, create GitHub release, and publish to npm
 release:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -70,10 +70,15 @@ release:
         echo "Tag $tag already exists. Bump version first: just bump [patch|minor|major]"
         exit 1
     fi
+    echo "Running checks..."
+    just check
+    echo ""
     echo "Tagging $tag..."
     git tag -a "$tag" -m "$tag"
     echo "Pushing main + tags..."
     git push origin main --tags
     echo "Creating GitHub release..."
     gh release create "$tag" --generate-notes --latest
+    echo "Publishing to npm..."
+    npm publish
     echo "Released $tag"

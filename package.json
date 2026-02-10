@@ -4,15 +4,32 @@
   "description": "Spatial terminal multiplexer with AI agent orchestration on a hex grid",
   "type": "module",
   "license": "MIT",
+  "author": "Kyle Snow Schwartz <kyle.snowschwartz@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kylesnowschwartz/hgnucomb.git"
+  },
+  "homepage": "https://github.com/kylesnowschwartz/hgnucomb",
+  "bugs": "https://github.com/kylesnowschwartz/hgnucomb/issues",
+  "keywords": [
+    "terminal",
+    "multiplexer",
+    "hex-grid",
+    "spatial",
+    "ai-agents",
+    "claude",
+    "mcp",
+    "tui"
+  ],
   "bin": {
     "hgnucomb": "./bin/hgnucomb.js"
   },
   "files": [
     "bin",
     "dist",
-    "server/dist",
-    "server/plugins",
-    "shared"
+    "server/dist/index.js",
+    "server/dist/mcp.js",
+    "server/plugins"
   ],
   "engines": {
     "node": ">=20.0.0"

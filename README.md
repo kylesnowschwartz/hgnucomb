@@ -16,32 +16,24 @@ And when you're ready for AI agents, they live on the same grid -- spawn them, w
 ## Quick Start
 
 ```bash
+npx hgnucomb
+```
+
+That's it. Starts the server, opens the browser, you're on the grid.
+
+### Prerequisites
+
+- Node.js 20+ (with C++ build tools for node-pty -- Xcode CLI on macOS, `build-essential` on Linux)
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude`) -- only needed for AI agents
+
+### Development
+
+```bash
 git clone git@github.com:kylesnowschwartz/hgnucomb.git
 cd hgnucomb
 just install    # pnpm install
 just dev        # frontend :5173 + server :3001
 ```
-
-Open http://localhost:5173.
-
-### Install from source
-
-```bash
-git clone git@github.com:kylesnowschwartz/hgnucomb.git
-cd hgnucomb
-pnpm install && cd server && pnpm install && cd ..
-pnpm build
-node bin/hgnucomb.js
-```
-
-This builds the frontend, starts the server, and opens the browser.
-
-### Prerequisites
-
-- Node.js 20+
-- pnpm
-- [just](https://github.com/casey/just) command runner
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude`) -- only needed for AI agents
 
 ## The Grid
 
@@ -136,20 +128,29 @@ See [CLAUDE.md](CLAUDE.md) for the full architecture reference.
 
 ## Status
 
-Working prototype.
+v0.1.0 -- working prototype. Usable for real work, rough around some edges.
 
-**What's solid:**
-- Hex grid with pan/zoom and keyboard navigation
-- Terminal spawn/close/reopen lifecycle
-- Orchestrator and worker lifecycle (spawn, monitor, kill)
-- Git worktree isolation per agent
-- MCP tools for agent coordination (15 tools)
-- Staged merge workflow with conflict detection
-- Live status badges with animations
-- Claude Code plugin hooks (enforce `report_result` before worker exit)
-- CLI entry point (`node bin/hgnucomb.js`)
+**What's shipped:**
+- Hex grid with pan/zoom, vim-style keyboard navigation (hjkl + diagonals)
+- Three cell types: terminal, orchestrator, worker -- each with distinct visuals
+- Git worktree isolation per agent (parallel edits without conflicts)
+- 18 MCP tools for agent coordination (spawn, merge, broadcast, status, cleanup, kill, etc.)
+- Staged merge workflow: worker -> orchestrator staging -> human approval -> main
+- Merge conflict detection with resolution options
+- Non-blocking multi-worker coordination (`check_workers`) and blocking single-worker (`await_worker`)
+- Live status badges with pulse animations and elapsed time
+- Parent-child edge visualization between orchestrators and workers
+- Agent telemetry pipeline (transcript watcher, JSONL parsing, HUD observability)
+- Worker commit enforcement via Claude Code plugin hooks
+- Session reconnection with exponential backoff
+- Configurable model per agent (opus/sonnet/haiku)
+- Non-git workspace fallback for projects outside git repos
+- PWA standalone mode for clean keyboard capture
 - Prerequisite checks on startup (node, git, claude)
 
 **What's next:**
-- Session persistence across reloads
-- Audio notifications on completion
+- Audio notifications on agent completion
+- Agent timeout and cancellation
+- Worker type specialization (typed archetypes with different capabilities)
+- Sparse checkout support for large repos
+- Server-side terminal state tracking
