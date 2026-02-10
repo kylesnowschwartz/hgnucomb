@@ -289,7 +289,24 @@ export class TranscriptWatcher {
 
     try {
       const stat = statSync(transcriptPath);
-      if (stat.size <= state.byteOffset) return; // No new data
+
+      // Detect file truncation (context compaction or /clear).
+      // When Claude Code compacts, the transcript file shrinks. Our stored
+      // byteOffset now points past EOF, so we'd silently stop reading forever.
+      // Reset offset to re-read from the start and clear stale tool state.
+      if (stat.size < state.byteOffset) {
+        console.log(
+          `[TranscriptWatcher] Transcript truncated for ${state.agentId}: ` +
+            `${state.byteOffset} → ${stat.size} bytes. Resetting watcher.`
+        );
+        state.byteOffset = 0;
+        state.runningTools.clear();
+        state.completedTools = [];
+        // Keep todos -- task state persists across compaction
+        // contextPercent will update from the next assistant message
+      }
+
+      if (stat.size <= state.byteOffset) return; // Caught up, no new data
 
       // Read new bytes from offset
       const stream = createReadStream(transcriptPath, {
