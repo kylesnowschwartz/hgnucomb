@@ -344,6 +344,9 @@ export interface McpSpawnRequest {
     instructions?: string;
     taskDetails?: string;
     model?: 'opus' | 'sonnet' | 'haiku';
+    /** Absolute path to a git repo for the worker's worktree.
+     * Required when orchestrator is outside a git repo. */
+    repoPath?: string;
   };
 }
 

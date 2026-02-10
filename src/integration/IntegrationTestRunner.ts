@@ -10,7 +10,7 @@
 
 import type { TerminalBridge } from '@features/terminal/TerminalBridge';
 import type { HexCoordinate } from '@shared/types';
-import type { AgentState } from '@features/agents/agentStore';
+import type { AgentState, SpawnOptions } from '@features/agents/agentStore';
 import type { LogEvent } from '@features/events/eventLogStore';
 import type {
   IntegrationTest,
@@ -40,12 +40,7 @@ export const TIMEOUTS = {
 // Store Access Interface
 // ============================================================================
 
-export interface SpawnOptions {
-  initialPrompt?: string;
-  parentId?: string;
-  task?: string;
-  taskDetails?: string;
-}
+// SpawnOptions imported from @features/agents/agentStore (canonical source)
 
 /**
  * Interface for accessing Zustand stores during tests.

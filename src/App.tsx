@@ -489,8 +489,11 @@ function App() {
         panelDimensions.height
       );
 
-      // Use the effective project directory from the project store
-      const projectDir = useProjectStore.getState().effectiveProject() ?? undefined;
+      // Agent-specific repoPath takes precedence over project-level projectDir.
+      // This lets orchestrators in non-git dirs target specific repos for workers.
+      const projectDir = agent.repoPath
+        ?? useProjectStore.getState().effectiveProject()
+        ?? undefined;
 
       try {
         const session = await bridge.createSession({
