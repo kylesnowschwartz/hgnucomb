@@ -36,9 +36,9 @@ kill:
     -lsof -ti:5173 | xargs kill 2>/dev/null
     -pkill -f "tsx --watch" 2>/dev/null
     @echo "Cleaned up hgnucomb processes"
-    @if [ -d .worktrees ] && [ "$$(ls -A .worktrees 2>/dev/null)" ]; then \
-        echo "Tip: orphaned worktrees remain. Run 'hgnucomb cleanup' to remove them."; \
-    fi
+    @test -d .worktrees && find .worktrees -mindepth 1 -maxdepth 1 -print -quit | grep -q . \
+        && echo "Tip: orphaned worktrees remain. Run 'hgnucomb cleanup' to remove them." \
+        || true
 
 # Remove all agent worktrees (delegates to the CLI cleanup command)
 clean-worktrees:

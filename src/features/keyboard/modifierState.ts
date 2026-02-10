@@ -17,7 +17,18 @@ let metaDown = false;
 let initialized = false;
 
 function handleKeyDown(e: KeyboardEvent): void {
-  if (e.key === 'Meta') metaDown = true;
+  if (e.key === 'Meta') {
+    metaDown = true;
+    return;
+  }
+
+  // Self-healing: if we think Meta is down but the browser disagrees,
+  // our tracking drifted (missed keyup during focus change, DOM mutation, etc.).
+  // The browser's e.metaKey is unreliable when stuck TRUE (Cmd+Tab bug),
+  // but reliable when FALSE -- if the browser says Meta isn't pressed, trust it.
+  if (metaDown && !e.metaKey) {
+    metaDown = false;
+  }
 }
 
 function handleKeyUp(e: KeyboardEvent): void {
