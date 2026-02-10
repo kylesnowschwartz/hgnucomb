@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useEventLogStore } from './eventLogStore';
-import type { BroadcastEvent, KillEvent, SpawnEvent } from './eventLogStore';
+import type { BroadcastEvent, RemovalEvent, SpawnEvent } from './eventLogStore';
 
 describe('eventLogStore', () => {
   beforeEach(() => {
@@ -111,16 +111,16 @@ describe('eventLogStore', () => {
     it('at maxEvents (500) keeps last 500 via slice(-500)', () => {
       // Add 510 events
       for (let i = 0; i < 510; i++) {
-        useEventLogStore.getState().addKill(`agent-${i}`);
+        useEventLogStore.getState().addRemoval(`agent-${i}`, 'cleanup');
       }
 
       const events = useEventLogStore.getState().events;
       expect(events.length).toBe(500);
 
       // First event should be agent-10 (0-9 were evicted)
-      expect((events[0] as KillEvent).agentId).toBe('agent-10');
+      expect((events[0] as RemovalEvent).agentId).toBe('agent-10');
       // Last event should be agent-509
-      expect((events[499] as KillEvent).agentId).toBe('agent-509');
+      expect((events[499] as RemovalEvent).agentId).toBe('agent-509');
     });
   });
 
@@ -172,25 +172,6 @@ describe('eventLogStore', () => {
         expect(event.agentId).toBe('agent-123');
         expect(event.cellType).toBe('orchestrator');
         expect(event.hex).toEqual({ q: 1, r: 2 });
-      }
-    });
-  });
-
-  // ==========================================================================
-  // addKill
-  // ==========================================================================
-
-  describe('addKill', () => {
-    it('creates KillEvent with agentId', () => {
-      useEventLogStore.getState().addKill('agent-456');
-
-      const events = useEventLogStore.getState().events;
-      expect(events.length).toBe(1);
-
-      const event = events[0];
-      expect(event.kind).toBe('kill');
-      if (event.kind === 'kill') {
-        expect(event.agentId).toBe('agent-456');
       }
     });
   });
@@ -289,7 +270,7 @@ describe('eventLogStore', () => {
   describe('clear', () => {
     it('resets events to empty array', () => {
       useEventLogStore.getState().addSpawn('agent-1', 'terminal', { q: 0, r: 0 });
-      useEventLogStore.getState().addKill('agent-1');
+      useEventLogStore.getState().addRemoval('agent-1', 'cleanup');
       expect(useEventLogStore.getState().events.length).toBe(2);
 
       useEventLogStore.getState().clear();

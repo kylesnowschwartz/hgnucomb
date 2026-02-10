@@ -4,7 +4,6 @@ import { ActionBar } from '@features/grid/ActionBar';
 import { ControlPanel } from '@features/controls/ControlPanel';
 import { StatusBar } from '@features/controls/StatusBar';
 import { TerminalPanel } from '@features/terminal/TerminalPanel';
-import { EventLog } from '@features/events/EventLog';
 import { WebSocketBridge } from '@features/terminal/index';
 import { useTerminalStore } from '@features/terminal/terminalStore';
 import { calculateTerminalDimensions } from '@features/terminal/terminalConfig';
@@ -137,7 +136,7 @@ function App() {
 
   const { selectedAgentId, selectAgent } = useUIStore();
   const { getAgent, getAllAgents, spawnAgent, removeAgent, updateAgentType, updateDetailedStatus } = useAgentStore();
-  const { addStatusChange, addSpawn, addRemoval } = useEventLogStore();
+  const { addStatusChange, addSpawn, addRemoval, addMessageReceived } = useEventLogStore();
   const panToHex = useViewportStore((s) => s.panToHex);
   const centerOnHex = useViewportStore((s) => s.centerOnHex);
 
@@ -386,6 +385,14 @@ function App() {
         };
         const agent = getAgent(agentId);
         if (agent) {
+          // Log new messages that weren't in the previous inbox
+          const oldIds = new Set(agent.inbox.map((m) => m.id));
+          for (const msg of messages) {
+            if (!oldIds.has(msg.id)) {
+              addMessageReceived(agentId, msg.from, msg.type, msg.payload);
+            }
+          }
+
           useAgentStore.setState((s) => ({
             agents: new Map(s.agents).set(agentId, {
               ...agent,
@@ -449,7 +456,7 @@ function App() {
     };
 
     return bridge.onNotification(handleNotification);
-  }, [bridge, removeAgent, removeSession, getSessionForAgent, addRemoval, selectAgent, updateAgentType, updateDetailedStatus, getAgent]);
+  }, [bridge, removeAgent, removeSession, getSessionForAgent, addRemoval, addMessageReceived, selectAgent, updateAgentType, updateDetailedStatus, getAgent]);
 
   // Create terminal session for an agent (without activating it)
   const createSessionForAgent = useCallback(
@@ -683,7 +690,6 @@ function App() {
       <MetaPanel />
       <ActionBar />
       {import.meta.env.DEV && <ControlPanel />}
-      {import.meta.env.DEV && <EventLog />}
       {panelShouldRender && cachedSessionId && (
         <TerminalPanel
           sessionId={cachedSessionId}

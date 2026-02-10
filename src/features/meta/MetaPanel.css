@@ -52,6 +52,36 @@
   padding: 0 4px;
 }
 
+/* Clickable section labels (CollapsibleSection) */
+
+.meta-panel__section-label--clickable {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-family: inherit;
+  width: 100%;
+  text-align: left;
+}
+
+.meta-panel__section-label--clickable:hover {
+  color: var(--ctp-lavender);
+}
+
+.meta-panel__section-chevron {
+  font-size: 8px;
+  width: 10px;
+  text-align: center;
+}
+
+.meta-panel__section-badge {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--ctp-overlay0);
+}
+
 /* Edge toggle tab - always visible */
 
 .meta-panel__tab {

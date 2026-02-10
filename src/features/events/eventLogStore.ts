@@ -3,7 +3,7 @@
  *
  * Provides a single timeline for all agent activity:
  * - Broadcasts (spatial messages between agents)
- * - Lifecycle events (spawn, kill, status change)
+ * - Lifecycle events (spawn, removal, status change)
  */
 
 import { create } from 'zustand';
@@ -35,11 +35,6 @@ export interface SpawnEvent extends BaseEvent {
   hex: HexCoordinate;
 }
 
-export interface KillEvent extends BaseEvent {
-  kind: 'kill';
-  agentId: string;
-}
-
 export interface StatusChangeEvent extends BaseEvent {
   kind: 'statusChange';
   agentId: string;
@@ -62,7 +57,7 @@ export interface RemovalEvent extends BaseEvent {
   reason: 'cleanup' | 'kill';
 }
 
-export type LogEvent = BroadcastEvent | SpawnEvent | KillEvent | StatusChangeEvent | MessageReceivedEvent | RemovalEvent;
+export type LogEvent = BroadcastEvent | SpawnEvent | StatusChangeEvent | MessageReceivedEvent | RemovalEvent;
 
 // ============================================================================
 // Store
@@ -83,7 +78,6 @@ interface EventLogStore {
     payload: unknown
   ) => void;
   addSpawn: (agentId: string, cellType: 'terminal' | 'orchestrator' | 'worker', hex: HexCoordinate) => void;
-  addKill: (agentId: string) => void;
   addStatusChange: (
     agentId: string,
     newStatus: DetailedStatus,
@@ -166,22 +160,6 @@ export const useEventLogStore = create<EventLogStore>()((set) => ({
         agentId,
         cellType,
         hex,
-      };
-      const events = [...state.events, event];
-      if (events.length > state.maxEvents) {
-        return { events: events.slice(-state.maxEvents) };
-      }
-      return { events };
-    });
-  },
-
-  addKill: (agentId) => {
-    set((state) => {
-      const event: KillEvent = {
-        id: nextEventId(),
-        timestamp: new Date().toISOString(),
-        kind: 'kill',
-        agentId,
       };
       const events = [...state.events, event];
       if (events.length > state.maxEvents) {
