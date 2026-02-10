@@ -299,9 +299,14 @@ export function TerminalPanel({
     // so Cmd+Escape (close panel), Cmd+hjkl (navigate), Cmd+c/v (clipboard)
     // all bubble to the app or browser where they belong.
     // Use tracked Meta state to avoid macOS Cmd+Tab stickiness.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    terminal.attachCustomKeyEventHandler((_e: KeyboardEvent) => {
+    terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (isMetaDown()) return false;
+      // Block modifier-only keypresses from generating Kitty protocol escape
+      // sequences. xterm.js incorrectly reports these when flag 2 (report event
+      // types) is set, but per the Kitty spec only flag 8 (report all keys)
+      // should enable modifier-only reporting. This causes neovim to receive
+      // unexpected sequences like CSI 57441u when Shift is pressed alone.
+      if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt') return false;
       return true;
     });
 
