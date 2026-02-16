@@ -12,10 +12,8 @@ import type {
   McpSpawnResponse,
   McpGetGridResponse,
   McpGridAgent,
-  McpReportStatusResponse,
   HexCoordinate,
   CellType,
-  DetailedStatus,
 } from '@shared/protocol';
 import { hexDistance, getHexRing } from '@shared/types';
 
@@ -31,17 +29,6 @@ export interface McpHandlerDeps {
     cellType: CellType,
     options: SpawnOptions,
   ) => string;
-  updateDetailedStatus: (
-    agentId: string,
-    status: DetailedStatus,
-    message?: string
-  ) => DetailedStatus | undefined;
-  addStatusChange: (
-    agentId: string,
-    newStatus: DetailedStatus,
-    message?: string,
-    previousStatus?: DetailedStatus
-  ) => void;
   addSpawn: (
     agentId: string,
     cellType: CellType,
@@ -95,8 +82,6 @@ export function createMcpHandler(
     getAgent,
     getAllAgents,
     spawnAgent,
-    updateDetailedStatus,
-    addStatusChange,
     addSpawn,
   } = deps;
 
@@ -232,41 +217,8 @@ export function createMcpHandler(
         break;
       }
 
-      case 'mcp.reportStatus': {
-        const { callerId, state, message } = request.payload;
-
-        const previousStatus = updateDetailedStatus(callerId, state, message);
-
-        if (previousStatus === undefined) {
-          const response: McpReportStatusResponse = {
-            type: 'mcp.reportStatus.result',
-            requestId: request.requestId,
-            payload: { success: false, error: `Agent not found: ${callerId}` },
-          };
-          bridge.sendMcpResponse(response);
-          return;
-        }
-
-        addStatusChange(callerId, state, message, previousStatus);
-
-        const response: McpReportStatusResponse = {
-          type: 'mcp.reportStatus.result',
-          requestId: request.requestId,
-          payload: { success: true },
-        };
-        bridge.sendMcpResponse(response);
-        console.log(
-          '[McpHandler] Status update:',
-          callerId,
-          previousStatus,
-          '->',
-          state
-        );
-        break;
-      }
-
-      // mcp.broadcast, mcp.reportResult, mcp.getMessages, mcp.getWorkerStatus
-      // are now handled server-side (server/index.ts) and no longer routed through the browser.
+      // mcp.broadcast, mcp.reportResult, mcp.reportStatus, mcp.getMessages, mcp.getWorkerStatus
+      // are all handled server-side (server/index.ts) and no longer routed through the browser.
     }
   };
 }

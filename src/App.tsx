@@ -297,10 +297,6 @@ function App() {
       getAllAgents: () => useAgentStore.getState().getAllAgents(),
       spawnAgent: (hex, cellType, options) =>
         useAgentStore.getState().spawnAgent(hex, cellType, options),
-      updateDetailedStatus: (agentId, status, message) =>
-        useAgentStore.getState().updateDetailedStatus(agentId, status, message),
-      addStatusChange: (agentId, newStatus, message, previousStatus) =>
-        useEventLogStore.getState().addStatusChange(agentId, newStatus, message, previousStatus),
       addSpawn: (agentId, cellType, hex) =>
         useEventLogStore.getState().addSpawn(agentId, cellType, hex),
     }),
@@ -429,21 +425,30 @@ function App() {
         return;
       }
 
-      // Handle inferred status updates (from PTY activity detection)
-      // Inferred status must NOT override sticky states that were explicitly reported
-      // Exception: 'done' agents can transition back to 'working' via PTY activity
+      // Handle status updates from server (both explicit agent reports and inferred PTY activity)
       if (msg.type === 'mcp.statusUpdate') {
-        const { agentId, state } = msg.payload as {
+        const { agentId, state, message: statusMessage, previousStatus, source } = msg.payload as {
           agentId: string;
           state: DetailedStatus;
           message?: string;
+          previousStatus?: DetailedStatus;
+          source?: 'explicit' | 'inferred';
         };
-        const agent = useAgentStore.getState().getAgent(agentId);
-        const stickyStates: DetailedStatus[] = ['error', 'cancelled', 'waiting_input', 'waiting_permission', 'stuck'];
-        if (agent && stickyStates.includes(agent.detailedStatus)) {
-          return; // Don't override explicit status with inferred activity
+
+        if (source === 'explicit') {
+          // Explicit agent-reported status: always apply + log to event log
+          useAgentStore.getState().updateDetailedStatus(agentId, state, statusMessage);
+          useEventLogStore.getState().addStatusChange(agentId, state, statusMessage, previousStatus);
+        } else {
+          // Inferred from PTY activity: apply sticky-state filtering
+          // Don't override explicit statuses that agents deliberately set
+          const agent = useAgentStore.getState().getAgent(agentId);
+          const stickyStates: DetailedStatus[] = ['error', 'cancelled', 'waiting_input', 'waiting_permission', 'stuck'];
+          if (agent && stickyStates.includes(agent.detailedStatus)) {
+            return;
+          }
+          useAgentStore.getState().updateDetailedStatus(agentId, state);
         }
-        useAgentStore.getState().updateDetailedStatus(agentId, state);
         return;
       }
     };

@@ -457,6 +457,10 @@ export interface McpStatusUpdateNotification {
     agentId: string;
     state: DetailedStatus;
     message?: string;
+    /** Previous status before this update (for event log transitions) */
+    previousStatus?: DetailedStatus;
+    /** Whether this update was explicitly reported by the agent or inferred from PTY activity */
+    source?: 'explicit' | 'inferred';
   };
 }
 

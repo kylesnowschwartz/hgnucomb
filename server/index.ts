@@ -312,6 +312,7 @@ function broadcastInferredStatus(agentId: string, status: 'working' | 'idle'): v
       agentId,
       state: status,
       message: 'Inferred from PTY activity',
+      source: 'inferred' as const,
     },
   };
 
@@ -345,7 +346,7 @@ const pendingMcpRequests = new Map<string, PendingMcpRequest>();
 /**
  * Route an MCP request from MCP server to browser clients.
  */
-function routeMcpToBrowser(msg: McpSpawnRequest | McpGetGridRequest | McpReportStatusRequest): void {
+function routeMcpToBrowser(msg: McpSpawnRequest | McpGetGridRequest): void {
   const json = JSON.stringify(msg);
   for (const browser of browserClients) {
     if (browser.readyState === WebSocket.OPEN) {
@@ -1274,25 +1275,69 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
       break;
     }
 
-    case "mcp.spawn":
-    case "mcp.getGrid":
     case "mcp.reportStatus": {
+      // Server-side handling: update sessionMetadata + notify browsers
+      const req = msg as McpReportStatusRequest;
+      const { callerId: agentId, state, message: statusMessage } = req.payload;
+
+      // Find agent in sessionMetadata
+      let found = false;
+      let previousStatus: DetailedStatus | undefined;
+      for (const [, metadata] of sessionMetadata.entries()) {
+        if (metadata.agentId === agentId) {
+          previousStatus = metadata.detailedStatus;
+          metadata.detailedStatus = state;
+          metadata.statusMessage = statusMessage;
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        ws.send(JSON.stringify({
+          type: "mcp.reportStatus.result",
+          requestId: req.requestId,
+          payload: { success: false, error: `Agent not found: ${agentId}` },
+        }));
+        break;
+      }
+
+      // Respond to MCP process directly (no browser round-trip)
+      ws.send(JSON.stringify({
+        type: "mcp.reportStatus.result",
+        requestId: req.requestId,
+        payload: { success: true },
+      }));
+
+      // Notify all browsers so they can update UI
+      const statusNotification = {
+        type: 'mcp.statusUpdate',
+        payload: {
+          agentId,
+          state,
+          message: statusMessage,
+          previousStatus,
+          source: 'explicit' as const,
+        },
+      };
+      const statusJson = JSON.stringify(statusNotification);
+      for (const browser of browserClients) {
+        if (browser.readyState === WebSocket.OPEN) {
+          browser.send(statusJson);
+        }
+      }
+
+      console.log(`[MCP] Status update: ${agentId} ${previousStatus} -> ${state}`);
+      break;
+    }
+
+    case "mcp.spawn":
+    case "mcp.getGrid": {
       // These still route through the browser (need UI state/grid placement)
       const agentId = msg.payload.callerId;
       pendingMcpRequests.set(msg.requestId, { mcpWs: ws, agentId });
       routeMcpToBrowser(msg);
       console.log(`[MCP] Routing ${msg.type} from ${agentId} to browser`);
-
-      // Keep server-side metadata in sync with reported status
-      if (msg.type === "mcp.reportStatus") {
-        for (const [, metadata] of sessionMetadata.entries()) {
-          if (metadata.agentId === agentId) {
-            metadata.detailedStatus = msg.payload.state as DetailedStatus;
-            metadata.statusMessage = msg.payload.message;
-            break;
-          }
-        }
-      }
       break;
     }
 
@@ -1726,8 +1771,7 @@ function handleMcpMessage(ws: WebSocket, msg: McpRequest | McpResponse | McpNoti
     }
 
     case "mcp.spawn.result":
-    case "mcp.getGrid.result":
-    case "mcp.reportStatus.result": {
+    case "mcp.getGrid.result": {
       // Browser responding to MCP request (only for browser-routed operations)
       routeMcpResponse(msg);
       console.log(`[MCP] Routing ${msg.type} back to MCP server`);
