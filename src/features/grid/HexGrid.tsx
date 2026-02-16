@@ -15,13 +15,13 @@ import Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { hexToPixel, hexesInRect, TERMINAL_STATUSES } from '@shared/types';
 import type { AgentStatus, CellType, DetailedStatus } from '@shared/types';
-import { useAgentStore, type AgentState, type FlashType } from '@features/agents/agentStore';
+import { useAgentStore, type FlashType } from '@features/agents/agentStore';
+import { useAgentGridData, type AgentGridData } from '@features/agents/selectors';
 import { useUIStore } from '@features/controls/uiStore';
 import { useEventLogStore } from '@features/events/eventLogStore';
 import { useViewportStore } from './viewportStore';
 import { computeFamilyGroups, buildFamilyLookup } from './hexPerimeter';
 import type { EdgeSegment } from './hexPerimeter';
-import { useShallow } from 'zustand/shallow';
 import { hexGrid, agentColors, palette } from '@theme/catppuccin-mocha';
 
 // ============================================================================
@@ -465,8 +465,13 @@ export function HexGrid({
     return () => { anim.stop(); };
   }, []);
 
-  // Agent state - useShallow prevents infinite re-render from new array references
-  const agents = useAgentStore(useShallow((s) => s.getAllAgents()));
+  // Agent layout data — projected selector with structural equality.
+  // Only re-renders when layout-relevant fields change (hex, cellType, status, etc).
+  // Activity-only changes (timestamps, git counts, telemetry) are excluded from
+  // comparison, so 3-second activity broadcasts don't invalidate layout memos.
+  const agents = useAgentGridData();
+  // Imperative access for satellite activity data, refreshed by `now` timer above
+  const getAgent = useAgentStore((s) => s.getAgent);
   const spawnAgent = useAgentStore((s) => s.spawnAgent);
   const flashes = useAgentStore((s) => s.flashes);
   const clearFlash = useAgentStore((s) => s.clearFlash);
@@ -508,9 +513,9 @@ export function HexGrid({
     return hexesInRect(worldMinX, worldMaxX, worldMinY, worldMaxY, hexSize);
   }, [position, scale, width, height, hexSize]);
 
-  // Build lookup: hex coord -> agent (if occupied)
+  // Build lookup: hex coord -> agent layout data (if occupied)
   const agentByHex = useMemo(() => {
-    const map = new Map<string, AgentState>();
+    const map = new Map<string, AgentGridData>();
     for (const agent of agents) {
       map.set(`${agent.hex.q},${agent.hex.r}`, agent);
     }
@@ -829,22 +834,28 @@ export function HexGrid({
           const satOpacity = satelliteOpacity(scale);
           if (satOpacity <= 0) return null;
 
+          // Read full agent state imperatively for activity data.
+          // Refreshed by `now` timer (1s) — at most 1s stale, fine for elapsed display.
+          const fullAgent = getAgent(agent.id);
+
           const progress = orchestratorProgress.get(agent.id);
           const hasProgress = progress && progress.total > 0;
 
           // Elapsed time: frozen for terminal states, live for active agents
           let elapsedText: string | null = null;
-          if (agent.createdAt) {
-            if (TERMINAL_STATUSES.has(agent.detailedStatus) && agent.lastActivityAt) {
+          const createdAt = fullAgent?.createdAt;
+          const lastActivityAt = fullAgent?.lastActivityAt;
+          if (createdAt) {
+            if (TERMINAL_STATUSES.has(agent.detailedStatus) && lastActivityAt) {
               // Done/error/cancelled: freeze at total lifetime
-              elapsedText = formatElapsed(agent.createdAt, agent.lastActivityAt);
+              elapsedText = formatElapsed(createdAt, lastActivityAt);
             } else {
-              const idleText = agent.lastActivityAt ? formatIdle(agent.lastActivityAt, now) : null;
-              elapsedText = idleText ?? formatElapsed(agent.createdAt, now);
+              const idleText = lastActivityAt ? formatIdle(lastActivityAt, now) : null;
+              elapsedText = idleText ?? formatElapsed(createdAt, now);
             }
           }
 
-          const hasGit = (agent.gitCommitCount ?? 0) > 0;
+          const hasGit = (fullAgent?.gitCommitCount ?? 0) > 0;
 
           return (
             <Group key={`sat-${agent.id}`} listening={false}>
@@ -889,7 +900,7 @@ export function HexGrid({
                 <Group x={x + 20} y={y + 25} opacity={satOpacity} listening={false}>
                   <Circle radius={8} fill={palette.green} />
                   <Text
-                    text={String(agent.gitCommitCount)}
+                    text={String(fullAgent?.gitCommitCount)}
                     fontSize={8}
                     fontFamily="monospace"
                     fill={palette.crust}

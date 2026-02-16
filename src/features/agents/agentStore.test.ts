@@ -2,6 +2,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAgentStore } from './agentStore';
 import { useEventLogStore } from '@features/events/eventLogStore';
 import type { AgentMessage } from '@shared/protocol';
+import {
+  selectGridData,
+  gridDataEqual,
+  selectSessionData,
+  sessionDataEqual,
+} from './selectors';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -397,6 +403,182 @@ describe('agentStore', () => {
       useAgentStore.getState().clear();
 
       expect(useAgentStore.getState().getAllAgents()).toEqual([]);
+    });
+  });
+
+  // ==========================================================================
+  // Selector Stability Oracle
+  //
+  // These tests prove that projected selectors with structural equality
+  // prevent unnecessary re-renders from activity broadcasts, while still
+  // detecting real structural changes (status transitions, agent spawn/remove).
+  // ==========================================================================
+
+  describe('selector stability', () => {
+    // Helper: fire a typical activity broadcast update
+    function fireActivityUpdate(agentId: string) {
+      useAgentStore.getState().updateActivities([{
+        agentId,
+        createdAt: Date.now(),
+        lastActivityAt: Date.now(),
+        gitCommitCount: 3,
+        gitRecentCommits: ['abc1234 some commit', 'def5678 another'],
+      }]);
+    }
+
+    describe('baseline: current getAllAgents() pattern is unstable', () => {
+      it('activity update creates new object references (triggers useShallow re-render)', () => {
+        const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
+        const before = useAgentStore.getState().getAllAgents();
+
+        fireActivityUpdate(id);
+
+        const after = useAgentStore.getState().getAllAgents();
+
+        // Same logical agent, different object reference
+        expect(before[0].id).toBe(after[0].id);
+        expect(before[0]).not.toBe(after[0]);
+      });
+    });
+
+    describe('selectGridData + gridDataEqual', () => {
+      it('is stable across activity-only updates', () => {
+        const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
+
+        const before = selectGridData(useAgentStore.getState());
+        fireActivityUpdate(id);
+        const after = selectGridData(useAgentStore.getState());
+
+        // Structural equality holds: layout fields unchanged
+        expect(gridDataEqual(before, after)).toBe(true);
+      });
+
+      it('detects detailedStatus change', () => {
+        const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
+
+        const before = selectGridData(useAgentStore.getState());
+        useAgentStore.getState().updateDetailedStatus(id, 'working');
+        const after = selectGridData(useAgentStore.getState());
+
+        expect(gridDataEqual(before, after)).toBe(false);
+      });
+
+      it('detects agent addition', () => {
+        useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
+
+        const before = selectGridData(useAgentStore.getState());
+        useAgentStore.getState().spawnAgent({ q: 1, r: 1 }, 'worker');
+        const after = selectGridData(useAgentStore.getState());
+
+        expect(gridDataEqual(before, after)).toBe(false);
+      });
+
+      it('detects agent removal', () => {
+        const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
+        useAgentStore.getState().spawnAgent({ q: 1, r: 1 }, 'worker');
+
+        const before = selectGridData(useAgentStore.getState());
+        useAgentStore.getState().removeAgent(id);
+        const after = selectGridData(useAgentStore.getState());
+
+        expect(gridDataEqual(before, after)).toBe(false);
+      });
+
+      it('detects cell type change', () => {
+        const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
+
+        const before = selectGridData(useAgentStore.getState());
+        useAgentStore.getState().updateAgentType(id, 'terminal');
+        const after = selectGridData(useAgentStore.getState());
+
+        expect(gridDataEqual(before, after)).toBe(false);
+      });
+
+      it('is stable across repeated activity updates', () => {
+        const id1 = useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
+        const id2 = useAgentStore.getState().spawnAgent({ q: 1, r: 1 }, 'worker');
+
+        const before = selectGridData(useAgentStore.getState());
+
+        // Simulate 3 activity broadcast cycles
+        for (let i = 0; i < 3; i++) {
+          useAgentStore.getState().updateActivities([
+            {
+              agentId: id1, createdAt: Date.now(), lastActivityAt: Date.now(),
+              gitCommitCount: i + 1, gitRecentCommits: [],
+            },
+            {
+              agentId: id2, createdAt: Date.now(), lastActivityAt: Date.now(),
+              gitCommitCount: 0, gitRecentCommits: [],
+            },
+          ]);
+        }
+
+        const after = selectGridData(useAgentStore.getState());
+        expect(gridDataEqual(before, after)).toBe(true);
+      });
+
+      it('projects only layout fields (excludes activity data)', () => {
+        const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
+        fireActivityUpdate(id);
+
+        const projected = selectGridData(useAgentStore.getState());
+        const agent = projected[0];
+
+        // Layout fields present
+        expect(agent.id).toBe(id);
+        expect(agent.hex).toEqual({ q: 0, r: 0 });
+        expect(agent.cellType).toBe('orchestrator');
+        expect(agent.detailedStatus).toBe('pending');
+
+        // Activity fields absent
+        expect('createdAt' in agent).toBe(false);
+        expect('lastActivityAt' in agent).toBe(false);
+        expect('gitCommitCount' in agent).toBe(false);
+        expect('telemetry' in agent).toBe(false);
+      });
+    });
+
+    describe('selectSessionData + sessionDataEqual', () => {
+      it('is stable across activity-only updates', () => {
+        const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
+
+        const before = selectSessionData(useAgentStore.getState());
+        fireActivityUpdate(id);
+        const after = selectSessionData(useAgentStore.getState());
+
+        expect(sessionDataEqual(before, after)).toBe(true);
+      });
+
+      it('detects agent addition', () => {
+        useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
+
+        const before = selectSessionData(useAgentStore.getState());
+        useAgentStore.getState().spawnAgent({ q: 1, r: 1 }, 'worker');
+        const after = selectSessionData(useAgentStore.getState());
+
+        expect(sessionDataEqual(before, after)).toBe(false);
+      });
+
+      it('detects cell type change', () => {
+        const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
+
+        const before = selectSessionData(useAgentStore.getState());
+        useAgentStore.getState().updateAgentType(id, 'terminal');
+        const after = selectSessionData(useAgentStore.getState());
+
+        expect(sessionDataEqual(before, after)).toBe(false);
+      });
+
+      it('is stable across status changes (only cares about id + cellType)', () => {
+        const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 }, 'orchestrator');
+
+        const before = selectSessionData(useAgentStore.getState());
+        useAgentStore.getState().updateDetailedStatus(id, 'working');
+        const after = selectSessionData(useAgentStore.getState());
+
+        expect(sessionDataEqual(before, after)).toBe(true);
+      });
     });
   });
 });

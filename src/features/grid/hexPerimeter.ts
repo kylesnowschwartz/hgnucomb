@@ -11,7 +11,7 @@
 
 import type { CellType } from '@shared/types';
 import { HEX_NEIGHBORS, hexToPixel } from '@shared/types';
-import type { AgentState } from '@features/agents/agentStore';
+import type { AgentGridData } from '@features/agents/selectors';
 
 // ============================================================================
 // Types
@@ -129,7 +129,7 @@ export function computePerimeterEdges(
  * there are no internal edges to suppress.
  */
 export function computeFamilyGroups(
-  agents: AgentState[],
+  agents: AgentGridData[],
   hexSize: number,
 ): Map<string, FamilyGroup> {
   const families = new Map<string, FamilyGroup>();

@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react';
 import { useAgentStore, type AgentState } from '@features/agents/agentStore';
 import { useUIStore } from '@features/controls/uiStore';
+import { useShallow } from 'zustand/shallow';
 import { TERMINAL_STATUSES } from '@shared/types';
 import type { DetailedStatus } from '@shared/types';
 import { palette } from '@theme/catppuccin-mocha';
@@ -113,7 +114,31 @@ export function AgentDetailsWidget() {
   const selectedAgentId = useUIStore((s) => s.selectedAgentId);
   const selectedHex = useUIStore((s) => s.selectedHex);
   const hoveredHex = useUIStore((s) => s.hoveredHex);
-  const agents = useAgentStore((s) => s.agents);
+
+  // Determine which agent to display: selected > hex-selected > hovered
+  const targetHex = selectedHex ?? hoveredHex;
+  const agent = useAgentStore((s) => {
+    if (selectedAgentId) return s.agents.get(selectedAgentId);
+    if (targetHex) {
+      for (const a of s.agents.values()) {
+        if (a.hex.q === targetHex.q && a.hex.r === targetHex.r) return a;
+      }
+    }
+    return undefined;
+  });
+
+  // Subscribe to children of the displayed agent (for worker list).
+  // useShallow prevents re-render when unrelated agents change — only fires
+  // when the children array contents change (by reference per element).
+  const agentId = agent?.id;
+  const children = useAgentStore(useShallow((s) => {
+    if (!agentId) return [] as AgentState[];
+    const result: AgentState[] = [];
+    for (const a of s.agents.values()) {
+      if (a.parentId === agentId) result.push(a);
+    }
+    return result;
+  }));
 
   // Live tick for elapsed time (1 second)
   const [now, setNow] = useState(() => Date.now());
@@ -122,33 +147,12 @@ export function AgentDetailsWidget() {
     return () => clearInterval(timer);
   }, []);
 
-  // Find agent to display: selected agent (panel open) > agent at selected hex > agent at hovered hex
-  let agent: AgentState | undefined;
-  if (selectedAgentId) {
-    agent = agents.get(selectedAgentId);
-  } else {
-    const hex = selectedHex ?? hoveredHex;
-    if (hex) {
-      agent = Array.from(agents.values()).find(
-        (a) => a.hex.q === hex.q && a.hex.r === hex.r
-      );
-    }
-  }
-
   if (!agent) {
     return (
       <div className="agent-details">
         <div className="agent-details__empty">Select an agent</div>
       </div>
     );
-  }
-
-  // Find child agents (workers spawned by this agent)
-  const children: AgentState[] = [];
-  for (const a of agents.values()) {
-    if (a.parentId === agent.id) {
-      children.push(a);
-    }
   }
 
   const doneCount = children.filter((c) =>

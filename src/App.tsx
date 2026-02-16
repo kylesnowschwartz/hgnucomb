@@ -10,13 +10,13 @@ import { calculateTerminalDimensions } from '@features/terminal/terminalConfig';
 import { useUIStore } from '@features/controls/uiStore';
 import { useAgentStore, type AgentState } from '@features/agents/agentStore';
 import { agentToSnapshot } from '@features/agents/snapshot';
+import { useAgentSessionData } from '@features/agents/selectors';
 import { useEventLogStore } from '@features/events/eventLogStore';
 import { useKeyboardNavigation, HelpModal } from '@features/keyboard';
 import { usePwaLifecycle } from '@features/pwa';
 import { useViewportStore } from '@features/grid/viewportStore';
 import { useProjectStore } from '@features/project/projectStore';
 import { MetaPanel } from '@features/meta/MetaPanel';
-import { useShallow } from 'zustand/shallow';
 import { createMcpHandler, type McpHandlerDeps } from './handlers/mcpHandler';
 import type { CellType, HexCoordinate, DetailedStatus } from '@shared/types';
 
@@ -107,23 +107,6 @@ const DEFAULT_PANEL_HEIGHT = Math.min(400, window.innerHeight * 0.45);
 function App() {
   usePwaLifecycle();
 
-  // DEBUG: Main thread stall detector — logs when a frame takes >50ms
-  useEffect(() => {
-    let lastFrame = performance.now();
-    let rafId: number;
-    const check = () => {
-      const now = performance.now();
-      const delta = now - lastFrame;
-      if (delta > 50) {
-        console.warn(`[PERF] Main thread blocked for ${delta.toFixed(0)}ms`);
-      }
-      lastFrame = now;
-      rafId = requestAnimationFrame(check);
-    };
-    rafId = requestAnimationFrame(check);
-    return () => cancelAnimationFrame(rafId);
-  }, []);
-
   const [dimensions, setDimensions] = useState({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -149,8 +132,9 @@ function App() {
   // Track which agents we've already initiated session creation for
   const sessionCreationInitiated = useRef<Set<string>>(new Set());
 
-  // Subscribe to agents for auto-session creation
-  const agents = useAgentStore(useShallow((s) => Array.from(s.agents.values())));
+  // Subscribe to agents for auto-session creation — only re-renders on agent
+  // add/remove or cellType change (not activity broadcasts or status transitions)
+  const agentSessionData = useAgentSessionData();
 
   // Rehydrate state from server on connect (tmux-like attach)
   const rehydrateFromServer = useCallback(async (ws: WebSocketBridge) => {
@@ -438,10 +422,10 @@ function App() {
             telemetry?: import('@shared/protocol').AgentTelemetryData;
           }>;
         };
-        const { updateActivity } = useAgentStore.getState();
-        for (const activity of activities) {
-          updateActivity(activity.agentId, activity);
-        }
+        // Batched: single set() call, single re-render for all subscribers.
+        // The unbatched loop was causing N re-renders of HexGrid (Konva canvas),
+        // MetaPanel, and App every 3 seconds — enough to block the main thread.
+        useAgentStore.getState().updateActivities(activities);
         return;
       }
 
@@ -552,26 +536,33 @@ function App() {
     [bridge, panelDimensions]
   );
 
-  // Auto-create terminal sessions for Claude agents when they appear
+  // Auto-create terminal sessions for Claude agents when they appear.
+  // Uses projected agentSessionData (id + cellType) for reactivity — only fires
+  // when agents are added/removed, not on activity broadcasts or status transitions.
+  // Reads full AgentState imperatively for createSessionForAgent.
   useEffect(() => {
     if (!bridge || connectionState !== 'connected') return;
 
-    for (const agent of agents) {
+    for (const data of agentSessionData) {
       // Only auto-create for Claude agents (orchestrator/worker)
-      const isClaudeAgent = agent.cellType === 'orchestrator' || agent.cellType === 'worker';
+      const isClaudeAgent = data.cellType === 'orchestrator' || data.cellType === 'worker';
       if (!isClaudeAgent) continue;
 
       // Skip if already initiated or session exists
-      if (sessionCreationInitiated.current.has(agent.id)) continue;
-      if (useTerminalStore.getState().getSessionForAgent(agent.id)) continue;
+      if (sessionCreationInitiated.current.has(data.id)) continue;
+      if (useTerminalStore.getState().getSessionForAgent(data.id)) continue;
+
+      // Read full agent state for session creation
+      const agent = useAgentStore.getState().getAgent(data.id);
+      if (!agent) continue;
 
       // Mark as initiated BEFORE async call to prevent duplicates
-      sessionCreationInitiated.current.add(agent.id);
+      sessionCreationInitiated.current.add(data.id);
 
       // Create session in background (don't await, don't activate)
       createSessionForAgent(agent);
     }
-  }, [agents, bridge, connectionState, createSessionForAgent]);
+  }, [agentSessionData, bridge, connectionState, createSessionForAgent]);
 
   // When agent selected, activate its session (create if needed for terminal cells)
   useEffect(() => {
