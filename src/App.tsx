@@ -107,6 +107,23 @@ const DEFAULT_PANEL_HEIGHT = Math.min(400, window.innerHeight * 0.45);
 function App() {
   usePwaLifecycle();
 
+  // DEBUG: Main thread stall detector — logs when a frame takes >50ms
+  useEffect(() => {
+    let lastFrame = performance.now();
+    let rafId: number;
+    const check = () => {
+      const now = performance.now();
+      const delta = now - lastFrame;
+      if (delta > 50) {
+        console.warn(`[PERF] Main thread blocked for ${delta.toFixed(0)}ms`);
+      }
+      lastFrame = now;
+      rafId = requestAnimationFrame(check);
+    };
+    rafId = requestAnimationFrame(check);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
   const [dimensions, setDimensions] = useState({
     width: window.innerWidth,
     height: window.innerHeight,

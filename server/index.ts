@@ -79,6 +79,20 @@ import { TranscriptWatcher } from "./transcript-watcher.js";
 
 runPreflight();
 
+// ==========================================================================
+// DEBUG: Event loop stall detector
+// Fires every 20ms; if the callback is delayed >50ms, something blocked.
+// ==========================================================================
+let _lastTick = Date.now();
+setInterval(() => {
+  const now = Date.now();
+  const delta = now - _lastTick;
+  if (delta > 50) {
+    console.warn(`[PERF] Event loop blocked for ${delta}ms`);
+  }
+  _lastTick = now;
+}, 20);
+
 const PORT_ENV = process.env.PORT;
 const PORT = parseInt(PORT_ENV ?? '3001', 10);
 const manager = new TerminalSessionManager();
@@ -1790,6 +1804,8 @@ function getAgentGitInfo(agentId: string): { count: number; commits: string[] } 
 const activityBroadcastInterval = setInterval(() => {
   if (browserClients.size === 0) return;  // No browsers connected
 
+  const broadcastStart = Date.now();
+
   const agentActivities: AgentActivityData[] = [];
 
   for (const [sessionId, metadata] of sessionMetadata.entries()) {
@@ -1797,7 +1813,12 @@ const activityBroadcastInterval = setInterval(() => {
     if (metadata.cellType === 'terminal') continue;
 
     const activity = sessionActivity.get(sessionId);
+    const gitStart = Date.now();
     const gitInfo = getAgentGitInfo(metadata.agentId);
+    const gitDuration = Date.now() - gitStart;
+    if (gitDuration > 10) {
+      console.warn(`[PERF] getAgentGitInfo(${metadata.agentId}) took ${gitDuration}ms`);
+    }
     const telemetry = transcriptWatcher.getTelemetry(metadata.agentId);
 
     agentActivities.push({
@@ -1808,6 +1829,11 @@ const activityBroadcastInterval = setInterval(() => {
       gitRecentCommits: gitInfo.commits,
       telemetry: telemetry ?? undefined,
     });
+  }
+
+  const broadcastDuration = Date.now() - broadcastStart;
+  if (broadcastDuration > 10) {
+    console.warn(`[PERF] Activity broadcast took ${broadcastDuration}ms for ${agentActivities.length} agent(s)`);
   }
 
   if (agentActivities.length === 0) return;
