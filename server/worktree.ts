@@ -22,6 +22,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { generateMcpConfig, writeMcpConfigToTemp } from "./mcp-config.js";
 import type { CellType } from "../shared/types.ts";
+import { getBranchName, WORKTREES_DIR, getWorktreePath } from "./git.js";
 
 /**
  * Execute git command and return stdout as string.
@@ -59,7 +60,7 @@ function branchExists(branchName: string, cwd: string): boolean {
  * Generate a unique branch name, adding suffix if collision.
  */
 function generateBranchName(agentId: string, cwd: string): string {
-  const baseName = `hgnucomb/${agentId}`;
+  const baseName = getBranchName(agentId);
   if (!branchExists(baseName, cwd)) {
     return baseName;
   }
@@ -122,7 +123,7 @@ export function createWorktree(targetDir: string, agentId: string, cellType: Cel
  */
 function createGitWorktree(gitRoot: string, agentId: string, cellType: CellType, wsUrl: string, toolDir?: string): WorktreeResult {
   // Create .worktrees directory if needed
-  const worktreesDir = join(gitRoot, ".worktrees");
+  const worktreesDir = join(gitRoot, WORKTREES_DIR);
   const worktreePath = join(worktreesDir, agentId);
 
   // Check if worktree already exists (reconnect/retry scenario).
@@ -138,7 +139,7 @@ function createGitWorktree(gitRoot: string, agentId: string, cellType: CellType,
       success: true,
       worktreePath,
       mcpConfigPath,
-      branchName: `hgnucomb/${agentId}`,
+      branchName: getBranchName(agentId),
     };
   }
 
@@ -271,7 +272,7 @@ export function removeWorktree(targetDir: string, agentId: string): WorktreeResu
     return { success: true };
   }
 
-  const worktreePath = join(gitRoot, ".worktrees", agentId);
+  const worktreePath = getWorktreePath(gitRoot, agentId);
 
   // Check if worktree exists
   if (!existsSync(worktreePath)) {
@@ -296,7 +297,7 @@ export function removeWorktree(targetDir: string, agentId: string): WorktreeResu
   }
 
   // Delete the branch
-  const branchName = `hgnucomb/${agentId}`;
+  const branchName = getBranchName(agentId);
   const branchResult = gitExec(["branch", "-D", branchName], gitRoot);
   if (branchResult === null) {
     // Branch might have a different name or already deleted
