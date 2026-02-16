@@ -1,6 +1,6 @@
 {
   "name": "hgnucomb",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Spatial terminal multiplexer with AI agent orchestration on a hex grid",
   "type": "module",
   "license": "MIT",
