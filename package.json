@@ -22,7 +22,7 @@
     "tui"
   ],
   "bin": {
-    "hgnucomb": "./bin/hgnucomb.js"
+    "hgnucomb": "bin/hgnucomb.js"
   },
   "files": [
     "bin",
