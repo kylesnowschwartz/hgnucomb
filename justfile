@@ -79,6 +79,16 @@ release:
     echo "Running checks..."
     just check
     echo ""
+    echo "Dry-run npm publish (catch warnings before tagging)..."
+    npm publish --dry-run --ignore-scripts 2>&1 | tee /tmp/npm-dry-run.log
+    if grep -q "npm warn publish" /tmp/npm-dry-run.log; then
+        echo ""
+        echo "npm publish warnings detected (see above). Fix before releasing."
+        rm -f /tmp/npm-dry-run.log
+        exit 1
+    fi
+    rm -f /tmp/npm-dry-run.log
+    echo ""
     echo "Tagging $tag..."
     git tag -a "$tag" -m "$tag"
     echo "Pushing main + tags..."
