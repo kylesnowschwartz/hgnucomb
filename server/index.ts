@@ -67,7 +67,8 @@ import {
   checkMergeConflicts,
   mergeWorkerToStaging,
   mergeStagingToMain,
-  gitExecWithError,
+  gitExec,
+  getBranchName,
 } from "./git.js";
 import { join, resolve, extname, basename } from "path";
 import { existsSync, readFileSync } from "fs";
@@ -1756,25 +1757,25 @@ function getAgentGitInfo(agentId: string): { count: number; commits: string[] } 
   const gitRoot = getGitRoot(projectDir);
   if (!gitRoot) return { count: 0, commits: [] };
 
-  // Agent worktree branch is named hgnucomb-<agentId>
-  const branch = `hgnucomb-${agentId}`;
+  // Use the standardized branch naming convention
+  const branch = getBranchName(agentId);
 
-  // Count commits on branch vs main
-  const countResult = gitExecWithError(
+  // Count commits on branch vs main (silent - this runs every 3s)
+  const countOutput = gitExec(
     ["rev-list", "--count", `main..${branch}`],
     gitRoot
   );
-  const count = countResult.ok ? parseInt(countResult.output, 10) || 0 : 0;
+  const count = countOutput ? parseInt(countOutput, 10) || 0 : 0;
 
   if (count === 0) return { count: 0, commits: [] };
 
-  // Get recent commit messages
-  const logResult = gitExecWithError(
+  // Get recent commit messages (silent - this runs every 3s)
+  const logOutput = gitExec(
     ["log", "--oneline", "-3", branch, "--not", "main"],
     gitRoot
   );
-  const commits = logResult.ok
-    ? logResult.output.split("\n").filter(Boolean)
+  const commits = logOutput
+    ? logOutput.split("\n").filter(Boolean)
     : [];
 
   return { count, commits };
