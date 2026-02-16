@@ -322,7 +322,13 @@ export function clearAgentsFromLocalStorage(): void {
   }
 }
 
-// Subscribe to state changes and persist
+// Subscribe to state changes and persist (debounced to avoid blocking the main
+// thread with synchronous JSON.stringify during high-frequency updates like
+// agent activity broadcasts and terminal data processing)
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
 useAgentStore.subscribe((state) => {
-  persistToLocalStorage(state.agents);
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistToLocalStorage(state.agents);
+  }, 2000);
 });

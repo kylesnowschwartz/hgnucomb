@@ -12,7 +12,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
-import { useTerminalStore } from './terminalStore';
+import { useTerminalStore, getBuffer } from './terminalStore';
 import { TERMINAL_FONT } from './terminalConfig';
 import { isFocusInTextEntry } from '@features/keyboard/focusGuards';
 import { isMetaDown } from '@features/keyboard/modifierState';
@@ -329,8 +329,8 @@ export function TerminalPanel({
 
     // Snapshot the buffer BEFORE setting up data handlers to avoid duplicates
     // Any data that arrives after this will be handled by the live data handler
-    // Reuse session from above (already fetched for dimensions)
-    const bufferSnapshot = session?.buffer ? [...session.buffer] : [];
+    // Buffer lives outside Zustand — snapshot it so replay doesn't race with new data
+    const bufferSnapshot = [...getBuffer(sessionId)];
 
     // Wire data handlers to catch any incoming data
     const unsubData = bridge.onData(sessionId, (data) => {

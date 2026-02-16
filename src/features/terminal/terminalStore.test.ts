@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useTerminalStore } from './terminalStore';
+import {
+  useTerminalStore,
+  appendToBuffer,
+  getBuffer,
+  clearOutputBuffer,
+} from './terminalStore';
 import type { TerminalBridge } from './index';
 
 // Suppress console logs during tests
@@ -8,7 +13,7 @@ vi.spyOn(console, 'error').mockImplementation(() => {});
 
 describe('terminalStore', () => {
   beforeEach(() => {
-    // Reset store state between tests
+    // Reset store state between tests (also clears output buffers)
     useTerminalStore.getState().clear();
     vi.clearAllMocks();
   });
@@ -27,7 +32,7 @@ describe('terminalStore', () => {
 
       const session = useTerminalStore.getState().getSession('sess-1');
       expect(session).toBeDefined();
-      expect(session?.buffer).toEqual([]);
+      expect(getBuffer('sess-1')).toEqual([]);
       expect(session?.exited).toBe(false);
     });
 
@@ -79,26 +84,24 @@ describe('terminalStore', () => {
   });
 
   // ==========================================================================
-  // appendData
+  // appendToBuffer (standalone, outside Zustand)
   // ==========================================================================
 
-  describe('appendData', () => {
+  describe('appendToBuffer', () => {
     it('adds to buffer', () => {
       useTerminalStore.getState().addSession({ sessionId: 'sess-1', cols: 80, rows: 24 });
 
-      useTerminalStore.getState().appendData('sess-1', 'hello');
-      useTerminalStore.getState().appendData('sess-1', 'world');
+      appendToBuffer('sess-1', 'hello');
+      appendToBuffer('sess-1', 'world');
 
-      const session = useTerminalStore.getState().getSession('sess-1');
-      expect(session?.buffer).toEqual(['hello', 'world']);
+      expect(getBuffer('sess-1')).toEqual(['hello', 'world']);
     });
 
-    it('ignores non-existent sessionId', () => {
-      // Should not throw
-      useTerminalStore.getState().appendData('nonexistent', 'data');
+    it('auto-creates buffer for unknown sessionId', () => {
+      // appendToBuffer is fire-and-forget — it should not throw
+      appendToBuffer('nonexistent', 'data');
 
-      // No sessions should exist
-      expect(useTerminalStore.getState().getAllSessions()).toEqual([]);
+      expect(getBuffer('nonexistent')).toEqual(['data']);
     });
 
     it('at MAX_BUFFER_CHUNKS (1000) drops oldest via splice', () => {
@@ -106,21 +109,21 @@ describe('terminalStore', () => {
 
       // Add 1000 chunks
       for (let i = 0; i < 1000; i++) {
-        useTerminalStore.getState().appendData('sess-1', `chunk-${i}`);
+        appendToBuffer('sess-1', `chunk-${i}`);
       }
 
-      let session = useTerminalStore.getState().getSession('sess-1');
-      expect(session?.buffer.length).toBe(1000);
-      expect(session?.buffer[0]).toBe('chunk-0');
-      expect(session?.buffer[999]).toBe('chunk-999');
+      let buf = getBuffer('sess-1');
+      expect(buf.length).toBe(1000);
+      expect(buf[0]).toBe('chunk-0');
+      expect(buf[999]).toBe('chunk-999');
 
       // Add one more - should drop the oldest
-      useTerminalStore.getState().appendData('sess-1', 'chunk-1000');
+      appendToBuffer('sess-1', 'chunk-1000');
 
-      session = useTerminalStore.getState().getSession('sess-1');
-      expect(session?.buffer.length).toBe(1000);
-      expect(session?.buffer[0]).toBe('chunk-1');
-      expect(session?.buffer[999]).toBe('chunk-1000');
+      buf = getBuffer('sess-1');
+      expect(buf.length).toBe(1000);
+      expect(buf[0]).toBe('chunk-1');
+      expect(buf[999]).toBe('chunk-1000');
     });
 
     it('keeps exactly 1000 chunks when over limit', () => {
@@ -128,11 +131,25 @@ describe('terminalStore', () => {
 
       // Add 1010 chunks
       for (let i = 0; i < 1010; i++) {
-        useTerminalStore.getState().appendData('sess-1', `chunk-${i}`);
+        appendToBuffer('sess-1', `chunk-${i}`);
       }
 
-      const session = useTerminalStore.getState().getSession('sess-1');
-      expect(session?.buffer.length).toBe(1000);
+      expect(getBuffer('sess-1').length).toBe(1000);
+    });
+
+    it('does not trigger Zustand subscribers', () => {
+      useTerminalStore.getState().addSession({ sessionId: 'sess-1', cols: 80, rows: 24 });
+
+      const listener = vi.fn();
+      const unsub = useTerminalStore.subscribe(listener);
+
+      // This should NOT trigger the Zustand subscriber
+      appendToBuffer('sess-1', 'hello');
+      appendToBuffer('sess-1', 'world');
+
+      expect(listener).not.toHaveBeenCalled();
+
+      unsub();
     });
   });
 
@@ -181,6 +198,15 @@ describe('terminalStore', () => {
     it('does not throw for non-existent session', () => {
       // Should not throw
       useTerminalStore.getState().removeSession('nonexistent');
+    });
+
+    it('cleans up output buffer', () => {
+      useTerminalStore.getState().addSession({ sessionId: 'sess-1', cols: 80, rows: 24 });
+      appendToBuffer('sess-1', 'data');
+      expect(getBuffer('sess-1')).toEqual(['data']);
+
+      useTerminalStore.getState().removeSession('sess-1');
+      expect(getBuffer('sess-1')).toEqual([]);
     });
   });
 
@@ -291,19 +317,18 @@ describe('terminalStore', () => {
   });
 
   // ==========================================================================
-  // clearBuffer
+  // clearOutputBuffer (standalone, outside Zustand)
   // ==========================================================================
 
-  describe('clearBuffer', () => {
+  describe('clearOutputBuffer', () => {
     it('resets buffer to empty array', () => {
       useTerminalStore.getState().addSession({ sessionId: 'sess-1', cols: 80, rows: 24 });
-      useTerminalStore.getState().appendData('sess-1', 'some data');
-      useTerminalStore.getState().appendData('sess-1', 'more data');
+      appendToBuffer('sess-1', 'some data');
+      appendToBuffer('sess-1', 'more data');
 
-      useTerminalStore.getState().clearBuffer('sess-1');
+      clearOutputBuffer('sess-1');
 
-      const session = useTerminalStore.getState().getSession('sess-1');
-      expect(session?.buffer).toEqual([]);
+      expect(getBuffer('sess-1')).toEqual([]);
     });
   });
 
@@ -349,6 +374,18 @@ describe('terminalStore', () => {
       expect(useTerminalStore.getState().activeSessionId).toBeNull();
       expect(useTerminalStore.getState().getSessionForAgent('agent-1')).toBeUndefined();
       expect(useTerminalStore.getState().getSessionForAgent('agent-2')).toBeUndefined();
+    });
+
+    it('clears all output buffers', () => {
+      useTerminalStore.getState().addSession({ sessionId: 'sess-1', cols: 80, rows: 24 });
+      useTerminalStore.getState().addSession({ sessionId: 'sess-2', cols: 80, rows: 24 });
+      appendToBuffer('sess-1', 'data1');
+      appendToBuffer('sess-2', 'data2');
+
+      useTerminalStore.getState().clear();
+
+      expect(getBuffer('sess-1')).toEqual([]);
+      expect(getBuffer('sess-2')).toEqual([]);
     });
   });
 });

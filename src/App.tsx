@@ -5,7 +5,7 @@ import { ControlPanel } from '@features/controls/ControlPanel';
 import { StatusBar } from '@features/controls/StatusBar';
 import { TerminalPanel } from '@features/terminal/TerminalPanel';
 import { WebSocketBridge } from '@features/terminal/index';
-import { useTerminalStore } from '@features/terminal/terminalStore';
+import { useTerminalStore, appendToBuffer } from '@features/terminal/terminalStore';
 import { calculateTerminalDimensions } from '@features/terminal/terminalConfig';
 import { useUIStore } from '@features/controls/uiStore';
 import { useAgentStore, type AgentState } from '@features/agents/agentStore';
@@ -119,24 +119,13 @@ function App() {
     height: DEFAULT_PANEL_HEIGHT,
   });
 
-  const {
-    bridge,
-    setBridge,
-    setConnectionState,
-    connectionState,
-    addSession,
-    appendData,
-    markExited,
-    removeSession,
-    removeSessionForAgent,
-    activeSessionId,
-    setActiveSession,
-    getSessionForAgent,
-  } = useTerminalStore();
+  // Granular selectors: only subscribe to values that drive renders.
+  // Actions are accessed via getState() in callbacks to avoid re-render cascades.
+  const bridge = useTerminalStore((s) => s.bridge);
+  const connectionState = useTerminalStore((s) => s.connectionState);
+  const activeSessionId = useTerminalStore((s) => s.activeSessionId);
 
-  const { selectedAgentId, selectAgent } = useUIStore();
-  const { getAgent, getAllAgents, spawnAgent, removeAgent, updateAgentType, updateDetailedStatus } = useAgentStore();
-  const { addStatusChange, addSpawn, addRemoval, addMessageReceived } = useEventLogStore();
+  const selectedAgentId = useUIStore((s) => s.selectedAgentId);
   const panToHex = useViewportStore((s) => s.panToHex);
   const centerOnHex = useViewportStore((s) => s.centerOnHex);
 
@@ -163,6 +152,8 @@ function App() {
       }
 
       console.log('[App] Found', sessions.length, 'session(s) to restore');
+
+      const { addSession, markExited } = useTerminalStore.getState();
 
       for (const session of sessions) {
         if (!session.agent) {
@@ -227,21 +218,21 @@ function App() {
           meta.agentId
         );
 
-        // Replay buffered output
+        // Replay buffered output (into module-level buffer, not Zustand)
         if (session.buffer.length > 0) {
           const fullOutput = session.buffer.join('');
-          appendData(session.sessionId, fullOutput);
+          appendToBuffer(session.sessionId, fullOutput);
           console.log('[App] Replayed', session.buffer.length, 'chunks for', meta.agentId);
         }
 
         // Set up data listener for new output
         ws.onData(session.sessionId, (data) => {
-          appendData(session.sessionId, data);
+          appendToBuffer(session.sessionId, data);
         });
 
         // Set up exit listener
         ws.onExit(session.sessionId, (exitCode) => {
-          markExited(session.sessionId, exitCode);
+          useTerminalStore.getState().markExited(session.sessionId, exitCode);
         });
 
         // Mark as exited if already exited
@@ -256,7 +247,7 @@ function App() {
     } catch (err) {
       console.error('[App] Failed to rehydrate from server:', err);
     }
-  }, [addSession, appendData, markExited]);
+  }, []);
 
   // Initialize bridge on mount
   // Subscribe to server.info BEFORE connect() to avoid the race where the
@@ -264,7 +255,7 @@ function App() {
   // effect hasn't subscribed yet (React batches effects).
   useEffect(() => {
     const ws = new WebSocketBridge();
-    setBridge(ws);
+    useTerminalStore.getState().setBridge(ws);
 
     // Must be registered before connect() - server sends server.info on open
     const unsubNotifications = ws.onNotification((notification: unknown) => {
@@ -277,7 +268,7 @@ function App() {
     });
 
     const unsubConnection = ws.onConnectionChange((state) => {
-      setConnectionState(state);
+      useTerminalStore.getState().setConnectionState(state);
       console.log('[App] Connection state:', state);
 
       // Rehydrate when connected (handles both initial connect and reconnect)
@@ -294,21 +285,25 @@ function App() {
       unsubNotifications();
       unsubConnection();
       ws.disconnect();
-      setBridge(null);
+      useTerminalStore.getState().setBridge(null);
     };
-  }, [setBridge, setConnectionState, rehydrateFromServer]);
+  }, [rehydrateFromServer]);
 
-  // MCP handler dependencies - memoized to avoid recreating handler
+  // MCP handler dependencies - stable refs via getState(), never changes
   const mcpDeps: McpHandlerDeps = useMemo(
     () => ({
-      getAgent,
-      getAllAgents,
-      spawnAgent,
-      updateDetailedStatus,
-      addStatusChange,
-      addSpawn,
+      getAgent: (id) => useAgentStore.getState().getAgent(id),
+      getAllAgents: () => useAgentStore.getState().getAllAgents(),
+      spawnAgent: (hex, cellType, options) =>
+        useAgentStore.getState().spawnAgent(hex, cellType, options),
+      updateDetailedStatus: (agentId, status, message) =>
+        useAgentStore.getState().updateDetailedStatus(agentId, status, message),
+      addStatusChange: (agentId, newStatus, message, previousStatus) =>
+        useEventLogStore.getState().addStatusChange(agentId, newStatus, message, previousStatus),
+      addSpawn: (agentId, cellType, hex) =>
+        useEventLogStore.getState().addSpawn(agentId, cellType, hex),
     }),
-    [getAgent, getAllAgents, spawnAgent, updateDetailedStatus, addStatusChange, addSpawn]
+    []
   );
 
   // Handle MCP requests from orchestrator agents
@@ -319,6 +314,7 @@ function App() {
   }, [bridge, mcpDeps]);
 
   // Handle server notifications (agent removal, status updates)
+  // All store actions accessed via getState() — this effect only depends on bridge.
   useEffect(() => {
     if (!bridge) return;
 
@@ -339,8 +335,7 @@ function App() {
         };
         console.log(`[App] Cell converted: ${agentId} (${oldCellType} -> ${newCellType})`);
 
-        // Update agent's cell type to terminal
-        updateAgentType(agentId, newCellType as CellType);
+        useAgentStore.getState().updateAgentType(agentId, newCellType as CellType);
         return;
       }
 
@@ -353,26 +348,23 @@ function App() {
         };
         console.log(`[App] Agent removed: ${agentId} (${reason})`);
 
-        // Remove from agent store
-        removeAgent(agentId);
+        useAgentStore.getState().removeAgent(agentId);
 
         // Remove associated terminal session
+        const termStore = useTerminalStore.getState();
         if (sessionId) {
-          removeSession(sessionId);
+          termStore.removeSession(sessionId);
         } else {
-          // Fallback: lookup session by agentId
-          const session = getSessionForAgent(agentId);
+          const session = termStore.getSessionForAgent(agentId);
           if (session) {
-            removeSession(session.sessionId);
+            termStore.removeSession(session.sessionId);
           }
         }
 
-        // Log removal event
-        addRemoval(agentId, reason);
+        useEventLogStore.getState().addRemoval(agentId, reason);
 
-        // Clear selection if this was the selected agent
         if (useUIStore.getState().selectedAgentId === agentId) {
-          selectAgent(null);
+          useUIStore.getState().selectAgent(null);
         }
         return;
       }
@@ -383,13 +375,13 @@ function App() {
           agentId: string;
           messages: import('@shared/protocol').AgentMessage[];
         };
-        const agent = getAgent(agentId);
+        const agent = useAgentStore.getState().getAgent(agentId);
         if (agent) {
           // Log new messages that weren't in the previous inbox
           const oldIds = new Set(agent.inbox.map((m) => m.id));
           for (const msg of messages) {
             if (!oldIds.has(msg.id)) {
-              addMessageReceived(agentId, msg.from, msg.type, msg.payload);
+              useEventLogStore.getState().addMessageReceived(agentId, msg.from, msg.type, msg.payload);
             }
           }
 
@@ -445,18 +437,18 @@ function App() {
           state: DetailedStatus;
           message?: string;
         };
-        const agent = getAgent(agentId);
+        const agent = useAgentStore.getState().getAgent(agentId);
         const stickyStates: DetailedStatus[] = ['error', 'cancelled', 'waiting_input', 'waiting_permission', 'stuck'];
         if (agent && stickyStates.includes(agent.detailedStatus)) {
           return; // Don't override explicit status with inferred activity
         }
-        updateDetailedStatus(agentId, state);
+        useAgentStore.getState().updateDetailedStatus(agentId, state);
         return;
       }
     };
 
     return bridge.onNotification(handleNotification);
-  }, [bridge, removeAgent, removeSession, getSessionForAgent, addRemoval, addMessageReceived, selectAgent, updateAgentType, updateDetailedStatus, getAgent]);
+  }, [bridge]);
 
   // Create terminal session for an agent (without activating it)
   const createSessionForAgent = useCallback(
@@ -479,7 +471,7 @@ function App() {
       // Only send allAgents for Claude agents (triggers context file generation)
       const agentSnapshot = agentToSnapshot(agent);
       const allAgentsSnapshot = isClaudeAgent
-        ? getAllAgents().map(agentToSnapshot)
+        ? useAgentStore.getState().getAllAgents().map(agentToSnapshot)
         : undefined;
 
       // Calculate initial terminal size from panel dimensions
@@ -513,23 +505,22 @@ function App() {
           projectDir,
         });
 
-        addSession(session, agent.id);
+        useTerminalStore.getState().addSession(session, agent.id);
 
-        // Always store data in buffer
+        // Always store data in buffer (outside Zustand — no re-renders)
         bridge.onData(session.sessionId, (data) => {
-          appendData(session.sessionId, data);
+          appendToBuffer(session.sessionId, data);
         });
 
         // Listen for exit
         bridge.onExit(session.sessionId, (exitCode) => {
-          markExited(session.sessionId, exitCode);
+          useTerminalStore.getState().markExited(session.sessionId, exitCode);
         });
 
         // If this agent is currently selected, activate the session
-        // Use getState() to get current value, avoiding stale closure
         const currentSelectedId = useUIStore.getState().selectedAgentId;
         if (currentSelectedId === agent.id) {
-          setActiveSession(session.sessionId);
+          useTerminalStore.getState().setActiveSession(session.sessionId);
         }
 
         console.log('[App] Auto-created session for agent:', agent.id, 'type:', agent.cellType);
@@ -541,7 +532,7 @@ function App() {
         return null;
       }
     },
-    [bridge, getAllAgents, addSession, appendData, markExited, setActiveSession, panelDimensions]
+    [bridge, panelDimensions]
   );
 
   // Auto-create terminal sessions for Claude agents when they appear
@@ -555,7 +546,7 @@ function App() {
 
       // Skip if already initiated or session exists
       if (sessionCreationInitiated.current.has(agent.id)) continue;
-      if (getSessionForAgent(agent.id)) continue;
+      if (useTerminalStore.getState().getSessionForAgent(agent.id)) continue;
 
       // Mark as initiated BEFORE async call to prevent duplicates
       sessionCreationInitiated.current.add(agent.id);
@@ -563,26 +554,26 @@ function App() {
       // Create session in background (don't await, don't activate)
       createSessionForAgent(agent);
     }
-  }, [agents, bridge, connectionState, getSessionForAgent, createSessionForAgent]);
+  }, [agents, bridge, connectionState, createSessionForAgent]);
 
   // When agent selected, activate its session (create if needed for terminal cells)
   useEffect(() => {
     if (!selectedAgentId || !bridge || connectionState !== 'connected') {
       if (!selectedAgentId) {
-        setActiveSession(null);
+        useTerminalStore.getState().setActiveSession(null);
       }
       return;
     }
 
     // Check if session already exists for this agent
-    const existingSession = getSessionForAgent(selectedAgentId);
+    const existingSession = useTerminalStore.getState().getSessionForAgent(selectedAgentId);
     if (existingSession) {
-      setActiveSession(existingSession.sessionId);
+      useTerminalStore.getState().setActiveSession(existingSession.sessionId);
       return;
     }
 
     // Get agent to determine type
-    const agent = getAgent(selectedAgentId);
+    const agent = useAgentStore.getState().getAgent(selectedAgentId);
     if (!agent) {
       console.error('[App] Agent not found:', selectedAgentId);
       return;
@@ -602,7 +593,7 @@ function App() {
       sessionCreationInitiated.current.add(agent.id);
       createSessionForAgent(agent).then((session) => {
         if (session) {
-          setActiveSession(session.sessionId);
+          useTerminalStore.getState().setActiveSession(session.sessionId);
         }
       });
     }
@@ -610,9 +601,6 @@ function App() {
     selectedAgentId,
     bridge,
     connectionState,
-    getSessionForAgent,
-    getAgent,
-    setActiveSession,
     createSessionForAgent,
   ]);
 
@@ -632,29 +620,29 @@ function App() {
   // Keyboard spawn handler - spawns agent and auto-opens terminal panel
   const handleKeyboardSpawn = useCallback(
     (cellType: CellType, hex: HexCoordinate) => {
-      const newAgentId = spawnAgent(hex, cellType);
-      addSpawn(newAgentId, cellType, hex);
+      const newAgentId = useAgentStore.getState().spawnAgent(hex, cellType);
+      useEventLogStore.getState().addSpawn(newAgentId, cellType, hex);
       // Agent is registered synchronously, safe to select immediately
-      selectAgent(newAgentId);
+      useUIStore.getState().selectAgent(newAgentId);
     },
-    [spawnAgent, addSpawn, selectAgent]
+    []
   );
 
   // Keyboard kill handler - disposes server session then removes client state
   const handleKeyboardKill = useCallback(
     (hex: HexCoordinate) => {
-      const agents = getAllAgents();
-      const agentAtHex = agents.find(
+      const allAgents = useAgentStore.getState().getAllAgents();
+      const agentAtHex = allAgents.find(
         (a) => a.hex.q === hex.q && a.hex.r === hex.r
       );
       if (agentAtHex) {
         // Tell server to kill the PTY and clean up session/metadata/worktree
-        removeSessionForAgent(agentAtHex.id);
+        useTerminalStore.getState().removeSessionForAgent(agentAtHex.id);
         // Remove from client-side agent store
         useAgentStore.getState().removeAgent(agentAtHex.id);
       }
     },
-    [getAllAgents, removeSessionForAgent]
+    []
   );
 
   // Show help handler
@@ -683,9 +671,9 @@ function App() {
 
   const handleCloseTerminal = useCallback(async () => {
     // Just deselect agent - keep session alive in background
-    selectAgent(null);
-    setActiveSession(null);
-  }, [selectAgent, setActiveSession]);
+    useUIStore.getState().selectAgent(null);
+    useTerminalStore.getState().setActiveSession(null);
+  }, []);
 
   return (
     <>

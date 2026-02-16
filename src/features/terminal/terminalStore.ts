@@ -1,8 +1,13 @@
 /**
  * Zustand store for terminal state management.
  *
- * Tracks connection state, active sessions, and terminal output buffers.
+ * Tracks connection state, active sessions, and session metadata.
  * Holds reference to the bridge instance for global access.
+ *
+ * Terminal output buffers live OUTSIDE Zustand (module-level Map) because
+ * they are write-hot (every PTY byte) but read-cold (only on panel mount).
+ * Storing them in reactive state caused O(n) array copies and full React
+ * re-render cascades on every keystroke echo.
  */
 
 import { create } from 'zustand';
@@ -14,12 +19,55 @@ import type {
 
 const MAX_BUFFER_CHUNKS = 1000;
 
+// ==========================================================================
+// Output buffers — mutable, outside React's reactive graph
+// ==========================================================================
+
+const outputBuffers = new Map<string, string[]>();
+
+/** Append PTY output to a session's buffer. Zero allocations, zero React notifications. */
+export function appendToBuffer(sessionId: string, data: string): void {
+  let buf = outputBuffers.get(sessionId);
+  if (!buf) {
+    buf = [];
+    outputBuffers.set(sessionId, buf);
+  }
+  buf.push(data);
+  if (buf.length > MAX_BUFFER_CHUNKS) {
+    buf.splice(0, buf.length - MAX_BUFFER_CHUNKS);
+  }
+}
+
+/** Get a session's output buffer (returns the live array — snapshot with [...] if needed). */
+export function getBuffer(sessionId: string): string[] {
+  return outputBuffers.get(sessionId) ?? [];
+}
+
+/** Clear a session's output buffer. */
+export function clearOutputBuffer(sessionId: string): void {
+  const buf = outputBuffers.get(sessionId);
+  if (buf) buf.length = 0;
+}
+
+/** Delete a session's output buffer entirely. */
+function removeOutputBuffer(sessionId: string): void {
+  outputBuffers.delete(sessionId);
+}
+
+/** Clear all output buffers (called from store.clear()). */
+function clearAllOutputBuffers(): void {
+  outputBuffers.clear();
+}
+
+// ==========================================================================
+// Zustand store — only UI-relevant state
+// ==========================================================================
+
 export interface TerminalSession {
   sessionId: string;
   agentId: string | null; // Associated agent, null for standalone sessions
   cols: number;
   rows: number;
-  buffer: string[];
   exited: boolean;
   exitCode?: number;
 }
@@ -43,11 +91,9 @@ interface TerminalStore {
   addSession: (info: TerminalSessionInfo, agentId?: string | null) => void;
   removeSession: (sessionId: string) => void;
   removeSessionForAgent: (agentId: string) => void;
-  appendData: (sessionId: string, data: string) => void;
   markExited: (sessionId: string, exitCode: number) => void;
   setActiveSession: (sessionId: string | null) => void;
   resizeSession: (sessionId: string, cols: number, rows: number) => void;
-  clearBuffer: (sessionId: string) => void;
   getSession: (sessionId: string) => TerminalSession | undefined;
   getSessionForAgent: (agentId: string) => TerminalSession | undefined;
   getAllSessions: () => TerminalSession[];
@@ -64,11 +110,14 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
   activeSessionId: null,
   agentToSession: new Map(),
 
-  clear: () => set({
-    sessions: new Map(),
-    activeSessionId: null,
-    agentToSession: new Map(),
-  }),
+  clear: () => {
+    clearAllOutputBuffers();
+    set({
+      sessions: new Map(),
+      activeSessionId: null,
+      agentToSession: new Map(),
+    });
+  },
 
   addSession: (info, agentId = null) => {
     set((s) => {
@@ -76,13 +125,15 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
       if (agentId) {
         newAgentToSession.set(agentId, info.sessionId);
       }
+      // Initialize the output buffer outside Zustand
+      outputBuffers.set(info.sessionId, []);
+
       return {
         sessions: new Map(s.sessions).set(info.sessionId, {
           sessionId: info.sessionId,
           agentId,
           cols: info.cols,
           rows: info.rows,
-          buffer: [],
           exited: false,
         }),
         agentToSession: newAgentToSession,
@@ -94,6 +145,7 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
   },
 
   removeSession: (sessionId) => {
+    removeOutputBuffer(sessionId);
     set((s) => {
       const session = s.sessions.get(sessionId);
       const nextSessions = new Map(s.sessions);
@@ -132,26 +184,6 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
     console.log('[TerminalStore] Cleaned up session for agent:', agentId);
   },
 
-  appendData: (sessionId, data) => {
-    set((s) => {
-      const session = s.sessions.get(sessionId);
-      if (!session) return s;
-
-      const newBuffer = [...session.buffer, data];
-      // Cap buffer to prevent memory bloat
-      if (newBuffer.length > MAX_BUFFER_CHUNKS) {
-        newBuffer.splice(0, newBuffer.length - MAX_BUFFER_CHUNKS);
-      }
-
-      return {
-        sessions: new Map(s.sessions).set(sessionId, {
-          ...session,
-          buffer: newBuffer,
-        }),
-      };
-    });
-  },
-
   markExited: (sessionId, exitCode) => {
     set((s) => {
       const session = s.sessions.get(sessionId);
@@ -182,20 +214,6 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
           ...session,
           cols,
           rows,
-        }),
-      };
-    });
-  },
-
-  clearBuffer: (sessionId) => {
-    set((s) => {
-      const session = s.sessions.get(sessionId);
-      if (!session) return s;
-
-      return {
-        sessions: new Map(s.sessions).set(sessionId, {
-          ...session,
-          buffer: [],
         }),
       };
     });
