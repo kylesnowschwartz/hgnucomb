@@ -5,6 +5,7 @@
 
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { getWorktreePath } from './git.js';
 
 /**
  * Save a base64-encoded image for a terminal session.
@@ -40,7 +41,7 @@ export function saveImageForSession(
     // Claude agent - save to worktree.
     // Use provided projectDir (from session metadata), not process.cwd().
     const repoRoot = projectDir ? resolve(projectDir) : resolve(process.cwd());
-    const worktreePath = join(repoRoot, '.worktrees', agentId);
+    const worktreePath = getWorktreePath(repoRoot, agentId);
     const imagesDir = join(worktreePath, 'images');
 
     if (!existsSync(imagesDir)) {
