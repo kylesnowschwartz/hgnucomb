@@ -44,6 +44,7 @@ import type {
   StoredAgentMetadata,
   DetailedStatus,
   ProjectValidateRequest,
+  AgentActivityData,
 } from "../shared/protocol.ts";
 import { isClientMessage, isMcpMessage } from "../shared/protocol.ts";
 import { hexDistance } from "../shared/types.ts";
@@ -1789,19 +1790,7 @@ function getAgentGitInfo(agentId: string): { count: number; commits: string[] } 
 const activityBroadcastInterval = setInterval(() => {
   if (browserClients.size === 0) return;  // No browsers connected
 
-  const agentActivities: Array<{
-    agentId: string;
-    createdAt: number;
-    lastActivityAt: number;
-    gitCommitCount: number;
-    gitRecentCommits: string[];
-    telemetry?: {
-      currentTool: { name: string; target?: string; startedMs: number } | null;
-      recentTools: Array<{ name: string; target?: string; status: 'completed' | 'error'; durationMs: number }>;
-      todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed' }>;
-      contextPercent?: number;
-    };
-  }> = [];
+  const agentActivities: AgentActivityData[] = [];
 
   for (const [sessionId, metadata] of sessionMetadata.entries()) {
     // Skip plain terminals (only report Claude agents)
