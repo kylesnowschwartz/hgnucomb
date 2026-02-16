@@ -97,6 +97,18 @@ interface AgentStore {
     gitRecentCommits: string[];
     telemetry?: AgentTelemetryData;
   }) => void;
+  // Batched activity update — single set() for all agents, single re-render.
+  // The per-agent updateActivity fires N set() calls for N agents, causing
+  // N re-renders of every subscriber (HexGrid, MetaPanel, App). This batched
+  // version collects all updates into one Map mutation.
+  updateActivities: (updates: Array<{
+    agentId: string;
+    createdAt: number;
+    lastActivityAt: number;
+    gitCommitCount: number;
+    gitRecentCommits: string[];
+    telemetry?: AgentTelemetryData;
+  }>) => void;
 }
 
 export const useAgentStore = create<AgentStore>()((set, get) => ({
@@ -238,6 +250,25 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         ...(data.telemetry ? { telemetry: data.telemetry } : {}),
       }),
     }));
+  },
+
+  updateActivities: (updates) => {
+    set((s) => {
+      const agents = new Map(s.agents);
+      for (const data of updates) {
+        const existing = agents.get(data.agentId);
+        if (!existing) continue;
+        agents.set(data.agentId, {
+          ...existing,
+          createdAt: data.createdAt,
+          lastActivityAt: data.lastActivityAt,
+          gitCommitCount: data.gitCommitCount,
+          gitRecentCommits: data.gitRecentCommits,
+          ...(data.telemetry ? { telemetry: data.telemetry } : {}),
+        });
+      }
+      return { agents };
+    });
   },
 
   getMessages: (agentId, since) => {

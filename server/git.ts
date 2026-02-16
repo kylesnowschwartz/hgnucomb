@@ -3,7 +3,7 @@
  * Extracted for testability.
  */
 
-import { execFileSync } from "child_process";
+import { execFile, execFileSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync, unlinkSync, openSync, closeSync, constants } from "fs";
 import { join } from "path";
 
@@ -57,6 +57,21 @@ export function gitExecWithError(args: string[], cwd: string): GitResult {
 export function gitExec(args: string[], cwd: string): string | null {
   const result = gitExecWithError(args, cwd);
   return result.ok ? result.output : null;
+}
+
+/**
+ * Async git execution — does NOT block the event loop.
+ * Use for periodic/background git queries (activity broadcasts, polling).
+ * The sync versions above are fine for one-shot operations (MCP tool handlers,
+ * worktree creation) where blocking briefly is acceptable.
+ */
+export function gitExecAsync(args: string[], cwd: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile("git", args, { cwd, encoding: "utf8" }, (err, stdout) => {
+      if (err) { resolve(null); return; }
+      resolve(stdout.trim());
+    });
+  });
 }
 
 /**

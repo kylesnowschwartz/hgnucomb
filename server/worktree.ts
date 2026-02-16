@@ -192,6 +192,10 @@ function createGitWorktree(gitRoot: string, agentId: string, cellType: CellType,
     const sourceDir = join(gitRoot, dir);
     if (existsSync(sourceDir)) {
       const targetDir = join(worktreePath, dir);
+      if (existsSync(targetDir)) {
+        console.log(`[Worktree] ${dir}/ already exists in worktree, skipping symlink`);
+        continue;
+      }
       try {
         symlinkSync(sourceDir, targetDir);
         console.log(`[Worktree] Symlinked ${dir}/ (from project)`);
@@ -210,6 +214,10 @@ function createGitWorktree(gitRoot: string, agentId: string, cellType: CellType,
     const sourceDir = join(hgnucombRoot, dir);
     if (existsSync(sourceDir)) {
       const targetDir = join(worktreePath, dir);
+      if (existsSync(targetDir)) {
+        console.log(`[Worktree] ${dir}/ already exists in worktree, skipping symlink`);
+        continue;
+      }
       try {
         symlinkSync(sourceDir, targetDir);
         console.log(`[Worktree] Symlinked ${dir}/ (from hgnucomb)`);
@@ -228,6 +236,10 @@ function createGitWorktree(gitRoot: string, agentId: string, cellType: CellType,
     const sourceDir = join(gitRoot, dir);
     if (existsSync(sourceDir)) {
       const targetDir = join(worktreePath, dir);
+      if (existsSync(targetDir)) {
+        console.log(`[Worktree] ${dir}/ already exists in worktree, skipping symlink`);
+        continue;
+      }
       // server/ subdir may not exist yet in the worktree
       const parentDir = join(worktreePath, dir, "..");
       if (!existsSync(parentDir)) {
