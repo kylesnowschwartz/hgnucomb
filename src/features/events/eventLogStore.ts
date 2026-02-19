@@ -8,6 +8,7 @@
 
 import { create } from 'zustand';
 import type { HexCoordinate, DetailedStatus } from '@shared/types';
+import { truncatePayload } from './eventLog.pure';
 
 // ============================================================================
 // Event Types
@@ -100,14 +101,7 @@ function nextEventId(): string {
   return `evt-${++eventCounter}-${Date.now()}`;
 }
 
-function truncatePayload(payload: unknown, maxLen = 80): string {
-  try {
-    const str = JSON.stringify(payload);
-    return str.length > maxLen ? str.slice(0, maxLen) + '...' : str;
-  } catch {
-    return '[unserializable]';
-  }
-}
+// truncatePayload extracted to eventLog.pure.ts
 
 export const useEventLogStore = create<EventLogStore>()((set) => ({
   events: [],

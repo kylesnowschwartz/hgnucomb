@@ -15,7 +15,8 @@ import type {
   HexCoordinate,
   CellType,
 } from '@shared/protocol';
-import { hexDistance, getHexRing } from '@shared/types';
+import { hexDistance } from '@shared/types';
+import { findNearestEmptyHex } from './mcp.pure';
 
 // ============================================================================
 // Types
@@ -36,32 +37,7 @@ export interface McpHandlerDeps {
   ) => void;
 }
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Find nearest empty hex to a given position using ring expansion.
- * Searches distance 1, then 2, etc. until an empty hex is found.
- */
-function findNearestEmptyHex(
-  center: HexCoordinate,
-  agents: AgentState[]
-): HexCoordinate {
-  const occupied = new Set(agents.map((a) => `${a.hex.q},${a.hex.r}`));
-
-  for (let radius = 1; radius <= 10; radius++) {
-    const ring = getHexRing(center, radius);
-    for (const hex of ring) {
-      if (!occupied.has(`${hex.q},${hex.r}`)) {
-        return hex;
-      }
-    }
-  }
-
-  // Fallback: return adjacent hex even if occupied (shouldn't happen)
-  return { q: center.q + 1, r: center.r };
-}
+// findNearestEmptyHex extracted to mcp.pure.ts
 
 // ============================================================================
 // Handler Factory

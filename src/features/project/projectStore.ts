@@ -9,6 +9,7 @@
  */
 
 import { create } from 'zustand';
+import { updateRecents } from './project.pure';
 
 const STORAGE_KEY = 'hgnucomb:projects';
 const MAX_RECENTS = 10;
@@ -81,11 +82,10 @@ export const useProjectStore = create<ProjectStore>()((set, get) => ({
   },
 
   setProject: (path) => {
-    set((s) => {
-      // Add to front of recents, deduplicate, cap at MAX_RECENTS
-      const recents = [path, ...s.recentProjects.filter((p) => p !== path)].slice(0, MAX_RECENTS);
-      return { currentProject: path, recentProjects: recents };
-    });
+    set((s) => ({
+      currentProject: path,
+      recentProjects: updateRecents(s.recentProjects, path, MAX_RECENTS),
+    }));
   },
 
   setServerDefault: (path) => {

@@ -8,6 +8,8 @@ import type {
 } from '@shared/types';
 import type { AgentMessage, AgentModel, AgentTelemetryData } from '@shared/protocol';
 import { useEventLogStore } from '@features/events/eventLogStore';
+import { determineFlash, type FlashType } from './agents.pure';
+export type { FlashType } from './agents.pure';
 
 // localStorage key for persisting agent state
 const STORAGE_KEY = 'hgnucomb:agents';
@@ -66,8 +68,7 @@ export interface SpawnOptions {
   repoPath?: string;
 }
 
-/** Transient flash state for status transition animations (done/error) */
-export type FlashType = 'done' | 'error';
+// FlashType re-exported from agents.pure.ts above
 
 interface AgentStore {
   agents: Map<string, AgentState>;
@@ -185,10 +186,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
     const previousStatus = existing.detailedStatus;
 
     // Trigger flash on terminal status transitions (done/error)
-    const flashType: FlashType | null =
-      status === 'done' && previousStatus !== 'done' ? 'done' :
-      status === 'error' && previousStatus !== 'error' ? 'error' :
-      null;
+    const flashType = determineFlash(status, previousStatus);
 
     set((s) => {
       const newFlashes = flashType ? new Map(s.flashes).set(agentId, flashType) : s.flashes;
