@@ -17,7 +17,7 @@ describe('eventLogStore', () => {
       useEventLogStore.getState().addSpawn('agent-1', 'terminal', { q: 0, r: 0 });
 
       const events = useEventLogStore.getState().events;
-      expect(events[0].id).toMatch(/^evt-\d+-\d+$/);
+      expect(events[0]!.id).toMatch(/^evt-\d+-\d+$/);
     });
 
     it('IDs are unique across rapid creation (counter increments)', () => {
@@ -36,7 +36,7 @@ describe('eventLogStore', () => {
       useEventLogStore.getState().addSpawn('agent-1', 'terminal', { q: 0, r: 0 });
 
       const events = useEventLogStore.getState().events;
-      expect(events[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+      expect(events[0]!.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     });
   });
 
@@ -142,7 +142,7 @@ describe('eventLogStore', () => {
       const events = useEventLogStore.getState().events;
       expect(events.length).toBe(1);
 
-      const event = events[0];
+      const event = events[0]!;
       expect(event.kind).toBe('broadcast');
       if (event.kind === 'broadcast') {
         expect(event.senderId).toBe('agent-1');
@@ -166,7 +166,7 @@ describe('eventLogStore', () => {
       const events = useEventLogStore.getState().events;
       expect(events.length).toBe(1);
 
-      const event = events[0];
+      const event = events[0]!;
       expect(event.kind).toBe('spawn');
       if (event.kind === 'spawn') {
         expect(event.agentId).toBe('agent-123');
@@ -187,7 +187,7 @@ describe('eventLogStore', () => {
       const events = useEventLogStore.getState().events;
       expect(events.length).toBe(1);
 
-      const event = events[0];
+      const event = events[0]!;
       expect(event.kind).toBe('statusChange');
       if (event.kind === 'statusChange') {
         expect(event.agentId).toBe('agent-1');
@@ -200,7 +200,7 @@ describe('eventLogStore', () => {
       useEventLogStore.getState().addStatusChange('agent-1', 'done', 'Complete', 'working');
 
       const events = useEventLogStore.getState().events;
-      const event = events[0];
+      const event = events[0]!;
 
       if (event.kind === 'statusChange') {
         expect(event.previousStatus).toBe('working');
@@ -212,7 +212,7 @@ describe('eventLogStore', () => {
       useEventLogStore.getState().addStatusChange('agent-1', 'idle');
 
       const events = useEventLogStore.getState().events;
-      const event = events[0];
+      const event = events[0]!;
 
       if (event.kind === 'statusChange') {
         expect(event.previousStatus).toBeUndefined();
@@ -236,7 +236,7 @@ describe('eventLogStore', () => {
       const events = useEventLogStore.getState().events;
       expect(events.length).toBe(1);
 
-      const event = events[0];
+      const event = events[0]!;
       expect(event.kind).toBe('messageReceived');
       if (event.kind === 'messageReceived') {
         expect(event.recipientId).toBe('orchestrator-1');
@@ -255,7 +255,7 @@ describe('eventLogStore', () => {
       );
 
       const events = useEventLogStore.getState().events;
-      const event = events[0];
+      const event = events[0]!;
 
       if (event.kind === 'messageReceived') {
         expect(event.messageType).toBe('broadcast');
@@ -294,8 +294,8 @@ describe('eventLogStore', () => {
 
       const events = useEventLogStore.getState().events;
       expect(events.length).toBe(1);
-      expect(events[0].id).toBeDefined();
-      expect(events[0].timestamp).toBeDefined();
+      expect(events[0]!.id).toBeDefined();
+      expect(events[0]!.timestamp).toBeDefined();
     });
   });
 });

@@ -28,7 +28,8 @@ export function getNeighborInDirection(
   hex: HexCoordinate,
   direction: HexDirection
 ): HexCoordinate {
-  const offset = HEX_NEIGHBORS[DIRECTION_INDEX[direction]];
+  // DIRECTION_INDEX maps all 6 HexDirection values to valid HEX_NEIGHBORS indices
+  const offset = HEX_NEIGHBORS[DIRECTION_INDEX[direction]]!;
   return {
     q: hex.q + offset.q,
     r: hex.r + offset.r,

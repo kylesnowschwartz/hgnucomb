@@ -133,7 +133,7 @@ export function createStagingWorkflowTest(stores: ConditionStores): IntegrationT
           predicate: () => {
             const workers = stores.getAllAgents().filter((a) => a.cellType === 'worker');
             if (workers.length >= 1) {
-              workerAId = workers[0].id;
+              workerAId = workers[0]!.id;
               return true;
             }
             return false;
@@ -150,7 +150,7 @@ export function createStagingWorkflowTest(stores: ConditionStores): IntegrationT
           predicate: () => {
             const workers = stores.getAllAgents().filter((a) => a.cellType === 'worker');
             if (workers.length >= 2) {
-              workerBId = workers[1].id;
+              workerBId = workers[1]!.id;
               return true;
             }
             return false;
@@ -310,7 +310,7 @@ Execute immediately.`;
           predicate: () => {
             const workers = stores.getAllAgents().filter((a) => a.cellType === 'worker');
             if (workers.length > 0) {
-              workerId = workers[0].id;
+              workerId = workers[0]!.id;
               return true;
             }
             return false;

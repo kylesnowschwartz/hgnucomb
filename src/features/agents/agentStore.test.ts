@@ -252,7 +252,7 @@ describe('agentStore', () => {
 
       const events = useEventLogStore.getState().events;
       expect(events.length).toBe(1);
-      expect(events[0].kind).toBe('messageReceived');
+      expect(events[0]!.kind).toBe('messageReceived');
     });
   });
 
@@ -327,7 +327,7 @@ describe('agentStore', () => {
       // Inbox should keep msg1 (at or before timestamp)
       const agent = useAgentStore.getState().getAgent(id);
       expect(agent?.inbox).toHaveLength(1);
-      expect(agent?.inbox[0].id).toBe('msg-1');
+      expect(agent?.inbox[0]!.id).toBe('msg-1');
     });
 
     it('keeps messages AT OR BEFORE timestamp', () => {
@@ -436,7 +436,7 @@ describe('agentStore', () => {
         const after = useAgentStore.getState().getAllAgents();
 
         // Same logical agent, different object reference
-        expect(before[0].id).toBe(after[0].id);
+        expect(before[0]!.id).toBe(after[0]!.id);
         expect(before[0]).not.toBe(after[0]);
       });
     });
@@ -523,7 +523,7 @@ describe('agentStore', () => {
         fireActivityUpdate(id);
 
         const projected = selectGridData(useAgentStore.getState());
-        const agent = projected[0];
+        const agent = projected[0]!;
 
         // Layout fields present
         expect(agent.id).toBe(id);

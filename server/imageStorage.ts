@@ -30,7 +30,7 @@ export function saveImageForSession(
 ): string {
   // Extract base64 content (remove data:image/png;base64, prefix if present)
   const base64Content = base64Data.includes(',')
-    ? base64Data.split(',')[1]
+    ? base64Data.split(',')[1]! // Split on ',' always produces index 1 when includes(',') is true
     : base64Data;
   const buffer = Buffer.from(base64Content, 'base64');
 

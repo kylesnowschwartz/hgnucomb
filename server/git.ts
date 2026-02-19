@@ -137,9 +137,9 @@ export function getWorkerDiff(gitRoot: string, workerId: string): WorkerDiff | n
   const statsRegex = /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/;
   const match = summary.match(statsRegex);
 
-  const files = match ? parseInt(match[1]) || 0 : 0;
-  const insertions = match ? parseInt(match[2]) || 0 : 0;
-  const deletions = match ? parseInt(match[3]) || 0 : 0;
+  const files = match ? parseInt(match[1] ?? '0') || 0 : 0;
+  const insertions = match ? parseInt(match[2] ?? '0') || 0 : 0;
+  const deletions = match ? parseInt(match[3] ?? '0') || 0 : 0;
 
   return {
     diff,

@@ -114,7 +114,7 @@ export function createCleanupCoordinationTest(stores: ConditionStores): Integrat
           predicate: () => {
             const workers = stores.getAllAgents().filter((a) => a.cellType === 'worker');
             if (workers.length > 0) {
-              workerId = workers[0].id;
+              workerId = workers[0]!.id;
               return true;
             }
             return false;
@@ -263,7 +263,7 @@ export function createKillWorkerTest(stores: ConditionStores): IntegrationTest {
           predicate: () => {
             const workers = stores.getAllAgents().filter((a) => a.cellType === 'worker');
             if (workers.length > 0) {
-              workerId = workers[0].id;
+              workerId = workers[0]!.id;
               return true;
             }
             return false;

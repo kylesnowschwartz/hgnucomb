@@ -88,7 +88,7 @@ export function createBadgeShowcaseTest(stores: ConditionStores): IntegrationTes
           predicate: () => {
             const workers = stores.getAllAgents().filter((a) => a.cellType === 'worker');
             if (workers.length > 0) {
-              workerId = workers[0].id;
+              workerId = workers[0]!.id;
               return true;
             }
             return false;

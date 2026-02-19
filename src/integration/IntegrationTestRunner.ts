@@ -10,6 +10,7 @@
 
 import type { TerminalBridge } from '@features/terminal/TerminalBridge';
 import type { HexCoordinate } from '@shared/types';
+import { assertNever } from '@shared/exhaustive';
 import type { AgentState, SpawnOptions } from '@features/agents/agentStore';
 import type { LogEvent } from '@features/events/eventLogStore';
 import type {
@@ -269,7 +270,7 @@ export class IntegrationTestRunner {
           throw new Error('Test aborted');
         }
 
-        const step = test.steps[i];
+        const step = test.steps[i]!; // Loop bounded by test.steps.length
         this.setState({ currentStep: i + 1 });
         const stepStart = Date.now();
 
@@ -345,6 +346,9 @@ export class IntegrationTestRunner {
         this.log('success', `Assertion passed: ${step.description}`);
         break;
       }
+
+      default:
+        assertNever(step);
     }
   }
 

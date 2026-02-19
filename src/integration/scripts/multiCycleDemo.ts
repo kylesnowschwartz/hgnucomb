@@ -91,7 +91,7 @@ export function createMultiCycleDemoTest(stores: ConditionStores): IntegrationTe
           predicate: () => {
             const workers = stores.getAllAgents().filter((a) => a.cellType === 'worker');
             if (workers.length >= 1) {
-              const worker = workers[0];
+              const worker = workers[0]!;
               if (worker.task && worker.parentId === orchestratorId) {
                 worker1Id = worker.id;
                 return true;

@@ -29,7 +29,8 @@ export const useKeyboardStore = create<KeyboardStore>()(
 
       getActiveKeymap: () => {
         const { activeKeymapId } = get();
-        return KEYMAPS[activeKeymapId] ?? KEYMAPS[DEFAULT_KEYMAP_ID];
+        // DEFAULT_KEYMAP_ID is a key in KEYMAPS, so fallback is always defined
+        return KEYMAPS[activeKeymapId] ?? KEYMAPS[DEFAULT_KEYMAP_ID]!;
       },
 
       getAvailableKeymaps: () => Object.values(KEYMAPS),

@@ -89,7 +89,7 @@ export function createBilateralCommunicationTest(stores: ConditionStores): Integ
           predicate: () => {
             const workers = stores.getAllAgents().filter((a) => a.cellType === 'worker');
             if (workers.length > 0) {
-              const worker = workers[0];
+              const worker = workers[0]!;
               workerId = worker.id;
               // Verify worker has task and parentId
               return worker.task !== undefined && worker.parentId !== undefined;

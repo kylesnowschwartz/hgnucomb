@@ -97,12 +97,14 @@ export function computePerimeterEdges(
   const edges: EdgeSegment[] = [];
 
   for (const key of memberHexes) {
-    const [q, r] = key.split(',').map(Number);
+    const parts = key.split(',').map(Number);
+    const q = parts[0]!, r = parts[1]!; // "q,r" format guaranteed by callers
     const { x: cx, y: cy } = hexToPixel({ q, r }, hexSize);
 
     for (let edgeIdx = 0; edgeIdx < 6; edgeIdx++) {
-      const neighborDir = EDGE_TO_NEIGHBOR[edgeIdx];
-      const neighbor = HEX_NEIGHBORS[neighborDir];
+      // EDGE_TO_NEIGHBOR has 6 entries, HEX_NEIGHBORS has 6 entries; all indices valid
+      const neighborDir = EDGE_TO_NEIGHBOR[edgeIdx]!;
+      const neighbor = HEX_NEIGHBORS[neighborDir]!;
       const neighborKey = `${q + neighbor.q},${r + neighbor.r}`;
 
       if (!memberHexes.has(neighborKey)) {

@@ -266,7 +266,7 @@ describe('KEYMAPS', () => {
   });
 
   describe('vim keymap', () => {
-    const vim = KEYMAPS['vim'];
+    const vim = KEYMAPS['vim']!;
 
     it('has bindings for all three modes', () => {
       expect(vim.bindings.grid).toBeDefined();
@@ -348,7 +348,7 @@ describe('KEYMAPS', () => {
   });
 
   describe.each(['vim', 'arrows'])('%s keymap navigation parity', (keymapId) => {
-    const keymap = KEYMAPS[keymapId];
+    const keymap = KEYMAPS[keymapId]!;
     const navActionTypes = ['navigate', 'navigate_vertical'];
 
     it('selected mode includes every navigation binding from grid mode', () => {
@@ -365,7 +365,7 @@ describe('KEYMAPS', () => {
   });
 
   describe.each(['vim', 'arrows'])('%s keymap terminal-mode parity', (keymapId) => {
-    const keymap = KEYMAPS[keymapId];
+    const keymap = KEYMAPS[keymapId]!;
 
     it('terminal mode has Meta+ equivalent for every non-nav selected-mode action', () => {
       // For every action in selected mode that is NOT navigation (which uses
@@ -408,7 +408,7 @@ describe('KEYMAPS', () => {
   });
 
   describe('arrows keymap', () => {
-    const arrows = KEYMAPS['arrows'];
+    const arrows = KEYMAPS['arrows']!;
 
     it('has arrow keys for navigation', () => {
       expect(arrows.bindings.grid['ArrowLeft']).toEqual({ type: 'navigate', direction: 'w' });

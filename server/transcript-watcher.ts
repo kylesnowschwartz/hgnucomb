@@ -415,17 +415,20 @@ export class TranscriptWatcher {
             state.todos
           );
           if (index !== null) {
-            const status = normalizeTodoStatus(input?.status);
-            if (status) {
-              state.todos[index].status = status;
-            }
-            const subject =
-              typeof input?.subject === "string" ? input.subject : "";
-            const description =
-              typeof input?.description === "string" ? input.description : "";
-            const updatedContent = subject || description;
-            if (updatedContent) {
-              state.todos[index].content = updatedContent;
+            const todo = state.todos[index];
+            if (todo) {
+              const status = normalizeTodoStatus(input?.status);
+              if (status) {
+                todo.status = status;
+              }
+              const subject =
+                typeof input?.subject === "string" ? input.subject : "";
+              const description =
+                typeof input?.description === "string" ? input.description : "";
+              const updatedContent = subject || description;
+              if (updatedContent) {
+                todo.content = updatedContent;
+              }
             }
           }
         } else {

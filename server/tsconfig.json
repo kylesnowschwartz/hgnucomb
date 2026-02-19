@@ -11,7 +11,8 @@
     "declaration": true,
     "sourceMap": true,
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "noUncheckedIndexedAccess": true
   },
   "include": ["*.ts", "../shared/*.ts"],
   "exclude": ["node_modules", "dist", "../shared/*.test.ts"]

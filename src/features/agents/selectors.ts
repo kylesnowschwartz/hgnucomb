@@ -79,7 +79,8 @@ export function selectGridData(s: { getAllAgents: () => AgentState[] }): AgentGr
 export function gridDataEqual(a: AgentGridData[], b: AgentGridData[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
-    const ai = a[i], bi = b[i];
+    // Loop bounded by a.length; both arrays have same length (checked above)
+    const ai = a[i]!, bi = b[i]!;
     if (ai.id !== bi.id) return false;
     if (ai.hex.q !== bi.hex.q || ai.hex.r !== bi.hex.r) return false;
     if (ai.cellType !== bi.cellType) return false;
@@ -121,7 +122,7 @@ export function selectSessionData(s: { getAllAgents: () => AgentState[] }): Agen
 export function sessionDataEqual(a: AgentSessionData[], b: AgentSessionData[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
-    if (a[i].id !== b[i].id || a[i].cellType !== b[i].cellType) return false;
+    if (a[i]!.id !== b[i]!.id || a[i]!.cellType !== b[i]!.cellType) return false;
   }
   return true;
 }

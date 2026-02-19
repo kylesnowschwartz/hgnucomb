@@ -5,6 +5,10 @@
  * Reference: https://www.redblobgames.com/grids/hexagons/
  */
 
+import type { PixelCoord } from './brands.ts';
+export { hex, pixel } from './brands.ts';
+export type { HexCoord, PixelCoord } from './brands.ts';
+
 // ============================================================================
 // Hex Coordinate Types
 // ============================================================================
@@ -82,11 +86,14 @@ export interface StoredAgentMetadata extends AgentSnapshot {
 /**
  * Convert hex axial coordinates to pixel position.
  * Uses pointy-top orientation.
+ *
+ * Accepts branded HexCoord or plain HexCoordinate (for gradual migration).
+ * Returns branded PixelCoord to prevent passing pixels into hex math.
  */
-export function hexToPixel(hex: HexCoordinate, size: number): { x: number; y: number } {
-  const x = size * (Math.sqrt(3) * hex.q + (Math.sqrt(3) / 2) * hex.r);
-  const y = size * ((3 / 2) * hex.r);
-  return { x, y };
+export function hexToPixel(h: HexCoordinate, size: number): PixelCoord {
+  const x = size * (Math.sqrt(3) * h.q + (Math.sqrt(3) / 2) * h.r);
+  const y = size * ((3 / 2) * h.r);
+  return { x, y } as PixelCoord;
 }
 
 /**
@@ -149,17 +156,18 @@ export function getHexRing(center: HexCoordinate, radius: number): HexCoordinate
   if (radius === 0) return [center];
 
   const results: HexCoordinate[] = [];
+  // HEX_NEIGHBORS has exactly 6 entries; indices 0-5 are always valid
   let hex = {
-    q: center.q + HEX_NEIGHBORS[4].q * radius,
-    r: center.r + HEX_NEIGHBORS[4].r * radius,
+    q: center.q + HEX_NEIGHBORS[4]!.q * radius,
+    r: center.r + HEX_NEIGHBORS[4]!.r * radius,
   };
 
   for (let i = 0; i < 6; i++) {
     for (let j = 0; j < radius; j++) {
       results.push({ ...hex });
       hex = {
-        q: hex.q + HEX_NEIGHBORS[i].q,
-        r: hex.r + HEX_NEIGHBORS[i].r,
+        q: hex.q + HEX_NEIGHBORS[i]!.q,
+        r: hex.r + HEX_NEIGHBORS[i]!.r,
       };
     }
   }
