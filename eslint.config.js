@@ -20,4 +20,15 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    files: ['**/*.pure.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          { group: ['zustand', 'zustand/*'], message: 'Pure modules cannot import Zustand' },
+          { group: ['react', 'react-dom', 'react/*'], message: 'Pure modules cannot import React' },
+        ]
+      }]
+    }
+  },
 ])
