@@ -18,8 +18,14 @@ import { useViewportStore } from '@features/grid/viewportStore';
 import { useProjectStore } from '@features/project/projectStore';
 import { MetaPanel } from '@features/meta/MetaPanel';
 import { createMcpHandler, type McpHandlerDeps } from './handlers/mcpHandler';
-import type { CellType, HexCoordinate, DetailedStatus } from '@shared/types';
+import { createNotificationHandler, type NotificationHandlerDeps } from './handlers/notificationHandler';
+import type { AgentMessage } from '@shared/protocol';
+import type { CellType, HexCoordinate } from '@shared/types';
 import { assertNever } from '@shared/exhaustive';
+
+// Activate persistence subscriptions (side-effect imports)
+import '@features/agents/agentPersistence';
+import '@features/project/projectPersistence';
 
 // Animation duration for terminal panel slide (must match CSS)
 const PANEL_ANIMATION_MS = 250;
@@ -304,6 +310,42 @@ function App() {
     []
   );
 
+  // Notification handler dependencies - stable refs via getState(), never changes
+  const notificationDeps: NotificationHandlerDeps = useMemo(
+    () => ({
+      getAgent: (id) => useAgentStore.getState().getAgent(id),
+      updateAgentType: (agentId, newCellType) =>
+        useAgentStore.getState().updateAgentType(agentId, newCellType),
+      removeAgent: (id) => useAgentStore.getState().removeAgent(id),
+      updateDetailedStatus: (agentId, status, message) =>
+        useAgentStore.getState().updateDetailedStatus(agentId, status, message),
+      updateActivities: (updates) =>
+        useAgentStore.getState().updateActivities(updates),
+      setAgentInbox: (agentId: string, messages: AgentMessage[]) => {
+        const agent = useAgentStore.getState().getAgent(agentId);
+        if (!agent) return;
+        useAgentStore.setState((s) => ({
+          agents: new Map(s.agents).set(agentId, { ...agent, inbox: messages }),
+        }));
+      },
+      removeSession: (sessionId) =>
+        useTerminalStore.getState().removeSession(sessionId),
+      getSessionForAgent: (agentId) =>
+        useTerminalStore.getState().getSessionForAgent(agentId),
+      addRemoval: (agentId, reason) =>
+        useEventLogStore.getState().addRemoval(agentId, reason),
+      addMessageReceived: (recipientId, senderId, messageType, payload) =>
+        useEventLogStore.getState().addMessageReceived(recipientId, senderId, messageType, payload),
+      addBroadcast: (senderId, senderHex, broadcastType, radius, recipientCount, payload) =>
+        useEventLogStore.getState().addBroadcast(senderId, senderHex, broadcastType, radius, recipientCount, payload),
+      addStatusChange: (agentId, newStatus, message, previousStatus) =>
+        useEventLogStore.getState().addStatusChange(agentId, newStatus, message, previousStatus),
+      getSelectedAgentId: () => useUIStore.getState().selectedAgentId,
+      selectAgent: (agentId) => useUIStore.getState().selectAgent(agentId),
+    }),
+    []
+  );
+
   // Handle MCP requests from orchestrator agents
   useEffect(() => {
     if (!bridge) return;
@@ -312,150 +354,11 @@ function App() {
   }, [bridge, mcpDeps]);
 
   // Handle server notifications (agent removal, status updates)
-  // All store actions accessed via getState() — this effect only depends on bridge.
   useEffect(() => {
     if (!bridge) return;
-
-    const handleNotification = (notification: unknown) => {
-      if (typeof notification !== 'object' || notification === null) return;
-      const msg = notification as { type: string; payload?: Record<string, unknown> };
-      if (!msg.payload) return;
-
-      // server.info is handled in the bridge init effect (before connect)
-
-      // Handle cell type conversion (orchestrator/worker -> terminal)
-      if (msg.type === 'cell.converted') {
-        const { agentId, oldCellType, newCellType } = msg.payload as {
-          agentId: string;
-          oldCellType: string;
-          newCellType: string;
-          sessionId: string;
-        };
-        console.log(`[App] Cell converted: ${agentId} (${oldCellType} -> ${newCellType})`);
-
-        useAgentStore.getState().updateAgentType(agentId, newCellType as CellType);
-        return;
-      }
-
-      // Handle agent removal
-      if (msg.type === 'agent.removed') {
-        const { agentId, reason, sessionId } = msg.payload as {
-          agentId: string;
-          reason: 'cleanup' | 'kill';
-          sessionId?: string;
-        };
-        console.log(`[App] Agent removed: ${agentId} (${reason})`);
-
-        useAgentStore.getState().removeAgent(agentId);
-
-        // Remove associated terminal session
-        const termStore = useTerminalStore.getState();
-        if (sessionId) {
-          termStore.removeSession(sessionId);
-        } else {
-          const session = termStore.getSessionForAgent(agentId);
-          if (session) {
-            termStore.removeSession(session.sessionId);
-          }
-        }
-
-        useEventLogStore.getState().addRemoval(agentId, reason);
-
-        if (useUIStore.getState().selectedAgentId === agentId) {
-          useUIStore.getState().selectAgent(null);
-        }
-        return;
-      }
-
-      // Handle inbox sync from server (display only - server is source of truth)
-      if (msg.type === 'inbox.sync') {
-        const { agentId, messages } = msg.payload as {
-          agentId: string;
-          messages: import('@shared/protocol').AgentMessage[];
-        };
-        const agent = useAgentStore.getState().getAgent(agentId);
-        if (agent) {
-          // Log new messages that weren't in the previous inbox
-          const oldIds = new Set(agent.inbox.map((m) => m.id));
-          for (const msg of messages) {
-            if (!oldIds.has(msg.id)) {
-              useEventLogStore.getState().addMessageReceived(agentId, msg.from, msg.type, msg.payload);
-            }
-          }
-
-          useAgentStore.setState((s) => ({
-            agents: new Map(s.agents).set(agentId, {
-              ...agent,
-              inbox: messages,
-            }),
-          }));
-        }
-        return;
-      }
-
-      // Handle broadcast event from server (for EventLog display)
-      if (msg.type === 'mcp.broadcast.event') {
-        const { senderId, senderHex, broadcastType, radius, recipientCount } = msg.payload as {
-          senderId: string;
-          senderHex: import('@shared/protocol').HexCoordinate;
-          broadcastType: string;
-          radius: number;
-          recipientCount: number;
-          recipients: string[];
-        };
-        useEventLogStore.getState().addBroadcast(senderId, senderHex, broadcastType, radius, recipientCount, null);
-        return;
-      }
-
-      // Handle agent activity broadcast (HUD observability data)
-      if (msg.type === 'agent.activity') {
-        const { agents: activities } = msg.payload as {
-          agents: Array<{
-            agentId: string;
-            createdAt: number;
-            lastActivityAt: number;
-            gitCommitCount: number;
-            gitRecentCommits: string[];
-            telemetry?: import('@shared/protocol').AgentTelemetryData;
-          }>;
-        };
-        // Batched: single set() call, single re-render for all subscribers.
-        // The unbatched loop was causing N re-renders of HexGrid (Konva canvas),
-        // MetaPanel, and App every 3 seconds — enough to block the main thread.
-        useAgentStore.getState().updateActivities(activities);
-        return;
-      }
-
-      // Handle status updates from server (both explicit agent reports and inferred PTY activity)
-      if (msg.type === 'mcp.statusUpdate') {
-        const { agentId, state, message: statusMessage, previousStatus, source } = msg.payload as {
-          agentId: string;
-          state: DetailedStatus;
-          message?: string;
-          previousStatus?: DetailedStatus;
-          source?: 'explicit' | 'inferred';
-        };
-
-        if (source === 'explicit') {
-          // Explicit agent-reported status: always apply + log to event log
-          useAgentStore.getState().updateDetailedStatus(agentId, state, statusMessage);
-          useEventLogStore.getState().addStatusChange(agentId, state, statusMessage, previousStatus);
-        } else {
-          // Inferred from PTY activity: apply sticky-state filtering
-          // Don't override explicit statuses that agents deliberately set
-          const agent = useAgentStore.getState().getAgent(agentId);
-          const stickyStates: DetailedStatus[] = ['error', 'cancelled', 'waiting_input', 'waiting_permission', 'stuck'];
-          if (agent && stickyStates.includes(agent.detailedStatus)) {
-            return;
-          }
-          useAgentStore.getState().updateDetailedStatus(agentId, state);
-        }
-        return;
-      }
-    };
-
-    return bridge.onNotification(handleNotification);
-  }, [bridge]);
+    const handler = createNotificationHandler(notificationDeps);
+    return bridge.onNotification(handler);
+  }, [bridge, notificationDeps]);
 
   // Create terminal session for an agent (without activating it)
   const createSessionForAgent = useCallback(

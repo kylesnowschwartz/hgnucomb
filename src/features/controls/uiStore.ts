@@ -48,11 +48,6 @@ export const useUIStore = create<UIStore>()((set) => ({
 
   selectAgent: (agentId) => {
     set({ selectedAgentId: agentId });
-    if (agentId) {
-      console.log('[UIStore] Selected agent:', agentId);
-    } else {
-      console.log('[UIStore] Deselected agent');
-    }
   },
 
   setHoveredHex: (hex) => {

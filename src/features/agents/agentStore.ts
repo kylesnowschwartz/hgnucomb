@@ -7,12 +7,8 @@ import type {
   DetailedStatus,
 } from '@shared/types';
 import type { AgentMessage, AgentModel, AgentTelemetryData } from '@shared/protocol';
-import { useEventLogStore } from '@features/events/eventLogStore';
 import { determineFlash, type FlashType } from './agents.pure';
 export type { FlashType } from './agents.pure';
-
-// localStorage key for persisting agent state
-const STORAGE_KEY = 'hgnucomb:agents';
 
 export interface AgentState {
   id: string;
@@ -146,7 +142,6 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         inbox: [],
       }),
     }));
-    console.log('[AgentStore] User spawned agent:', id, 'type:', cellType, 'at', hex, parentId ? `parent: ${parentId}` : '', task ? `task: ${task}` : '');
     return id;
   },
 
@@ -156,16 +151,11 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       next.delete(id);
       return { agents: next };
     });
-    console.log('[AgentStore] Removed agent:', id);
   },
 
   updateAgentType: (agentId, newCellType) => {
     const existing = get().agents.get(agentId);
-    if (!existing) {
-      console.warn('[AgentStore] Cannot update type: agent not found:', agentId);
-      return false;
-    }
-    const oldCellType = existing.cellType;
+    if (!existing) return false;
     set((s) => ({
       agents: new Map(s.agents).set(agentId, {
         ...existing,
@@ -173,16 +163,12 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         role: newCellType === 'orchestrator' ? 'orchestrator' : 'worker',
       }),
     }));
-    console.log('[AgentStore] Cell type updated:', agentId, oldCellType, '->', newCellType);
     return true;
   },
 
   updateDetailedStatus: (agentId, status, message) => {
     const existing = get().agents.get(agentId);
-    if (!existing) {
-      console.warn('[AgentStore] Cannot update status: agent not found:', agentId);
-      return undefined;
-    }
+    if (!existing) return undefined;
     const previousStatus = existing.detailedStatus;
 
     // Trigger flash on terminal status transitions (done/error)
@@ -199,30 +185,18 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         flashes: newFlashes,
       };
     });
-    console.log('[AgentStore] Status updated:', agentId, previousStatus, '->', status);
     return previousStatus;
   },
 
   addMessageToInbox: (agentId, message) => {
     const existing = get().agents.get(agentId);
-    if (!existing) {
-      console.warn('[AgentStore] Cannot add message: agent not found:', agentId);
-      return false;
-    }
+    if (!existing) return false;
     set((s) => ({
       agents: new Map(s.agents).set(agentId, {
         ...existing,
         inbox: [...existing.inbox, message],
       }),
     }));
-    console.log('[AgentStore] Message added to inbox:', agentId, 'from:', message.from, 'type:', message.type);
-    // Log to event store for visibility in EventLog
-    useEventLogStore.getState().addMessageReceived(
-      agentId,
-      message.from,
-      message.type,
-      message.payload
-    );
     return true;
   },
 
@@ -271,10 +245,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
 
   getMessages: (agentId, since) => {
     const existing = get().agents.get(agentId);
-    if (!existing) {
-      console.warn('[AgentStore] Cannot get messages: agent not found:', agentId);
-      return [];
-    }
+    if (!existing) return [];
 
     let messagesToReturn: AgentMessage[];
     let remainingMessages: AgentMessage[];
@@ -298,66 +269,8 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
           inbox: remainingMessages,
         }),
       }));
-      console.log('[AgentStore] Consumed', messagesToReturn.length, 'messages from inbox:', agentId);
     }
 
     return messagesToReturn;
   },
 }));
-
-// ============================================================================
-// localStorage Persistence
-// ============================================================================
-
-/**
- * Serialize agent state to localStorage.
- * Called automatically on state changes via subscription.
- */
-function persistToLocalStorage(agents: Map<string, AgentState>): void {
-  try {
-    // Map -> Array for JSON serialization
-    const data = Array.from(agents.values());
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (err) {
-    console.warn('[AgentStore] Failed to persist to localStorage:', err);
-  }
-}
-
-/**
- * Load agent state from localStorage.
- * Called by reconnect flow to get cached state (server is still source of truth).
- */
-export function loadAgentsFromLocalStorage(): AgentState[] {
-  try {
-    const json = localStorage.getItem(STORAGE_KEY);
-    if (!json) return [];
-    return JSON.parse(json) as AgentState[];
-  } catch (err) {
-    console.warn('[AgentStore] Failed to load from localStorage:', err);
-    return [];
-  }
-}
-
-/**
- * Clear persisted agent state from localStorage.
- * Called on session clear.
- */
-export function clearAgentsFromLocalStorage(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-    console.log('[AgentStore] Cleared localStorage');
-  } catch (err) {
-    console.warn('[AgentStore] Failed to clear localStorage:', err);
-  }
-}
-
-// Subscribe to state changes and persist (debounced to avoid blocking the main
-// thread with synchronous JSON.stringify during high-frequency updates like
-// agent activity broadcasts and terminal data processing)
-let persistTimer: ReturnType<typeof setTimeout> | null = null;
-useAgentStore.subscribe((state) => {
-  if (persistTimer) clearTimeout(persistTimer);
-  persistTimer = setTimeout(() => {
-    persistToLocalStorage(state.agents);
-  }, 2000);
-});

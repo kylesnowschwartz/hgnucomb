@@ -141,7 +141,6 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
         activeSessionId: s.activeSessionId,
       };
     });
-    console.log('[TerminalStore] Session added:', info.sessionId, 'for agent:', agentId);
   },
 
   removeSession: (sessionId) => {
@@ -164,7 +163,6 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
           s.activeSessionId === sessionId ? null : s.activeSessionId,
       };
     });
-    console.log('[TerminalStore] Session removed:', sessionId);
   },
 
   removeSessionForAgent: (agentId) => {
@@ -174,14 +172,13 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
 
     // Kill the PTY process
     if (bridge) {
-      bridge.disposeSession(sessionId).catch((err) => {
-        console.error('[TerminalStore] Failed to dispose session:', err);
+      bridge.disposeSession(sessionId).catch(() => {
+        // Dispose failure is non-fatal — session may already be dead
       });
     }
 
     // Clean up store state
     get().removeSession(sessionId);
-    console.log('[TerminalStore] Cleaned up session for agent:', agentId);
   },
 
   markExited: (sessionId, exitCode) => {
@@ -197,7 +194,6 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
         }),
       };
     });
-    console.log('[TerminalStore] Session exited:', sessionId, 'code:', exitCode);
   },
 
   setActiveSession: (sessionId) => {

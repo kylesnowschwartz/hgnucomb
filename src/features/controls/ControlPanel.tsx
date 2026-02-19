@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { useAgentStore, clearAgentsFromLocalStorage } from '@features/agents/agentStore';
+import { useAgentStore } from '@features/agents/agentStore';
+import { clearAgentsFromLocalStorage } from '@features/agents/agentPersistence';
 import { useTerminalStore } from '@features/terminal/terminalStore';
 import { useEventLogStore } from '@features/events/eventLogStore';
 import { useUIStore } from './uiStore';
