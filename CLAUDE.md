@@ -65,23 +65,28 @@ Browser (localhost:5173)              Server (localhost:3001)
 ## Directory Structure
 
 ```
-shared/               # Single source of truth for types (client + server)
+shared/               # Pure types and utilities (client + server, no side effects)
   protocol.ts         # WebSocket messages, MCP request/response types
   types.ts            # HexCoordinate, CellType, AgentStatus, hex utilities
+  brands.ts           # Branded types: HexCoord, PixelCoord (prevent coordinate confusion)
+  exhaustive.ts       # assertNever() for compile-time exhaustive switch checks
+  result.ts           # Result<T, E> discriminated union for fallible operations
   context.ts          # Orchestrator context JSON schema
 
 src/
-  features/           # Feature-colocated modules (store + UI together)
-    agents/           # agentStore.ts
+  features/           # Feature-colocated modules (see Feature Template below)
+    agents/           # agentStore, agents.pure, agentPersistence, selectors
     terminal/         # terminalStore, TerminalPanel, WebSocketBridge
-    events/           # eventLogStore, EventLog
+    events/           # eventLogStore, eventLog.pure, EventLog
     controls/         # uiStore, ControlPanel
-    grid/             # HexGrid, useDraggable
+    grid/             # HexGrid, useDraggable, hexPerimeter
     meta/             # MetaPanel (collapsible right-side panel, widget container)
-    project/          # projectStore, ProjectWidget (project directory selection)
+    project/          # projectStore, project.pure, projectPersistence, ProjectWidget
     keyboard/         # keyboardStore, useKeyboardNavigation, keymaps
-  handlers/           # Request handlers extracted from App.tsx
-    mcpHandler.ts     # MCP request handling (spawn, broadcast, status)
+  handlers/           # Request handlers extracted from App.tsx (DI pattern)
+    mcpHandler.ts     # MCP request handling (spawn, grid query)
+    mcp.pure.ts       # Pure helpers: findNearestEmptyHex
+    notificationHandler.ts  # Server notification dispatch (status, activity, inbox)
   protocol/           # Event types and script playback
   theme/              # Catppuccin theme definitions (mocha/latte)
   integration/        # Integration test framework
@@ -112,6 +117,42 @@ import { ... } from '@theme/catppuccin-mocha';
 // Server (server/tsconfig.json)
 import { ... } from '@shared/protocol.ts';  // Note: .ts extension required
 ```
+
+## Feature Template
+
+Features follow a layered file structure that separates pure logic from side effects. This makes agent-written code easier to review: trust pure files, scrutinize edge files.
+
+```
+src/features/<name>/
+  types.ts              # Types only, no runtime code (optional if few types)
+  <name>.pure.ts        # Pure functions: transforms, validators, selectors
+  <name>Store.ts        # Zustand store: state shape + pure state transitions
+  <name>Persistence.ts  # Side effects: localStorage, subscriptions (optional)
+  <Name>.tsx            # React components (optional)
+  <name>.test.ts        # Tests
+  index.ts              # Public API re-exports (optional)
+```
+
+**Rules for `*.pure.ts` files:**
+- May import from `@shared/*` and other `.pure.ts` files
+- May NOT import Zustand, React, or DOM APIs (enforced by ESLint)
+- All functions are pure: same inputs always produce same outputs, no side effects
+
+**Rules for store files:**
+- No `console.log` in actions — the event log captures lifecycle events
+- No cross-store calls in actions — wire those at the composition root (App.tsx or handlers)
+- No localStorage in actions — extract to a `*Persistence.ts` file that subscribes to the store
+
+**Handler pattern (src/handlers/):**
+Handlers use dependency injection via a `Deps` interface. See `mcpHandler.ts` and `notificationHandler.ts`:
+```typescript
+interface FooDeps {
+  getAgent: (id: string) => AgentState | undefined;
+  // ... other store actions needed
+}
+function createFooHandler(deps: FooDeps): (request: FooRequest) => void
+```
+This keeps handlers testable without mocking stores directly.
 
 ## Cell Types
 
