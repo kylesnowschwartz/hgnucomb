@@ -22,8 +22,6 @@ export const useKeyboardStore = create<KeyboardStore>()(
       setActiveKeymap: (id: string) => {
         if (KEYMAPS[id]) {
           set({ activeKeymapId: id });
-        } else {
-          console.warn('[KeyboardStore] Unknown keymap:', id);
         }
       },
 

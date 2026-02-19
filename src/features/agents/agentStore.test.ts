@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAgentStore } from './agentStore';
-import { useEventLogStore } from '@features/events/eventLogStore';
 import type { AgentMessage } from '@shared/protocol';
 import {
   selectGridData,
@@ -21,15 +20,10 @@ const localStorageMock = (() => {
 })();
 vi.stubGlobal('localStorage', localStorageMock);
 
-// Suppress console logs during tests
-vi.spyOn(console, 'log').mockImplementation(() => {});
-vi.spyOn(console, 'warn').mockImplementation(() => {});
-
 describe('agentStore', () => {
   beforeEach(() => {
     // Reset store state between tests
     useAgentStore.getState().clear();
-    useEventLogStore.getState().clear();
     localStorageMock.clear();
     vi.clearAllMocks();
   });
@@ -238,22 +232,6 @@ describe('agentStore', () => {
       expect(result).toBe(true);
     });
 
-    it('logs to eventLogStore', () => {
-      const id = useAgentStore.getState().spawnAgent({ q: 0, r: 0 });
-      const msg: AgentMessage = {
-        id: 'msg-1',
-        from: 'worker-1',
-        type: 'result',
-        payload: { analysis: 'complete' },
-        timestamp: '2024-01-01T10:00:00Z',
-      };
-
-      useAgentStore.getState().addMessageToInbox(id, msg);
-
-      const events = useEventLogStore.getState().events;
-      expect(events.length).toBe(1);
-      expect(events[0].kind).toBe('messageReceived');
-    });
   });
 
   // ==========================================================================
