@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useProjectStore } from './projectStore';
+import './projectPersistence'; // Activate persistence subscription
 
 // Mock localStorage
 const localStorageMock = (() => {

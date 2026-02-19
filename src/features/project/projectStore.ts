@@ -58,15 +58,6 @@ function loadFromStorage(): { currentProject: string | null; recentProjects: str
   }
 }
 
-/** Persist to localStorage (only currentProject and recentProjects) */
-function persistToStorage(currentProject: string | null, recentProjects: string[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ currentProject, recentProjects }));
-  } catch (err) {
-    console.warn('[ProjectStore] Failed to persist:', err);
-  }
-}
-
 const initial = loadFromStorage();
 
 export const useProjectStore = create<ProjectStore>()((set, get) => ({
@@ -112,8 +103,3 @@ export const useProjectStore = create<ProjectStore>()((set, get) => ({
     return get().validationCache.get(path);
   },
 }));
-
-// Persist on state changes
-useProjectStore.subscribe((state) => {
-  persistToStorage(state.currentProject, state.recentProjects);
-});
