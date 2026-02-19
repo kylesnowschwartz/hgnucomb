@@ -7,6 +7,7 @@
 
 import { useKeyboardStore } from './keyboardStore';
 import type { KeyAction, InputMode } from './types';
+import { assertNever } from '@shared/exhaustive';
 import './HelpModal.css';
 
 interface HelpModalProps {
@@ -44,6 +45,8 @@ function formatAction(action: KeyAction): string {
       return 'Toggle meta panel';
     case 'show_help':
       return 'Show this help';
+    default:
+      return assertNever(action);
   }
 }
 

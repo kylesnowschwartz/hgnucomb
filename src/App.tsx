@@ -19,6 +19,7 @@ import { useProjectStore } from '@features/project/projectStore';
 import { MetaPanel } from '@features/meta/MetaPanel';
 import { createMcpHandler, type McpHandlerDeps } from './handlers/mcpHandler';
 import type { CellType, HexCoordinate, DetailedStatus } from '@shared/types';
+import { assertNever } from '@shared/exhaustive';
 
 // Animation duration for terminal panel slide (must match CSS)
 const PANEL_ANIMATION_MS = 250;
@@ -40,7 +41,7 @@ function animReducer(state: AnimPhase, action: AnimAction): AnimPhase {
       if (state === 'exiting') return 'unmounted';
       return state;
     default:
-      return state;
+      return assertNever(action);
   }
 }
 

@@ -14,6 +14,7 @@ import { getNeighborInDirection, getVerticalDirection } from './directions';
 import { isFocusInTextEntry } from './focusGuards';
 import { initModifierTracking, isMetaDown } from './modifierState';
 import type { CellType, HexCoordinate } from '@shared/types';
+import { assertNever } from '@shared/exhaustive';
 
 interface UseKeyboardNavigationOptions {
   /** Called when help modal should open */
@@ -170,6 +171,9 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions = {}
       case 'show_help':
         optionsRef.current.onShowHelp?.();
         break;
+
+      default:
+        assertNever(action);
     }
   }, []);
 
